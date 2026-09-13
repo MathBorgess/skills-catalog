@@ -123,3 +123,23 @@ button {
 .steps li { margin: 0.45rem 0; }
 
 a { color: var(--accent); }
+
+.note { margin: 0.75rem 0 0; }
+.note summary { min-height: var(--tap); padding: 0.55rem 0; color: var(--muted); cursor: pointer; }
+.q .note { display: none; }
+.quiz.is-checked .q .note { display: block; }
+
+textarea {
+  width: 100%;
+  padding: 0.6rem;
+  border: 1px solid var(--line);
+  border-radius: 0.5rem;
+  background: var(--bg);
+  color: var(--fg);
+  font: inherit;
+  font-size: 1rem;
+}
+
+.resume { margin: 1.25rem 0 0; }
+.resume textarea { margin-top: 0.75rem; font: 0.85rem/1.45 ui-monospace, Menlo, monospace; }
+.copied { color: var(--muted); font-size: 0.92rem; }

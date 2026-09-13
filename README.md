@@ -67,7 +67,7 @@ Symlinks every skill into `~/.claude/skills`, `~/.cursor/skills`, `~/.codex/skil
 |---|---|---|
 | [`handoff`](skills/handoff/) | 1.0.0 | Compacts a conversation into a session brief, or splits remaining work into parallel Cursor, Claude, and Codex sessions: the parent picks provider and model, shows a routing table, launches the CLIs, and records a scorecard so the skill can be revised from use. |
 | [`study-wiki`](skills/study-wiki/) | 1.0.0 | Interviews you about the certifications you are chasing, then builds and operates a personal study repository: a knowledge graph of notes, a question bank, an error log, and a daily study loop that injects questions, grades your answers, and records where you are weak. |
-| [`teach-me`](skills/teach-me/) | 1.0.0 | Runs one study session against a wiki that already exists: a phone-sized HTML lesson plus a session note and error log. Not for bootstrapping an empty wiki — that is study-wiki. |
+| [`teach-me`](skills/teach-me/) | 1.0.1 | Runs one study session against a wiki that already exists: a phone-sized HTML lesson plus a session note and error log. Not for bootstrapping an empty wiki — that is study-wiki. |
 
 ## Using a skill
 

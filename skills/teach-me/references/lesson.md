@@ -36,7 +36,11 @@ Completable inside the daily budget. One mechanism. One visible win in the heade
     <!-- theory: form.quiz below. practice: ol.steps — navigation names, checkpoints, the failure to provoke. No finished notebook. -->
 
     <p class="source">Primary source: <a href="...">...</a></p>
-    <p class="ask">When you finish, send the agent the tally (n/m) and which items felt like a guess. The wiki cannot log a miss you only tapped in the page.</p>
+    <p class="ask">Leave a note on any question, then tap Copy resume prompt and paste it into any agent session. The wiki cannot log a miss you only tapped in the page.</p>
+
+    <script type="text/plain" id="resume-brief">
+    <!-- brief from references/resume.md, written from this conversation -->
+    </script>
   </article>
   <script src="../assets/quiz.js"></script>
 </body>
@@ -75,6 +79,8 @@ After they submit (in the HTML or by sending letters in chat), grade in the sess
 The HTML is the briefing they can read anywhere. The evidence still needs the environment, later in the same day is fine.
 
 `ol.steps`: objective in one line, where in the console and the **name the platform uses**, checkpoints ("after step 2 you should see X"), the failure to provoke. Not the finished config.
+
+`quiz.js` adds **What I observed** and **Doubt / attention** to each step and a Copy resume prompt button after the list. Do not write those fields by hand.
 
 ## Do not
 

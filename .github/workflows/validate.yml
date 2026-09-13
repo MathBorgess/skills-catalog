@@ -30,11 +30,13 @@ jobs:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     permissions:
-      contents: read
+      contents: write
       packages: write
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -55,3 +57,18 @@ jobs:
             exit 0
           fi
           npm publish
+
+      - name: Tag the plugin release if this version is new
+        run: |
+          set -euo pipefail
+          name="$(node -p "require('./.claude-plugin/plugin.json').name")"
+          version="$(node -p "require('./.claude-plugin/plugin.json').version")"
+          tag="${name}--v${version}"
+          if git rev-parse -q --verify "refs/tags/${tag}" >/dev/null; then
+            echo "already tagged: ${tag}"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          npm install -g @anthropic-ai/claude-code
+          claude plugin tag --push .

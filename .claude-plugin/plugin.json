@@ -1,0 +1,26 @@
+{
+  "name": "skills-catalog",
+  "version": "1.0.0",
+  "description": "Matheus Borges's agent skills: study wikis, teaching sessions, and cross-provider handoff. Inspired by Matt Pocock's skills packaging.",
+  "author": {
+    "name": "Matheus Borges",
+    "url": "https://github.com/MathBorgess"
+  },
+  "homepage": "https://github.com/MathBorgess/skills-catalog",
+  "repository": "https://github.com/MathBorgess/skills-catalog",
+  "license": "MIT",
+  "keywords": [
+    "skills",
+    "study-wiki",
+    "teach-me",
+    "handoff",
+    "claude",
+    "cursor",
+    "codex"
+  ],
+  "skills": [
+    "./skills/handoff",
+    "./skills/study-wiki",
+    "./skills/teach-me"
+  ]
+}

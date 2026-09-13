@@ -1,6 +1,6 @@
 # Scheduled tasks — the daily loop
 
-The system works without any of this; someone who opens a session and says "quiz me" gets the whole loop by hand. Scheduling exists to remove the one step that actually fails: remembering to start.
+The system works without any of this; someone who opens a session and says "quiz me" is running **teach-me** (or Flow 3 of study-wiki if teach-me is not installed). Scheduling exists to remove the one step that actually fails: remembering to start.
 
 **Propose, do not install.** Show the user the tasks, recommend two, and create only what they ask for. Eight scheduled tasks on day one is eight notifications muted by day four.
 
@@ -22,7 +22,7 @@ Times below are placeholders — set them from the user's stated timezone and da
 
 ## Task 1 — Opening (recommended, start here)
 
-> You are the study agent for the `<repo>` repository. Read `wiki/_log/errors.md` and pick the 2–3 topics with the most recent misses or the longest time since review. Generate <N> multiple-choice questions in `<CODE>` exam style about those topics, each with a capitalized qualifier in the stem (`MOST cost-effectively`, `LEAST operational overhead`, or the equivalent for this exam), and with at least two technically plausible options. Send the questions **without the answer key** — the key comes only after the user answers. Once they answer: grade each question, explain what every wrong option was testing, state the trap in one line, append one line per miss to `wiki/_log/errors.md` under today's date heading (the belief that was wrong, plus a `[[Note_Link]]`), and append the score to `wiki/_log/score.md` (+10 per correct, +5 bonus for a correct answer in a weak domain, nothing subtracted for a miss). Create today's date heading in either file if it does not exist. If the user does not answer within the session, write nothing to either log.
+> You are the study agent for the `<repo>` repository. Call the Skill tool with `"teach-me"` if it is installed and run that session. If it is not: read `wiki/_meta/roadmap.md` (gates in the next seven days first), `wiki/_meta/overlap.md`, and `wiki/_log/errors.md`. Pick ONE topic — overlap rank, then most recent misses — on the **active** exam only. Generate <N> multiple-choice questions in `<CODE>` exam style about that topic, each with a capitalized qualifier in the stem (`MOST cost-effectively`, `LEAST operational overhead`, or the equivalent for this exam), and with at least two technically plausible options. Send the questions **without the answer key** — the key comes only after the user answers. Once they answer: grade each question, explain what every wrong option was testing, state the trap in one line, append one line per miss to `wiki/_log/errors.md` under today's date heading (the belief that was wrong, plus a `[[Note_Link]]`), and append the score to `wiki/_log/score.md` (+10 per correct, +5 bonus for a correct answer in a weak domain, nothing subtracted for a miss). Create today's date heading in either file if it does not exist. If the user does not answer within the session, write nothing to either log.
 
 ## Task 2 — Closing (recommended, the other half)
 
@@ -30,7 +30,7 @@ Times below are placeholders — set them from the user's stated timezone and da
 
 ## Task 3 — Weekly report (add after two weeks of data)
 
-> Read `wiki/_meta/profile.md`, `wiki/_log/errors.md`, `wiki/_log/score.md`, `wiki/_log/decisions.md`, and the note list under each track in `<repo>`. Compare notes and errors per exam domain against the official weights in the profile, and name the single most imbalanced domain. Compute readiness per domain with the formula in the study-wiki skill and rank the domains by it. Sum this week's points and name the best day; never present a day without entries as a gap. Close with exactly one recommended focus for next week and an offer to generate the first batch for it. Keep it short enough to read on a phone.
+> Read `wiki/_meta/profile.md`, `wiki/_meta/roadmap.md`, `wiki/_meta/overlap.md`, `wiki/_log/errors.md`, `wiki/_log/score.md`, `wiki/_log/decisions.md`, and the note list under each track in `<repo>`. If a gate falls in the next seven days, it is the first line. Compare notes and errors per exam domain against the official weights in the profile, and name the single most imbalanced **active** domain. Compute readiness per domain with the formula in the study-wiki skill and rank the domains by it. Sum this week's points and name the best day; never present a day without entries as a gap. Close with exactly one recommended focus for next week (the next overlap row, not a parked exam) and an offer to call the Skill tool with `"teach-me"` on it. Keep it short enough to read on a phone.
 
 ## The rest — only if the first three stick
 

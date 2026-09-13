@@ -1,16 +1,21 @@
 # skills-catalog — conventions
 
-This repository is a catalog of skills. Each skill is a folder of markdown that a model reads in order to operate a workflow. Nothing here executes; the instructions are the product.
+This repository is a catalog of skills. Each skill is a folder of markdown that a model reads in order to operate a workflow. The instructions are the product; the plugin, npm package, and link script are how those folders get onto a machine.
+
+The catalog is written by **Matheus Borges**. Packaging (plugin manifests, install scripts, version sync) and some skill patterns were inspired by [Matt Pocock's skills](https://github.com/mattpocock/skills).
 
 ## Layout
 
 ```
 skills/<skill-name>/
-  SKILL.md          # required — frontmatter + the workflow
-  references/*.md   # optional — depth loaded on demand
+  SKILL.md              # required — frontmatter + the workflow
+  agents/openai.yaml    # required — Codex picker metadata
+  references/*.md       # optional — depth loaded on demand
 ```
 
 One skill per directory. Directory name is the skill name: lowercase, hyphenated, no version suffix.
+
+Install commands for consumers live in [`.agents/install-block.md`](.agents/install-block.md). Change that file first, then `README.md`.
 
 ## SKILL.md
 
@@ -26,7 +31,11 @@ metadata:
 ---
 ```
 
-`name` matches the directory name exactly. `metadata.author` is the person who wrote the skill — it travels with the file when someone copies the folder into their own project, and a contributed skill keeps its contributor's name, not the repository owner's. `metadata.version` is semantic and is bumped by the change, not by the calendar: patch for a clarification or a fixed typo, minor for a new step or a new reference file, major when the workflow changes shape or the files it writes are renamed. Bumping the version means updating the row in `README.md` in the same commit.
+`name` matches the directory name exactly. `metadata.author` is the person who wrote the skill — it travels with the file when someone copies the folder into their own project, and a contributed skill keeps its contributor's name, not the repository owner's.
+
+`metadata.version` is the last version **published on `main`**. It is semantic, not a calendar stamp: patch for a clarification or a fixed typo, minor for a new step or a new reference file, major when the workflow changes shape or the files it writes are renamed. The bump describes the *cumulative* delta since the previous `main` version, not each staging edit.
+
+Do not bump during brainstorming, tests, or work on a branch. The only commit that may change `metadata.version` (and the matching `README.md` catalog row) is the one that publishes the skill onto `main`. A skill that has never been on `main` stays at `0.0.0` until that first publish, which sets `1.0.0`.
 
 The `description` is the only part of a skill a model sees before deciding to load it. Write it as a trigger, not a summary: name the situations, the artifacts and the words a user would actually say. "Helps with studying" triggers on nothing. "Use when the user wants to build or run a personal study repository for a certification exam — bootstrapping the wiki, ingesting practice questions, logging wrong answers, scheduling the daily loop" triggers on the real request.
 
@@ -35,6 +44,8 @@ Body rules:
 - **Fits on two screens.** A skill that has to be read in full at the start of a session cannot be a manual. Push templates, literal prompts and long checklists into `references/` and link them by repo-relative path.
 - **Imperative and ordered.** Numbered steps the model performs, not prose about the philosophy. Where a decision is judgment-based, say what to weigh and give the default.
 - **Ends with a done-check.** The last section is what has to be true before the model reports completion.
+
+Invocation rules: [`.agents/invocation.md`](.agents/invocation.md). Default is model-invoked.
 
 ## Writing rules
 
@@ -48,11 +59,28 @@ Body rules:
 
 1. Read this file and one existing skill end to end before writing.
 2. Create `skills/<name>/SKILL.md` against the rules above.
-3. Add a row to the catalog table in `README.md`. A skill missing from that table is a skill nobody will find.
-4. Keep reference files to one concern each, named by what they answer (`question-loop.md`, not `part-3.md`).
+3. Add `skills/<name>/agents/openai.yaml` (`interface.display_name`, `interface.short_description`).
+4. Add a row to the catalog table in `README.md` at version `0.0.0`. A skill missing from that table is a skill nobody will find. Leave the number at `0.0.0` until the commit that publishes it to `main`.
+5. Append `"./skills/<name>"` to the `skills` array in `.claude-plugin/plugin.json`.
+6. Keep reference files to one concern each, named by what they answer (`question-loop.md`, not `part-3.md`).
+7. Run `npm run check`. It must pass before you report the skill added.
+
+## Release
+
+Package version (`package.json`) and plugin version (`.claude-plugin/plugin.json`) move together on a catalog release. Skill `metadata.version` is independent: it still only changes in the commit that publishes that skill to `main`, even if the package version stays put or moves on a different cadence.
+
+```bash
+npm version patch   # or minor / major — syncs plugin.json and commits
+npm publish --access public
+git push --follow-tags
+claude plugin tag --push
+```
+
+`npm publish` ships `@borgesmathai/skills-catalog`. Pushing the git tag plus `claude plugin tag --push` is what Claude Code users pick up after they added this marketplace.
 
 ## Do not
 
-- Do not add build tooling, CI, or code to a catalog of markdown until a skill actually needs it.
-- Do not maintain a second index. `README.md` is the catalog.
+- Do not add a second catalog index. `README.md` is the catalog; `plugin.json` is the ship list and must match it (`npm run check`).
 - Do not append "Update YYYY-MM" sections to a skill. Rewrite the instruction; git holds the history.
+- Do not bump `metadata.version` or the README catalog version except in the commit that publishes that skill to `main`.
+- Do not document install commands anywhere except by copying [`.agents/install-block.md`](.agents/install-block.md).

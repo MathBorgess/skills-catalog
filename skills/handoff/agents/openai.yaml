@@ -1,0 +1,5 @@
+interface:
+  display_name: "Handoff"
+  short_description: "Handoff work to parallel Cursor, Claude, or Codex sessions"
+policy:
+  allow_implicit_invocation: true

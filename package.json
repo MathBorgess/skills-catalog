@@ -1,0 +1,46 @@
+{
+  "name": "@borgesmathai/skills-catalog",
+  "version": "1.0.0",
+  "description": "Matheus Borges's catalog of agent skills for Claude, Cursor, and Codex.",
+  "author": {
+    "name": "Matheus Borges",
+    "url": "https://github.com/MathBorgess"
+  },
+  "license": "MIT",
+  "homepage": "https://github.com/MathBorgess/skills-catalog#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/MathBorgess/skills-catalog.git"
+  },
+  "bugs": {
+    "url": "https://github.com/MathBorgess/skills-catalog/issues"
+  },
+  "keywords": [
+    "agent-skills",
+    "claude",
+    "claude-code",
+    "cursor",
+    "codex",
+    "skills"
+  ],
+  "files": [
+    "skills",
+    ".claude-plugin",
+    "scripts",
+    "README.md",
+    "LICENSE",
+    "CLAUDE.md",
+    "AGENTS.md"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "check": "node scripts/check-catalog.mjs",
+    "link": "bash scripts/link-skills.sh",
+    "list": "bash scripts/list-skills.sh",
+    "sync-plugin-version": "node scripts/sync-plugin-version.mjs",
+    "version": "node scripts/sync-plugin-version.mjs && git add .claude-plugin/plugin.json",
+    "prepublishOnly": "node scripts/check-catalog.mjs"
+  }
+}

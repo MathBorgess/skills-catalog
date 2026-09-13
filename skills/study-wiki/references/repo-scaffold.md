@@ -11,7 +11,10 @@ sources/                        # immutable raw study material, one file per ing
 wiki/
   README.md                     # the index: domains, weights, one bullet per note
   _meta/
-    profile.md                  # certifications, dates, weights, budget, language
+    profile.md                  # certifications, dates, durations, weights, budget, language
+    overlap.md                  # cross-exam topic table, ranked (Flow 1, not a stub)
+    roadmap.md                  # canonical calendar: sessions, gates, parks, triggers
+  sessions/                     # created on the first teach-me session, not at scaffold
   _log/
     errors.md                   # one line per wrong answer → topic note
     score.md                    # append-only daily points
@@ -54,7 +57,9 @@ _(no notes yet)_
 - [[Exam_Batch_01]] — <n> questions (<themes>)
 
 ## 3. Meta
-- [[Profile]] — certifications, dates, domain weights, daily budget
+- [[Profile]] — certifications, dates, durations, domain weights, daily budget
+- [[Overlap]] — cross-exam topics, ranked by shortest active exam then least mastery
+- [[Roadmap]] — sessions, diagnostic S0, gates, parks, triggers. Dates live only here.
 
 ## 4. Conventions
 
@@ -67,7 +72,7 @@ The descriptor after each bullet is not decoration — it is what makes `grep` o
 
 ## `CLAUDE.md` in the generated repo
 
-The generated repo gets its own operating rules so any model opening it later behaves the same, with no skill installed. Write it with: the orientation order (`CLAUDE.md` → `wiki/README.md` → topic note → last 30 lines of `errors.md`), the note template, the frontmatter contract, the wiki-link convention, the immutability of `sources/`, the rewrite-don't-append rule, the redaction rule, and the lint checklist. Keep it under 150 lines; it is read in full every session.
+The generated repo gets its own operating rules so any model opening it later behaves the same, with no skill installed. Write it with: the orientation order (`CLAUDE.md` → `wiki/README.md` → `wiki/_meta/roadmap.md` → `wiki/_meta/overlap.md` → topic note → last 30 lines of `errors.md`), that a study session calls the Skill tool with `"teach-me"` when that skill is installed, the note template, the frontmatter contract, the wiki-link convention, the immutability of `sources/`, the rewrite-don't-append rule, the redaction rule, that dates live only in the roadmap, and the lint checklist. Keep it under 150 lines; it is read in full every session.
 
 ## `README.md` in the generated repo
 
@@ -77,9 +82,11 @@ For a human arriving cold, or a future employer looking at it. What the repo is,
 
 1. `wiki/_meta/profile.md` — everything else derives from it.
 2. `wiki/README.md` with the full domain skeleton and empty domain sections.
-3. `wiki/_log/errors.md` and `wiki/_log/score.md` with their format contracts.
-4. `wiki/_buffer/capture.md` and `wiki/_log/decisions.md` — **only if** the user said capture is on.
-5. `CLAUDE.md` and `README.md`.
-6. `sources/` and the track directories — created when the first file lands in them, not before.
+3. `wiki/_meta/overlap.md` — real ranked rows, not a heading and a promise.
+4. `wiki/_meta/roadmap.md` — real sessions, `S0`, gates with both outcomes, park/trigger for every inactive exam.
+5. `wiki/_log/errors.md` and `wiki/_log/score.md` with their format contracts.
+6. `wiki/_buffer/capture.md` and `wiki/_log/decisions.md` — **only if** the user said capture is on.
+7. `CLAUDE.md` and `README.md`.
+8. `sources/`, `wiki/sessions/`, and the track directories — created when the first file lands in them, not before.
 
 Commit once, with a message naming the exams. Then report the paths and ask for the first study source or run the diagnostic batch.

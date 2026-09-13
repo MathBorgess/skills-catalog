@@ -1,0 +1,22 @@
+{
+  "name": "mathborgess",
+  "owner": {
+    "name": "Matheus Borges",
+    "url": "https://github.com/MathBorgess"
+  },
+  "description": "Matheus Borges's skills catalog as an installable Claude Code plugin.",
+  "plugins": [
+    {
+      "name": "skills-catalog",
+      "source": "./",
+      "description": "Study wikis, teaching sessions, and cross-provider handoff.",
+      "category": "productivity",
+      "keywords": [
+        "skills",
+        "study-wiki",
+        "teach-me",
+        "handoff"
+      ]
+    }
+  ]
+}

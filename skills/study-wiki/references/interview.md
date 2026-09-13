@@ -50,6 +50,7 @@ last_updated: YYYY-MM-DD
 | Field | Value |
 |---|---|
 | Certifications | `<CODE>` — <name>, target <date or "unscheduled"> |
+| Exam duration | `<CODE>` — <n> questions, <m> minutes (from the vendor guide; mark unverified if unsure) |
 | Starting level | <per exam> |
 | Daily budget | <minutes>, <when>, <timezone> |
 | Batch size | <n> questions |
@@ -66,3 +67,7 @@ last_updated: YYYY-MM-DD
 ```
 
 Fill the domain table from the vendor's official exam guide. If you are not certain of the current weights, say so in one line and mark the table `unverified — confirm against the vendor exam guide` rather than inventing percentages. Wrong weights silently corrupt every weekly report that follows.
+
+Look up each exam's **question count and timebox in minutes** from the same guide when writing the duration row. The overlap sort and the "shortest exam first" rule read that row; an invented 90 minutes will put the wrong credential first. Do not add an eighth interview question for this — it is a lookup, not a preference.
+
+After the profile exists, Flow 1 writes `wiki/_meta/overlap.md` then `wiki/_meta/roadmap.md`. Those files are not optional and they are not the interview.

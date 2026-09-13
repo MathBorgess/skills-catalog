@@ -8,15 +8,17 @@ Three entry points, one exit: every wrong answer becomes a line in `wiki/_log/er
 
 ## Entry A — Generated batch (the daily default)
 
-**1. Pick the topics — from the errors, not from the notes.**
+**1. Pick the topics — from the overlap table, then the errors, not from the notes.**
 
-Read `wiki/_log/errors.md` and rank topics by, in order:
+If `wiki/_meta/overlap.md` exists, take the top **active** row (parked exams out). The error log then steers *inside* that topic — most recent misses, longest without review — not onto a second exam.
+
+If the overlap table does not exist, rank `wiki/_log/errors.md` by, in order:
 1. missed in the last 14 days, more than once;
 2. missed once, never re-tested since;
 3. covered by a note but never tested at all;
 4. longest since last review.
 
-Take two or three topics. Do not spread five questions across five topics — a batch that touches everything diagnoses nothing.
+Take **one** overlap row (or two or three error-log themes *inside* that row). Do not spread five questions across five topics — a batch that touches everything diagnoses nothing.
 
 **2. Write the questions in the exam's real shape.**
 

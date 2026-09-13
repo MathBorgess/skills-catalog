@@ -64,19 +64,23 @@ Invocation rules: [`.agents/invocation.md`](.agents/invocation.md). Default is m
 5. Append `"./skills/<name>"` to the `skills` array in `.claude-plugin/plugin.json`.
 6. Keep reference files to one concern each, named by what they answer (`question-loop.md`, not `part-3.md`).
 7. Run `npm run check`. It must pass before you report the skill added.
+8. Open a pull request against `main`. Do not push to `main`. Direct pushes are blocked.
 
 ## Release
 
 Package version (`package.json`) and plugin version (`.claude-plugin/plugin.json`) move together on a catalog release. Skill `metadata.version` is independent: it still only changes in the commit that publishes that skill to `main`, even if the package version stays put or moves on a different cadence.
 
+Bump versions on a branch, open a PR, merge. Merging to `main` publishes `@mathborgess/skills-catalog` to GitHub Packages.
+
 ```bash
+git checkout -b release/x.y.z
 npm version patch   # or minor / major — syncs plugin.json and commits
-npm publish --access public
-git push --follow-tags
-claude plugin tag --push
+git push -u origin HEAD --follow-tags
 ```
 
-`npm publish` ships `@borgesmathai/skills-catalog`. Pushing the git tag plus `claude plugin tag --push` is what Claude Code users pick up after they added this marketplace.
+Then merge the PR. After merge: `claude plugin tag --push`.
+
+Do not `git push origin main`. See [`.agents/adr/0002-prs-only-on-main.md`](.agents/adr/0002-prs-only-on-main.md).
 
 ## Do not
 

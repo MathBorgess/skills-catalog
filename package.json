@@ -1,5 +1,5 @@
 {
-  "name": "@borgesmathai/skills-catalog",
+  "name": "@mathborgess/skills-catalog",
   "version": "1.0.0",
   "description": "Matheus Borges's catalog of agent skills for Claude, Cursor, and Codex.",
   "author": {
@@ -33,7 +33,7 @@
     "AGENTS.md"
   ],
   "publishConfig": {
-    "access": "public"
+    "registry": "https://npm.pkg.github.com"
   },
   "scripts": {
     "check": "node scripts/check-catalog.mjs",

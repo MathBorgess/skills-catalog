@@ -36,11 +36,20 @@ From GitHub:
 npx skills add MathBorgess/skills-catalog
 ```
 
-From npm ([`@borgesmathai/skills-catalog`](https://www.npmjs.com/package/@borgesmathai/skills-catalog)):
+From GitHub Packages ([`@mathborgess/skills-catalog`](https://github.com/MathBorgess/skills-catalog/pkgs/npm/skills-catalog)):
 
 ```bash
-npx skills add npm:@borgesmathai/skills-catalog
+npx skills add npm:@mathborgess/skills-catalog
 ```
+
+GitHub Packages needs a token even for a public package. Keep it in `~/.npmrc`, never in the repo:
+
+```
+@mathborgess:registry=https://npm.pkg.github.com
+//npm.pkg.github.com/:_authToken=YOUR_GITHUB_TOKEN
+```
+
+The repo `.npmrc` already maps the scope. npmjs.org still has [`@borgesmathai/skills-catalog`](https://www.npmjs.com/package/@borgesmathai/skills-catalog) from an earlier publish; new versions ship on GitHub Packages.
 
 Pick the skills you want and which coding agents to install them on. Add `-g` for a user-wide install. One skill: append `--skill <name>`. Later: `npx skills update <name>`.
 
@@ -95,6 +104,8 @@ metadata:
 
 ## Contributing
 
+All changes land through **pull requests** against `main`. Direct pushes to `main` are blocked, including for admins. Branch, open a PR, wait for the **Catalog** check, merge.
+
 Issues and suggestions are welcome. A new skill has to meet [`CLAUDE.md`](CLAUDE.md) (same rules in [`AGENTS.md`](AGENTS.md)). Short version: one job per skill, a description written for the moment of triggering, `metadata.author` and `metadata.version` in the frontmatter, an `agents/openai.yaml`, no dead scaffolding, and every instruction concrete enough that two different models produce the same shape of output.
 
 Skills contributed by other people keep their own author in `metadata.author`; authorship travels with the skill, not with the repository.
@@ -106,21 +117,25 @@ Skills contributed by other people keep their own author in `metadata.author`; a
 3. Add a row to the catalog table above at version `0.0.0`.
 4. Append `"./skills/<name>"` to `.claude-plugin/plugin.json` → `skills`.
 5. Run `npm run check` and fix anything it reports.
-
-Open a pull request against `main`. CI runs the same check.
+6. Open a pull request against `main`. Do not push to `main`.
 
 ### Release (maintainers)
 
-Package version and plugin version move together. Skill frontmatter versions bump only in the commit that publishes that skill to `main`, for the cumulative work since the last published number.
+Package version and plugin version move together on a catalog release. Bump them **on the PR**, not on `main`. Skill frontmatter versions bump only in the commit that publishes that skill to `main`, for the cumulative work since the last published number.
 
 ```bash
+git checkout -b release/x.y.z
 npm version patch          # or minor / major — syncs plugin.json, commits, tags vX.Y.Z
-npm publish --access public
-git push --follow-tags
+git push -u origin HEAD --follow-tags
+```
+
+Open the PR, wait for **Catalog**, merge. Merging to `main` publishes [`@mathborgess/skills-catalog`](https://github.com/MathBorgess/skills-catalog/pkgs/npm/skills-catalog) to GitHub Packages if that version is not already there. Then:
+
+```bash
 claude plugin tag --push   # skills-catalog--vX.Y.Z for Claude Code
 ```
 
-The npm package is [`@borgesmathai/skills-catalog`](https://www.npmjs.com/package/@borgesmathai/skills-catalog). After a version bump, `npm publish --access public` updates the registry. Claude Code users who already added the marketplace run `claude plugin marketplace update MathBorgess` then `claude plugin update skills-catalog@MathBorgess`.
+Claude Code users who already added the marketplace run `claude plugin marketplace update MathBorgess` then `claude plugin update skills-catalog@MathBorgess`.
 
 To submit the plugin to Anthropic's community marketplace later, follow [Discover plugins](https://code.claude.com/docs/en/discover-plugins). Until that listing exists, the self-hosted marketplace commands above are the Claude install path.
 

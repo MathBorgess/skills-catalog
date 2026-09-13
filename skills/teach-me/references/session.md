@@ -33,7 +33,7 @@ Send this table **before** the HTML lesson:
 | Artifact | lesson HTML path + session note path + ledger lines |
 | Failure to provoke | one thing that should break or be distinguished |
 
-Then write the HTML ([`lesson.md`](lesson.md)) and open it if you can. One line in chat: the path, that Check hides the key until they tap it, and that they should send back the tally (`n/m`) so the ledger can update.
+Then write the HTML ([`lesson.md`](lesson.md)) with its resume brief ([`resume.md`](resume.md)) and open it if you can. One line in chat: the path, that Check hides the key until they tap it, and that **Copy resume prompt** gives them a prompt to paste here or in any other session (a bare `n/m` also works).
 
 **Practice:** environment is here. HTML is the briefing (steps, platform names, checkpoints). Evidence is still a config, query, denial, or trace they produce. No finished notebook in the HTML.
 
@@ -44,6 +44,8 @@ Do not interview for a life mission. The roadmap already has the reason. Three c
 ## 4. After they answer
 
 Grade. For each miss: the winning qualifier, what every distractor was testing, the trap as a one-line rule. For practice: mechanism, observed failure, how it shows up on the exam. End with **Contents to study aside** — what this session exposed that does not fit in the correction.
+
+A pasted `teach-me resume` prompt is the main input: its brief replaces the conversation you did not see. Resolve every **Doubt / attention** note as [`resume.md`](resume.md) says — source first, then note edit, `lacuna`, `erro`, or Contents to study aside.
 
 A tally they send from the phone (`4/6`, "errei a 2 e a 5") is a real session result. Grade from that. Do not wait for a desktop write-up.
 

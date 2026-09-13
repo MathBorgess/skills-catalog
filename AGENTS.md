@@ -26,10 +26,10 @@ claude plugin install skills-catalog@MathBorgess
 npx skills add MathBorgess/skills-catalog
 ```
 
-From npm:
+From GitHub Packages:
 
 ```bash
-npx skills add npm:@borgesmathai/skills-catalog
+npx skills add npm:@mathborgess/skills-catalog
 ```
 
 **This clone (maintainer)**
@@ -40,7 +40,7 @@ npm run link
 
 That symlinks `skills/*` into `~/.claude/skills`, `~/.cursor/skills`, `~/.codex/skills`, and `~/.agents/skills`.
 
-Canonical wording: [`.agents/install-block.md`](.agents/install-block.md).
+Canonical wording: [`.agents/install-block.md`](.agents/install-block.md). Changes reach `main` only through pull requests. Do not push to `main`.
 
 ## Layout
 

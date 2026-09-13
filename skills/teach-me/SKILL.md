@@ -3,7 +3,7 @@ name: teach-me
 description: "Use when the user is about to study, review, quiz, or practice material that already lives in a certification study wiki — a session inside an existing roadmap, a topic from the overlap table, a phone-sized HTML lesson, \"vou estudar\", \"me ensina\", \"quiz me\", \"aula\", \"lição\", \"no celular\", \"practice questions\", \"I got these wrong\", a pasted prompt starting with \"teach-me resume\", \"retomar sessão\", \"resume prompt\", or when they open a MathAI-style vault under estudos/ and say they will study. Not for bootstrapping an empty wiki (that is study-wiki)."
 metadata:
   author: Matheus Borges
-  version: 1.0.1
+  version: 1.1.0
 ---
 
 # Teach Me

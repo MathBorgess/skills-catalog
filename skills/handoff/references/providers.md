@@ -9,13 +9,15 @@ The dispatcher, for each session:
 1. Creates the git worktree itself (`handoff/<run-id>-<NN>` under the run directory) and sets it as the child's working directory. **No provider-specific worktree flag is used.** Those flags differ per CLI and per version, and guessing one wrong is a launch failure that costs a whole session.
 2. Passes `sessions/NN.prompt.md` — three lines pointing at the brief — as the prompt argument. Never a long prompt on the command line, never an API key.
 3. Redirects stdout and stderr to `logs/NN.log`, detached, so the whole set goes out together and nothing blocks on anything else.
-4. On exit, reads `sessions/NN.result.md` for a status. No result file plus quota language in the log tail → the slot is marked empty and the session is relaunched elsewhere. No result file and no quota language → `failed`.
+4. On exit, reads `sessions/NN.result.md` for a status. No result file plus quota language in the log tail → the slot — or, on a provider with lanes, the one lane that died — is marked empty and the session is relaunched elsewhere. No result file and no quota language → `failed`.
 
 Read-only sessions (`"writes": []`) skip the worktree and run in the current checkout.
 
 ## Model ids
 
 Probe, never remember: `agent --list-models`, `claude --help`, `codex --help`. Put the id in the plan's `model` field, or leave it unset for the CLI default. A stale id from training is a launch failure.
+
+`route` already runs `--list-models` itself on a provider that bills more than one pool, to pin a session's lane to an id that exists (see [`routing.md`](routing.md)). A `model` you set in the plan always wins over that, and pins the lane that model belongs to.
 
 ## When a launch fails
 

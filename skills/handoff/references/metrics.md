@@ -44,7 +44,7 @@ When the user asks whether the skill is getting worse, read the tail of `metrics
 
 | Pattern across recent runs | What it means |
 |---|---|
-| `quota_deaths` > 0 repeatedly on one provider | that provider's real ceiling is lower than the probe suggests; lower `HANDOFF_LOW_PCT` |
+| `quota_deaths` > 0 repeatedly on one provider | that provider's real ceiling is lower than the probe suggests; lower `HANDOFF_LOW_PCT`. On a provider with lanes the death is counted per lane, so read the run's events for which pool actually ran out before changing the threshold for both |
 | `launch_fails` > 0 | the installed CLI's flags have moved — fix `launchArgs` and say which flag |
 | `spread_miss` = 1 with several providers available | the cut is too coarse to spread, or one provider is being named by habit |
 | `relaunches` climbing while `n_done` holds | briefs are short of context; the fix is in `brief.md`, not in the router |

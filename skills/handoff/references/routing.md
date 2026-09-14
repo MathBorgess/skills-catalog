@@ -41,6 +41,21 @@ Detect from this session's environment. That is the provider whose tokens you ar
 
 Leave `model` unset unless the user named one or the tier clearly demands a specific id. An unset model means the CLI default, which never goes stale. Never invent a model id from memory; probe the CLI's own list.
 
+## Lanes
+
+A provider that bills **several pools inside one billing cycle** carries lanes. Cursor is the one that does: **Cursor Models** (Auto, Composer, the Grok tiers) and **Other Models** (named third-party models, at that model's API price). Lanes are alternatives, not gates — a session draws from exactly one — so a slot is worth its *best* lane, and the model id is what decides which one it spends. Why the split exists and how it is read: [`references/quota.md`](quota.md).
+
+| `tier` | Lane it prefers | Why |
+|---|---|---|
+| `mechanical` | Cursor Models | a rename on a frontier model spends metered credit for nothing |
+| `design`, `review` | Other Models | a judgment call traded down to a small own-model is a real downgrade |
+
+The preference is steep but not a wall: the other lane still wins when the preferred one is far more loaded, and the routing table marks that session `↓`. A lane with no supply left is not a candidate at all — so a design session is never routed into a pool already at 100%, it goes to another provider instead.
+
+`route` **pins** the lane by taking a model id from the CLI's own `--list-models` output, never one from memory, and prefers a named own-model over bare `auto` (on team plans Auto's router can land in the other pool). When a CLI does not list its models the lane stays a preference its default model may ignore, and the cell is marked `*`. A model you set yourself always wins, and pins the lane that model belongs to.
+
+At dispatch, a lane that dies of quota blacklists **that lane**, not the slot: a session that exhausts Other Models is relaunched on Cursor Models with a model from that pool, without a parent turn.
+
 ## What the router does with it
 
 In order:
@@ -48,8 +63,8 @@ In order:
 1. **Independence gate.** Overlapping concurrent write-sets → the plan is refused with the colliding paths named. Fix the cut, do not argue with it.
 2. **Supply per slot**, measured over `horizon_s`, **per window and then at the minimum**. A slot's worth is a *rate*, not a stock: a five-hour window sitting at 15% that reopens in ten minutes is worth more across a two-hour run than a weekly window at 30% that does not. Because a plan gates on every window at once, the slot is worth the least of them — but each refills on its own clock, so the five-hour window stops binding a long run while a weekly window binds it the whole way. A slot blocked only by a window that reopens inside the horizon is assigned work and **held** until that reset instead of being discarded; the table shows it as `holds 30m`. Which window binds depends on the horizon, which is why `horizon_s` is worth setting honestly.
 3. **Admission control.** Estimated demand (per-session cost by provider and size, from this machine's own history once it has three samples, a built-in prior before that) against total supply. Over budget → the table carries a warning naming the shortfall. Act on it: cut fewer and bigger sessions, or dispatch after the soonest reset. Launching into a wall costs a whole session and produces nothing.
-4. **Assignment**, minimising projected utilisation per slot rather than counting sessions — a five-minute lint job and a subsystem refactor are not one each. A user-named provider wins and is marked as an override.
-5. **Rerouting**, at dispatch time: a session whose provider dies with quota language is relaunched on the next eligible slot, up to three attempts, without a parent turn.
+4. **Assignment**, minimising projected utilisation per **lane** rather than counting sessions — a five-minute lint job and a subsystem refactor are not one each, and two lanes of the same slot compete for work independently. A user-named provider wins and is marked as an override.
+5. **Rerouting**, at dispatch time: a session that dies with quota language is relaunched on the next eligible lane — which may be the other lane of the same provider — up to three attempts, without a parent turn.
 
 ## Isolation
 

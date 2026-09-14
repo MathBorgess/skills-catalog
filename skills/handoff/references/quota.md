@@ -16,11 +16,13 @@ Per provider, the first source that yields a number wins.
 |---|---|---|---|
 | claude | each `CLAUDE_CONFIG_DIR` entry (or `~/.config/claude`, `~/.claude`) `/.credentials.json`, then the **macOS login Keychain** under service `Claude Code-credentials` | `api.anthropic.com/api/oauth/usage` | `five_hour.utilization`, `seven_day.utilization` |
 | codex | each `CODEX_HOME` entry (or `~/.codex`) `/auth.json` | `chatgpt.com/backend-api/wham/usage` | `rate_limit.primary_window/secondary_window.used_percent` |
-| cursor | the Cursor **IDE**'s `state.vscdb`, key `cursorAuth/accessToken`, read with `sqlite3` or a `python3` one-liner | `POST api2.cursor.sh/aiserver.v1.DashboardService/GetCurrentPeriodUsage` with `Authorization: Bearer` and `Connect-Protocol-Version: 1` | `planUsage.totalPercentUsed`, `billingCycleStart/End` |
+| cursor | the Cursor **IDE**'s `state.vscdb`, key `cursorAuth/accessToken`, read with `sqlite3` or a `python3` one-liner | `POST api2.cursor.sh/aiserver.v1.DashboardService/GetCurrentPeriodUsage` with `Authorization: Bearer` and `Connect-Protocol-Version: 1` | `planUsage.totalPercentUsed` plus the two pools, `autoPercentUsed` and `apiPercentUsed`; `billingCycleStart/End` |
 
 Cursor's session cookie is **not** the raw token: it is `WorkosCursorSessionToken=<user id>%3A%3A<token>`, where the user id is the part of the JWT's `sub` claim after the provider prefix (`auth0|user_abc` → `user_abc`). Sending the bare token returns HTTP 401 with a credential that is perfectly valid.
 
-**Cursor's token is the IDE's, not the CLI's.** `cursor-agent` stores identity and settings in `~/.cursor/cli-config.json` and **no usage token at all**; the token this endpoint needs is the one the Cursor IDE keeps in its SQLite state file. A machine with the CLI but no signed-in IDE therefore has nothing to read, and that is the correct answer rather than a bug to keep hunting. The slot stays `unknown`, which routing weights neutrally instead of dropping.
+**Cursor's token is the IDE's, not the CLI's.** `cursor-agent` stores identity and settings in `~/.cursor/cli-config.json` and **no usage token at all**; the token this endpoint needs is the one the Cursor IDE keeps in its SQLite state file. A machine with the CLI but no signed-in IDE therefore has nothing to read, and that is the correct answer rather than a bug to keep hunting.
+
+**A missing source is never a failed probe.** `probe` exits 0 whatever it finds: the slot reads `unknown`, the note says which source was missing, and routing carries it at a neutral weight — so a machine with `cursor-agent` and no Cursor IDE still gets Cursor sessions, just without a quota reading or lane split to steer them. Only a provider whose **binary** is absent is dropped outright, as `absent`.
 
 The dashboard endpoint takes a bearer token and nothing else. An older summary endpoint (`cursor.com/api/usage-summary`) is kept as a fallback and authenticates differently: a composite cookie `WorkosCursorSessionToken=<user id>%3A%3A<token>`, where the user id is whichever part of an oauth id like `github|user_abc` starts with `user_` — not blindly the second. Sending the bare token there is a 401 on a perfectly valid credential. `state.vscdb` can exceed 2 GB, so it is queried, never slurped.
 
@@ -55,6 +57,25 @@ Three separate questions come out of that list, and they have different answers:
 | How long must it wait? | the **latest** reset among those blocked windows, when they reopen inside the horizon |
 
 So a slot whose five-hour window sits at 8% but reopens in thirty minutes is assigned work on a two-hour run — and **held for thirty minutes** before it starts, rather than being discarded or walking into the wall. On a twenty-minute run the same slot is simply out, because nothing refills in time.
+
+## Two lanes are not two windows
+
+Cursor bills **two independent pools inside the same billing cycle**, and its own dashboard names them:
+
+| Lane | Field | What draws on it |
+|---|---|---|
+| **Cursor Models** | `autoPercentUsed` | Auto, Composer, the Grok tiers — Cursor's own models, with their own included usage |
+| **Other Models** | `apiPercentUsed` | named third-party models (Claude, GPT, Gemini), charged at that model's API price against the plan's included credit |
+
+`totalPercentUsed` is the blend of the two, and it is the number that hides the case that decides a run. A live Ultra account has been observed at `auto 98.1% · api 100% · total 98.5%`: the headline says the slot has 1.5% left, and a session routed there on a named model dies on its first call while Composer would have worked all day.
+
+**Windows are simultaneous; lanes are alternatives.** A plan gates on every window at once, so a slot is worth the **least** of its windows. A session draws from exactly one lane, so a slot is worth the **best** of its lanes — and which one it draws from is decided by the model id, which is why routing pins a model rather than stating a preference. A lane at 0% is out even while the cycle it sits inside reads 55%.
+
+Both pools reset with the monthly cycle, so a lane caps the windows it shares that cycle with rather than carrying a reset of its own.
+
+**Both pools or neither.** A payload that reports one and not the other yields no lanes at all and the slot falls back to the blended total — a half-known split would send routing off a guess, and the total is at least a real number. Team and enterprise accounts report no `plan` object; there the two percentages come from the prose fields `autoModelSelectedDisplayMessage` and `namedModelSelectedDisplayMessage`, under the same rule.
+
+The other providers report one undivided pool, so they carry no lanes and every line above collapses to the behaviour they already had.
 
 ## Two things the probe will not do
 

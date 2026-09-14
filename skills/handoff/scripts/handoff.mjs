@@ -360,6 +360,7 @@ const PROVIDERS = {
                     : null,
               },
             ],
+            lanes: cursorLanes(plan, j),
           };
         }
       }
@@ -406,6 +407,7 @@ const PROVIDERS = {
                 : null,
           },
         ],
+        lanes: cursorLanes(plan2, j2),
       };
     },
   },
@@ -426,6 +428,88 @@ function cursorUserId(rawId) {
   const part = rawId.split("|").find((p) => p.startsWith("user_"));
   return part ?? (rawId.startsWith("user_") ? rawId : null);
 }
+
+// ------------------------------------------------------------------- lanes
+//
+// Cursor bills two independent pools inside one billing cycle, and its own
+// dashboard names them: **Cursor Models** (Auto, Composer, the Grok tiers —
+// `autoPercentUsed`) and **Other Models** (named third-party models, charged at
+// that model's API price — `apiPercentUsed`). `totalPercentUsed` is the blended
+// headline, and it hides the case that decides a run: a slot reading 55% overall
+// can have Other Models at 100% spent, so a session routed there on Claude dies
+// on its first call while Composer would have worked all day.
+//
+// Lanes are not windows. Windows are simultaneous gates — a plan checks all of
+// them at once, so a slot is worth the LEAST of them. Lanes are alternatives — a
+// session draws from exactly one, so a slot is worth the BEST of them, and which
+// one it draws from is decided by the model id.
+const LANE_LABEL = {
+  "cursor-models": "Cursor Models — Auto, Composer, Grok",
+  "other-models": "Other Models — named third-party, at API price",
+};
+
+// Which lane a model id draws from. A pattern, not a list of ids: Cursor adds
+// and renames its own models faster than any hardcoded list survives, and an
+// unrecognised name falls to the metered lane rather than quietly spending the
+// pool it does not belong to.
+const CURSOR_OWN_MODEL_RE = new RegExp(
+  process.env.HANDOFF_CURSOR_OWN_MODELS ?? "composer|grok|^auto$",
+  "i",
+);
+const cursorLaneOf = (model) =>
+  !model ? null : CURSOR_OWN_MODEL_RE.test(model) ? "cursor-models" : "other-models";
+const laneOfModel = (provider, model) => (provider === "cursor" ? cursorLaneOf(model) : null);
+
+// "You've used 42% of your included total usage" — on team and enterprise
+// accounts, which report no `plan` object, the prose is the only place the split
+// appears.
+function percentFromMessage(msg) {
+  const m = typeof msg === "string" ? msg.match(/(\d+(?:\.\d+)?)\s*%/) : null;
+  return m ? Number(m[1]) : null;
+}
+
+// Both pools or neither. A half-known split would send routing off a guess,
+// while the blended total it falls back to is at least a real number.
+function cursorLanes(plan, payload) {
+  const read = (v, msg) =>
+    typeof v === "number" && Number.isFinite(v) ? v : percentFromMessage(msg);
+  const auto = read(plan?.autoPercentUsed, payload?.autoModelSelectedDisplayMessage);
+  const api = read(plan?.apiPercentUsed, payload?.namedModelSelectedDisplayMessage);
+  if (typeof auto !== "number" || typeof api !== "number") return undefined;
+  const left = (used) => Math.max(0, Math.min(100, Math.round(100 - used)));
+  return [
+    { name: "cursor-models", remaining_pct: left(auto) },
+    { name: "other-models", remaining_pct: left(api) },
+  ];
+}
+
+// The CLI's own model list, so a lane can be pinned to a real id instead of an
+// invented one. `--list-models` is the documented flag; a CLI without it exits
+// non-zero and the lane stays a preference the default model may ignore, which
+// the routing table then marks rather than pretending otherwise.
+const modelListCache = new Map();
+function cliModels(bin) {
+  if (modelListCache.has(bin)) return modelListCache.get(bin);
+  let out = [];
+  try {
+    const r = spawnSync(bin, ["--list-models"], { encoding: "utf8", timeout: 20000 });
+    if (r.status === 0 && r.stdout) {
+      out = r.stdout
+        .split("\n")
+        .map((l) => l.replace(/^[\s*\-\u2022]+/, "").trim())
+        .filter((l) => /^[a-z0-9][a-z0-9._-]{1,48}$/i.test(l));
+    }
+  } catch {}
+  modelListCache.set(bin, out);
+  return out;
+}
+
+const pickModelForLane = (bin, provider, laneName) => {
+  const inLane = cliModels(bin).filter((m) => laneOfModel(provider, m) === laneName);
+  // `auto` hands the choice to Cursor's router, and on team plans that choice can
+  // land in the other pool — so a named own-model wins over it when one is listed.
+  return inLane.find((m) => m.toLowerCase() !== "auto") ?? inLane[0] ?? null;
+};
 
 // Walk a parsed config and return the first string that decodes as a JWT
 // carrying a `sub` claim. Key names move between CLI versions — the shape of a
@@ -559,12 +643,16 @@ function fromUsagebar(report, ids) {
 // `window` are only the headline — the binding one right now. Supply is
 // computed per window and then taken at the minimum, because a plan gates on
 // all of its windows at once and each refills on its own schedule.
-function makeSlot({ key, provider, account, bin, windows, source, estimated, note, tried }) {
+function makeSlot({ key, provider, account, bin, windows, lanes, source, estimated, note, tried }) {
   const usable = (windows ?? []).filter((w) => typeof w.remaining_pct === "number");
   const head = usable.length ? pickTightest(usable) : null;
   return {
     key, provider, account, installed: true, bin,
     windows: windows?.length ? windows : undefined,
+    // Alternatives, not gates — see the lanes block above.
+    lanes: lanes?.length
+      ? lanes.map((l) => ({ ...l, bucket: bucketOf(l.remaining_pct) }))
+      : undefined,
     remaining_pct: head?.remaining_pct ?? null,
     window: head?.name ?? windows?.[0]?.name ?? null,
     resets_at: head?.resets_at ?? windows?.[0]?.resets_at ?? null,
@@ -631,13 +719,12 @@ async function probe() {
           p.noCredentialHint ??
           `${tokenless[0]} holds settings or identity but no session token ` +
             `(probe --explain lists every path tried)`;
-          (process.platform === "darwin"
-            ? `. To find it: security dump-keychain 2>/dev/null | grep -i '"svce".*${name}' ` +
-              `— that prints attribute names only, never a secret, and the service it names ` +
-              `can be added to this provider's Keychain list`
-            : "");
       } else {
-        note = `no credential found — run \`${bin}\` once to log in (probe --explain lists the paths tried)`;
+        // Where the CLI is not the thing that holds the token, saying "log in
+        // again" sends someone to do the one thing that cannot help.
+        note =
+          p.noCredentialHint ??
+          `no credential found — run \`${bin}\` once to log in (probe --explain lists the paths tried)`;
       }
     } else {
       try {
@@ -694,6 +781,7 @@ async function probe() {
       makeSlot({
         key: name, provider: name, account: "default", bin,
         windows: result?.windows ?? [],
+        lanes: result?.lanes,
         source: source ?? "probe failed",
         estimated, note,
         tried: arg("explain") ? tried : undefined,
@@ -757,17 +845,42 @@ function windowSupply(w, horizonS) {
 // reopens in twenty minutes stops binding a two-hour run, while a weekly
 // window at 8% binds it the whole way.
 function effectiveSupply(slot, horizonS) {
-  if (slot.bucket === "absent" || slot.bucket === "empty") return 0;
-  const windows = slot.windows?.length
+  return Math.max(...laneOptions(slot).map((l) => supplyFor(slot, l, horizonS)));
+}
+
+// The lanes a slot can be routed on: its real ones, or one null lane for a
+// provider that bills a single undivided pool.
+const laneOptions = (slot) => (slot.lanes?.length ? slot.lanes : [null]);
+
+const slotWindows = (slot) =>
+  slot.windows?.length
     ? slot.windows
     : [{ remaining_pct: slot.remaining_pct, resets_at: slot.resets_at, window_secs: slot.window_secs }];
-  return Math.min(...windows.map((w) => windowSupply(w, horizonS)));
+
+// Supply for ONE lane of a slot. The lane is a smaller pool inside the same
+// cycle, so its cap goes in before the per-window rate math, not after — a lane
+// at 0% is out even while the cycle it sits in reads 55%.
+function supplyFor(slot, lane, horizonS) {
+  if (slot.bucket === "absent" || slot.bucket === "empty") return 0;
+  return Math.min(...laneCapped(slot, lane).map((w) => windowSupply(w, horizonS)));
+}
+
+function laneCapped(slot, lane) {
+  const windows = slotWindows(slot);
+  if (!lane) return windows;
+  return windows.map((w) => ({
+    ...w,
+    remaining_pct:
+      typeof w.remaining_pct === "number"
+        ? Math.min(w.remaining_pct, lane.remaining_pct)
+        : lane.remaining_pct,
+  }));
 }
 
 // The latest reset among windows that are under the floor right now and reopen
 // within the horizon. Null when nothing is currently blocking a start.
-function holdUntil(slot, horizonS) {
-  const windows = slot.windows?.length ? slot.windows : [slot];
+function holdUntil(slot, horizonS, lane = null) {
+  const windows = laneCapped(slot, lane);
   let latest = null;
   for (const w of windows) {
     if (typeof w.remaining_pct !== "number" || w.remaining_pct >= LOW_PCT) continue;
@@ -883,6 +996,16 @@ function estimateCost(provider, size, history) {
   return history[`${provider}:${size}`] ?? COST_PRIOR[size] ?? COST_PRIOR.m;
 }
 
+// A mechanical job on a frontier model spends the metered pool for nothing; a
+// design job on a small own-model is a real downgrade. So tier picks a lane — as
+// a preference, not a wall: a penalty on the score, so the other lane still wins
+// when the preferred one is genuinely scarce, and the table marks it when it
+// does. The penalty is deliberately steep: the preference is about capability,
+// not load-balancing, and it should take a wide utilisation gap to trade a
+// design session down to a small model while the frontier pool is still full.
+const LANE_PENALTY = 3;
+const preferredLane = (tier) => (tier === "mechanical" ? "cursor-models" : "other-models");
+
 function route(dir) {
   const plan = readJSON(join(dir, "plan.json"));
   if (!plan?.sessions?.length) die("plan.json missing or has no sessions");
@@ -930,6 +1053,18 @@ function route(dir) {
   );
   const pool = ok.length ? ok : eligible;
 
+  // Lanes expand the pool: a slot with one spent lane is not a spent slot, and
+  // the two lanes of one slot compete for work independently.
+  const candidates = [];
+  for (const p of pool) {
+    for (const lane of laneOptions(p)) {
+      const supply = supplyFor(p, lane, horizonS);
+      if (supply > 0) {
+        candidates.push({ slot: p, lane, key: lane ? `${p.key}/${lane.name}` : p.key, supply });
+      }
+    }
+  }
+
   // Admission control before assignment: does the pool hold this cut?
   const demand = plan.sessions.reduce((acc, s) => {
     const size = s.size ?? "m";
@@ -944,22 +1079,49 @@ function route(dir) {
     headroom_pct: Math.round(supply - demand),
   };
 
-  // Weighted assignment: minimise projected utilisation of each slot.
-  const load = Object.fromEntries(pool.map((p) => [p.key, 0]));
+  // Weighted assignment: minimise projected utilisation of each lane.
+  const load = Object.fromEntries(candidates.map((c) => [c.key, 0]));
   const assigned = [];
+  const pickBest = (field, size, wanted, pinned) => {
+    const lanePinned = pinned ? field.filter((c) => c.lane?.name === pinned) : [];
+    return (lanePinned.length ? lanePinned : field)
+      .map((c) => ({
+        c,
+        score:
+          ((load[c.key] + estimateCost(c.slot.provider, size, history)) / c.supply) *
+          (c.lane && c.lane.name !== wanted ? LANE_PENALTY : 1),
+      }))
+      .sort((a, b) => a.score - b.score)[0].c;
+  };
   for (const s of [...plan.sessions].sort((a, b) => a.id.localeCompare(b.id))) {
     const size = s.size ?? "m";
-    let slot;
+    const wanted = preferredLane(s.tier);
+    let cand;
     if (s.provider) {
-      slot = pool.find((p) => p.key === s.provider || p.provider === s.provider)
-        ?? eligible.find((p) => p.provider === s.provider);
-      if (!slot) die(`session ${s.id} names provider ${s.provider}, which is absent`);
+      const named = candidates.filter(
+        (c) => c.slot.key === s.provider || c.slot.provider === s.provider,
+      );
+      if (named.length) {
+        cand = pickBest(named, size, wanted, laneOfModel(named[0].slot.provider, s.model));
+      } else {
+        // The user named a provider whose every lane is spent. Their call wins;
+        // the zero supply is what the admission warning is for.
+        const slot =
+          eligible.find((p) => p.key === s.provider || p.provider === s.provider) ??
+          quota.slots.find((p) => p.key === s.provider || p.provider === s.provider);
+        if (!slot?.installed) die(`session ${s.id} names provider ${s.provider}, which is absent`);
+        cand = { slot, lane: null, key: slot.key, supply: 0 };
+      }
     } else {
-      slot = pool
-        .map((p) => ({ p, score: (load[p.key] + estimateCost(p.provider, size, history)) / p.supply }))
-        .sort((a, b) => a.score - b.score)[0].p;
+      cand = pickBest(candidates, size, wanted, null);
     }
-    load[slot.key] += estimateCost(slot.provider, size, history);
+    const slot = cand.slot;
+    const laneName = cand.lane?.name ?? null;
+    load[cand.key] = (load[cand.key] ?? 0) + estimateCost(slot.provider, size, history);
+    // Pin the lane to a model id the CLI actually lists. Without a pin the lane
+    // is only a preference and the CLI's default model decides the pool, so the
+    // table says so rather than claiming a routing decision it did not make.
+    const model = s.model ?? (laneName ? pickModelForLane(slot.bin, slot.provider, laneName) : null);
     assigned.push({
       ...s,
       size,
@@ -967,9 +1129,14 @@ function route(dir) {
       provider: slot.provider,
       account: slot.account,
       bin: slot.bin,
-      model: s.model ?? null,
+      model,
+      lane: laneName ?? undefined,
+      lane_remaining_pct: cand.lane?.remaining_pct,
+      lane_pinned: laneName ? Boolean(model) : undefined,
+      lane_fallback: laneName && laneName !== wanted ? true : undefined,
       remaining_pct: slot.remaining_pct,
       windows: slot.windows,
+      lanes: slot.lanes,
       isolation: (s.writes ?? []).length ? `wt/${s.id}` : "cwd",
       brief: join(dir, "sessions", `${s.id}.md`),
       est_cost_pct: estimateCost(slot.provider, size, history),
@@ -980,7 +1147,7 @@ function route(dir) {
       // walks straight into that wall. So hold until the LAST such window has
       // reset — and only when it resets inside the horizon, otherwise waiting
       // buys nothing.
-      not_before: holdUntil(slot, horizonS),
+      not_before: holdUntil(slot, horizonS, cand.lane),
       user_override: Boolean(s.provider),
     });
   }
@@ -1027,30 +1194,70 @@ function renderWindows(s) {
     .join(" · ");
 }
 
+// Every pool the slot bills against, not just the blended headline. A reader who
+// cannot see that Other Models is spent cannot tell why a 55% slot is about to
+// refuse a Claude session.
+function renderLanes(s) {
+  if (!s.lanes?.length) return "—";
+  return s.lanes
+    .map((l) => `${l.name} ${typeof l.remaining_pct === "number" ? `${l.remaining_pct}%` : "?"}`)
+    .join(" · ");
+}
+
 function renderQuota(quota) {
   const rows = quota.slots.map(
     (s) =>
-      `| ${s.key} | ${pct(s.remaining_pct)}${s.estimated ? "~" : ""} | ${s.bucket} | ${renderWindows(s)} | ${s.source} |`,
+      `| ${s.key} | ${pct(s.remaining_pct)}${s.estimated ? "~" : ""} | ${s.bucket} | ${renderWindows(s)} | ${renderLanes(s)} | ${s.source} |`,
   );
   return [
     "",
-    "| Slot | Binding | Bucket | Windows | Source |",
-    "|---|---|---|---|---|",
+    "| Slot | Binding | Bucket | Windows | Lanes | Source |",
+    "|---|---|---|---|---|---|",
     ...rows,
     ...quota.slots.filter((s) => s.note).map((s) => `> ${s.key}: ${s.note}`),
+    ...quota.slots.flatMap((s) =>
+      (s.lanes ?? [])
+        .filter((l) => l.bucket === "empty" || l.bucket === "low")
+        .map(
+          (l) =>
+            `> ${s.key}: ${LANE_LABEL[l.name] ?? l.name} is ${l.bucket} at ${l.remaining_pct}% — ` +
+            `the other lane is still open, so route by model, not by dropping the slot`,
+        ),
+    ),
   ].join("\n");
+}
+
+// The model and the lane are one decision, so they share a cell: the model id is
+// what actually decides which pool the session spends.
+function renderModel(s) {
+  const model = s.model ?? "default";
+  if (!s.lane) return model;
+  const tag = s.lane.replace("-models", "");
+  return `${model} [${tag}${s.lane_fallback ? "\u2193" : ""}${s.lane_pinned === false ? "*" : ""}]`;
 }
 
 function renderRouting(r) {
   const rows = r.sessions.map(
     (s) =>
-      `| ${s.id} | ${s.goal?.slice(0, 40) ?? ""} | ${s.provider} | ${s.model ?? "default"} | ${pct(s.remaining_pct)} | ~${s.est_cost_pct}% | ${s.isolation} | ${(s.deps ?? []).join(",") || "—"} | ${s.not_before ? `holds ${fmtDur(Math.round((Date.parse(s.not_before) - Date.now()) / 1000))}` : "now"} |`,
+      `| ${s.id} | ${s.goal?.slice(0, 40) ?? ""} | ${s.provider} | ${renderModel(s)} | ${pct(s.lane_remaining_pct ?? s.remaining_pct)} | ~${s.est_cost_pct}% | ${s.isolation} | ${(s.deps ?? []).join(",") || "—"} | ${s.not_before ? `holds ${fmtDur(Math.round((Date.parse(s.not_before) - Date.now()) / 1000))}` : "now"} |`,
   );
+  const legend = [];
+  if (r.sessions.some((s) => s.lane_fallback)) {
+    legend.push(
+      "\u2193 the lane this tier prefers was spent or loaded — this session fell back to the other pool",
+    );
+  }
+  if (r.sessions.some((s) => s.lane_pinned === false)) {
+    legend.push(
+      "* lane not pinned — this CLI did not list its models, so its default model picks the pool",
+    );
+  }
   return [
     "",
-    "| Session | Goal | Provider | Model | Remaining | Est. cost | Isolation | Deps | Starts |",
+    "| Session | Goal | Provider | Model [lane] | Remaining | Est. cost | Isolation | Deps | Starts |",
     "|---|---|---|---|---|---|---|---|---|",
     ...rows,
+    ...legend,
   ].join("\n");
 }
 
@@ -1138,7 +1345,7 @@ async function dispatch(dir) {
 
   const byId = new Map(routing.sessions.map((s) => [s.id, s]));
   for (const s of routing.sessions) {
-    state.sessions[s.id] ??= { status: "pending", attempts: 0, slot: s.slot };
+    state.sessions[s.id] ??= { status: "pending", attempts: 0, slot: s.slot, lane: s.lane };
   }
 
   const live = new Map(); // id -> child process
@@ -1148,22 +1355,31 @@ async function dispatch(dir) {
     (s.deps ?? []).every((d) => state.sessions[d]?.status === "done");
 
   const reassign = (s) => {
-    // The slot died. Pick the next eligible one rather than waiting for it.
+    // The lane died — which is not the same as the slot dying. A Cursor session
+    // that ran Other Models out still has the Cursor Models pool sitting next to
+    // it, so the sibling lane is a candidate like any other slot.
     const dead = new Set(state.empty_slots);
-    const pool = quota.slots.filter(
-      (q) => q.installed && q.bucket !== "empty" && !dead.has(q.key),
-    );
-    if (!pool.length) return null;
     const horizon = routing.horizon_s ?? 7200;
-    const best = pool
-      .map((q) => ({ q, supply: effectiveSupply(q, horizon) }))
-      .filter((x) => x.supply > 0)
-      .sort((a, b) => b.supply - a.supply)[0];
+    const options = [];
+    for (const q of quota.slots) {
+      if (!q.installed || q.bucket === "empty" || dead.has(q.key)) continue;
+      for (const lane of laneOptions(q)) {
+        const key = lane ? `${q.key}/${lane.name}` : q.key;
+        if (dead.has(key)) continue;
+        const supply = supplyFor(q, lane, horizon);
+        if (supply > 0) options.push({ q, lane, supply });
+      }
+    }
+    const best = options.sort((a, b) => b.supply - a.supply)[0];
     if (!best) return null;
     s.slot = best.q.key;
     s.provider = best.q.provider;
     s.bin = best.q.bin;
-    s.model = null; // model ids do not travel across providers
+    s.lane = best.lane?.name ?? undefined;
+    // Model ids do not travel across providers, and inside a lane the id is what
+    // holds the session to that pool — so it is re-pinned, never carried over.
+    s.model = best.lane ? pickModelForLane(best.q.bin, best.q.provider, best.lane.name) : null;
+    s.lane_pinned = best.lane ? Boolean(s.model) : undefined;
     return s;
   };
 
@@ -1196,20 +1412,28 @@ async function dispatch(dir) {
         st.status = "running";
         st.pid = child.pid;
         st.slot = s.slot;
+        st.lane = s.lane;
         st.started_at = nowISO();
         st.attempts += 1;
         live.set(s.id, child);
-        state.events.push(`${nowISO()} ${s.id} launched on ${s.slot} pid ${child.pid}`);
+        state.events.push(
+          `${nowISO()} ${s.id} launched on ${s.lane ? `${s.slot}/${s.lane}` : s.slot} pid ${child.pid}`,
+        );
         child.on("exit", (code) => {
           const verdict = classifyExit(dir, s, code ?? -1);
           live.delete(s.id);
           st.ended_at = nowISO();
           if (verdict.status === "quota") {
-            if (!state.empty_slots.includes(st.slot)) state.empty_slots.push(st.slot);
-            state.events.push(`${nowISO()} ${s.id} died: ${st.slot} quota exhausted`);
+            // Mark the lane that died, not the whole slot: blacklisting `cursor`
+            // because Other Models ran out throws away a pool that is still full.
+            const deadKey = st.lane ? `${st.slot}/${st.lane}` : st.slot;
+            if (!state.empty_slots.includes(deadKey)) state.empty_slots.push(deadKey);
+            state.events.push(`${nowISO()} ${s.id} died: ${deadKey} quota exhausted`);
             if (st.attempts < 3 && reassign(s)) {
               st.status = "pending"; // relaunch on another slot next tick
-              state.events.push(`${nowISO()} ${s.id} rerouted to ${s.slot}`);
+              state.events.push(
+                `${nowISO()} ${s.id} rerouted to ${s.lane ? `${s.slot}/${s.lane}` : s.slot}`,
+              );
             } else {
               st.status = "blocked";
               st.reason = "no slot with quota left";
@@ -1269,7 +1493,8 @@ function renderStatus(dir, routing, state) {
       // context unless the model decides to open it.
       summary = (readFileSync(res, "utf8").match(/^\s*-?\s*summary:\s*(.+)$/mi)?.[1] ?? "").slice(0, 70);
     }
-    return `| ${s.id} | ${st.status ?? "pending"} | ${st.slot ?? s.slot} | ${st.attempts ?? 0} | ${summary} |`;
+    const lane = st.lane ?? s.lane;
+    return `| ${s.id} | ${st.status ?? "pending"} | ${st.slot ?? s.slot}${lane ? `/${lane}` : ""} | ${st.attempts ?? 0} | ${summary} |`;
   });
   return ["", "| Session | Status | Slot | Tries | Note |", "|---|---|---|---|---|", ...rows].join("\n");
 }

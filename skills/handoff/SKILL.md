@@ -29,7 +29,7 @@ HANDOFF_RUN="${TMPDIR:-/tmp}/handoff/$(date -u +%Y%m%dT%H%M%SZ)"
 node <skill>/scripts/handoff.mjs probe --run "$HANDOFF_RUN"
 ```
 
-That prints the slot table and writes `quota.json`. A slot is **provider × account**, not a binary — one machine can hold several, and each carries **every window the plan gates on** (`5h 8% (30m) · 7d 43% (3d)`). `Binding` is only the headline; the five-hour window is what decides whether a session starts now or in forty minutes, so never route off the headline alone. The probe falls back through three sources (vendor tool, OAuth credential, local transcripts), so a reading marked `~` is estimated from this machine's own transcripts rather than read from the account — usable for routing, never quoted as the real limit.
+That prints the slot table and writes `quota.json`. A slot is **provider × account**, not a binary — one machine can hold several, and each carries **every window the plan gates on** (`5h 8% (30m) · 7d 43% (3d)`). `Binding` is only the headline; the five-hour window is what decides whether a session starts now or in forty minutes, so never route off the headline alone. A slot may also carry **lanes** — pools it bills separately inside the same window. Cursor has two (`cursor-models 45% · other-models 0%`): they are alternatives, not gates, and the model id picks which one a session spends. A lane at 0% does not make the slot dead, and a slot at 55% does not make the lane alive, so read both columns. The probe falls back through three sources (vendor tool, OAuth credential, local transcripts), so a reading marked `~` is estimated from this machine's own transcripts rather than read from the account — usable for routing, never quoted as the real limit.
 
 If a slot still reads `unknown`, run the same command with `--explain`: it prints every credential path and transcript directory it consulted, found or missing. Give the user that list and the one-line fix. Details: [`references/quota.md`](references/quota.md).
 
@@ -87,7 +87,7 @@ Re-probes, writes the scorecard into `manifest.md`, appends one line to `$TMPDIR
 
 ## Done-check
 
-- [ ] `probe` ran before any launch; the slot table was shown with every window, not just the binding one.
+- [ ] `probe` ran before any launch; the slot table was shown with every window and every lane, not just the binding one.
 - [ ] `plan.json` exists; `route` accepted it (no write-set collisions) and its table was shown.
 - [ ] Every session has a brief written before dispatch; Goal and Constraints are yours.
 - [ ] Fan-out: dispatched without waiting for approval; no child launched by hand.

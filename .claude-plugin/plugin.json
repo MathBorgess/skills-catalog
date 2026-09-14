@@ -1,7 +1,7 @@
 {
   "name": "skills-catalog",
   "version": "1.0.0",
-  "description": "Matheus Borges's agent skills: study wikis, teaching sessions, and cross-provider handoff. Inspired by Matt Pocock's skills packaging.",
+  "description": "Matheus Borges's agent skills: study wikis, teaching sessions, and cross-provider handoff, with a guard hook that protects live handoff runs. Inspired by Matt Pocock's skills packaging.",
   "author": {
     "name": "Matheus Borges",
     "url": "https://github.com/MathBorgess"
@@ -22,5 +22,6 @@
     "./skills/handoff",
     "./skills/study-wiki",
     "./skills/teach-me"
-  ]
+  ],
+  "hooks": "./hooks/hooks.json"
 }

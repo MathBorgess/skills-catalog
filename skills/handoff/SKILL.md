@@ -9,9 +9,9 @@ metadata:
 
 # Handoff
 
-Package the current conversation into self-contained session briefs another agent can execute without this context. Two modes of that one job: **compact** (one successor) and **fan-out** (N independent sessions, max parallel, possibly other providers).
+Package the current conversation into self-contained session briefs another agent can execute without this context. Two modes of that one job: **compact** (one successor) and **fan-out** (N independent sessions across every provider on the machine).
 
-The parent does not do the children's work. It cuts, routes, writes briefs, launches, reads result files, scores the run.
+Your job is the part a script cannot do: **cut the work, scope each session, write the goals.** Quota probing, admission control, independence checking, slot assignment, launching, waiting, rerouting a dead session and scoring are `scripts/handoff.mjs` — call it, read its table, move on. Do not redo its arithmetic in prose, and do not launch a child by hand.
 
 ## 1. Mode
 
@@ -20,62 +20,75 @@ The parent does not do the children's work. It cuts, routes, writes briefs, laun
 - Ambiguous: **fan-out** if two or more remaining cuts share no files and no sequence; else **compact**.
 - User arguments are routing constraints (provider, model, focus). They win.
 
-Load [`references/routing.md`](references/routing.md) before cutting or assigning providers.
+## 2. Run directory and supply
 
-## 2. Run directory
+`run-id` is UTC `YYYYMMDDTHHMMSSZ`, under the OS temp dir — never the workspace. Probe before anything else:
 
-Create this on the OS temp dir — not the workspace:
-
-```text
-$TMPDIR/handoff/<run-id>/
-  manifest.md
-  sessions/NN.md
-  sessions/NN.prompt.md
-  sessions/NN.result.md
+```bash
+HANDOFF_RUN="${TMPDIR:-/tmp}/handoff/$(date -u +%Y%m%dT%H%M%SZ)"
+node <skill>/scripts/handoff.mjs probe --run "$HANDOFF_RUN"
 ```
 
-`run-id` is UTC `YYYYMMDDTHHMMSSZ`. Fall back to `/tmp` when `TMPDIR` is unset. Write `manifest.md` before any launch, using the template in routing.md.
+That prints the slot table and writes `quota.json`. A slot is **provider × account**, not a binary — one machine can hold several. Read [`references/quota.md`](references/quota.md) only if a slot comes back `unknown` and you need to tell the user why.
 
-## 3. Cut, route, write
+## 3. Cut the work into a graph
 
-1. List remaining work. Merge anything that shares files or must run in order into one session or a later **wave**. Each session in a wave is independent.
-2. Probe which of `agent`/`cursor-agent`, `claude`, `codex` exist (`command -v`). That is the provider pool: Cursor, Claude, Codex.
-3. Probe **remaining quota** per provider ([`references/quota.md`](references/quota.md)). Drop `empty`; avoid `low` (`< 20%` remaining unless the user set another floor). Assign with weighted round-robin so two eligible providers never collapse onto one. User-named provider still wins. Then pick the **model** as in [`references/providers.md`](references/providers.md): cheaper/faster for mechanical work, stronger for design and review; never hardcode model ids.
-4. Write one brief per session from [`references/brief.md`](references/brief.md). Pointers to existing artifacts by path or URL; no duplicated specs. Redact secrets and PII.
+This is the step that is yours. Write `$HANDOFF_RUN/plan.json`:
 
-## 4. Show the routing table, then launch
-
-Print the quota snapshot from [`references/quota.md`](references/quota.md), then this table, then launch in the **same turn**. Do not wait for approval.
-
-```markdown
-| Session | Goal | Provider | Model | Remaining | Isolation | Brief |
-|---|---|---|---|---|---|---|
-| 01 | … | cursor \| claude \| codex | <id or default> | 63% \| low 8% \| unknown | worktree … / cwd | $RUN/sessions/01.md |
+```json
+{"mode":"fan-out","horizon_s":7200,"sessions":[
+  {"id":"01","goal":"…","tier":"design","size":"l","writes":["src/auth/**"],"reads":["**"],"deps":[]},
+  {"id":"02","goal":"…","tier":"mechanical","size":"s","writes":["docs/**"],"deps":[]},
+  {"id":"03","goal":"…","tier":"review","size":"m","writes":[],"deps":["01","02"]}
+]}
 ```
 
-- **compact:** one row. Launch only if the user named a provider for the successor.
-- **fan-out:** one row per session in the current wave. Launch every row.
+- `deps` is a dependency graph, **not waves.** A session starts when its own dependencies finish, not when a whole batch does. Batching is what turns twenty sessions into ten serial rounds.
+- `writes` is the write-set. Two sessions with no dependency path between them **must not** share one — `route` refuses the plan if they do, naming the paths.
+- `tier` (`mechanical` | `design` | `review`) and `size` (`s` | `m` | `l`) drive model choice and cost estimation.
+- `horizon_s` is how long you expect the whole run to take. It decides whether a provider whose window reopens mid-run counts as supply.
 
-Launch recipes: [`references/providers.md`](references/providers.md). All launches for a wave go out together. File-writing sessions get their own worktree. The child's last action is writing `sessions/NN.result.md`.
+Rules for cutting: [`references/routing.md`](references/routing.md).
 
-Parent in-process subagents (Task and the like) only when no other provider CLI is installed, or the session is read-only and should finish in seconds.
+## 4. Write the briefs
 
-## 5. Orchestrate
+One `NN.md` + one `NN.prompt.md` per session, per [`references/brief.md`](references/brief.md). **You author Goal and Constraints yourself** — they carry the conversation knowledge nothing else has. Expansion (scope lists, pointers, boilerplate) may be delegated to a cheap model that writes straight to disk; you do not read it back. Pointers to existing artifacts by path or URL; never paste the artifact. Redact secrets and PII.
 
-Until the wave's result files exist (or a child has died):
+## 5. Route, then dispatch — same turn, no approval
 
-- Poll `sessions/NN.result.md` and process liveness. Do not ingest full transcripts or CLI stdout dumps.
-- On `done`, accept. On `blocked`/`failed` from rate-limit or quota language, mark that provider `empty` ([`references/quota.md`](references/quota.md)) and reassign any session not yet launched; do not pick up the implementation yourself. Any other `blocked`/`failed`: relaunch with a patched brief or fold into the next wave.
-- Start the next wave only after the current wave's results are in.
+```bash
+node <skill>/scripts/handoff.mjs route    --run "$HANDOFF_RUN"
+node <skill>/scripts/handoff.mjs dispatch --run "$HANDOFF_RUN" --budget 540
+```
 
-Then score the run ([`references/metrics.md`](references/metrics.md)): write the scorecard into `manifest.md`, append one JSON line to `$TMPDIR/handoff/metrics.jsonl`, report the scores. If a review trigger fires, patch the loaded skill copy as that file specifies.
+`route` prints the quota table and the routing table, refuses a plan whose sessions collide, and warns when the cut costs more quota than the pool holds. Show both tables to the user.
+
+`dispatch` launches everything whose dependencies are met, waits, relaunches a session whose provider ran out on the next eligible slot, and returns a one-line-per-session digest. It is one call, not a poll loop. If it reports sessions still running, call it again — or run it with `run_in_background` and keep working. A session that fails to start at all is a stale CLI flag: [`references/providers.md`](references/providers.md) says how to fix it and where.
+
+**compact:** one session in the plan; write the brief and stop. Launch only if the user named a provider.
+
+## 6. Read only the digest
+
+- Accept `dispatch`'s table. To re-check later: `handoff.mjs status --run "$HANDOFF_RUN"`.
+- Open `sessions/NN.result.md` only for a session you must act on.
+- **Never** read `logs/NN.log`, a child transcript, or anything under `wt/`. That is the child's raw output; ingesting it spends exactly what this skill exists to save. On a Claude parent the guard hook refuses it outright.
+- **Never** implement a child's in-scope work yourself. A blocked child gets a corrected brief and a relaunch, not your edits.
+- A session `blocked` on missing context means its brief was short a fact you had. Patch `NN.md` and relaunch that id.
+
+## 7. Score
+
+```bash
+node <skill>/scripts/handoff.mjs score --run "$HANDOFF_RUN"
+```
+
+Re-probes, writes the scorecard into `manifest.md`, appends one line to `$TMPDIR/handoff/metrics.jsonl`, and prints what the run actually cost in plan quota. Report those numbers. Details and how the history feeds the next run's estimates: [`references/metrics.md`](references/metrics.md).
 
 ## Done-check
 
-- [ ] `$TMPDIR/handoff/<run-id>/` exists with `manifest.md` and one brief per session.
-- [ ] Quota snapshot and routing table were shown; every row has provider, model, and remaining.
-- [ ] Fan-out: children launched without waiting for approval; parent did not implement their work.
-- [ ] Compact: brief written; launched only if a provider was named.
+- [ ] `probe` ran before any launch, and the slot table was shown.
+- [ ] `plan.json` exists; `route` accepted it (no write-set collisions) and its table was shown.
+- [ ] Every session has a brief written before dispatch; Goal and Constraints are yours.
+- [ ] Fan-out: dispatched without waiting for approval; no child launched by hand.
+- [ ] Parent implemented nothing a session owned, and read no child log or worktree.
 - [ ] Secrets and PII redacted; existing artifacts referenced, not copied.
-- [ ] Scorecard is in the manifest and appended to `metrics.jsonl`.
-- [ ] Report lists the run path, the table, child statuses, metric scores, and one next action.
+- [ ] `score` ran; the report gives the run path, both tables, per-session status, and the quota cost.

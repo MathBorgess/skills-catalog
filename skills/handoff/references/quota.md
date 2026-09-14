@@ -1,65 +1,44 @@
 # Quota
 
-Probe remaining plan quota **before** assigning providers. Then round-robin across whoever is not low. Never dump every session on the richest provider when another eligible one exists.
+`handoff.mjs probe` answers one question: how much plan quota is left on each slot, and when does it reopen. Read this file when a slot comes back `unknown` and you have to tell the user why, or when you are changing the probe itself.
 
-Remaining means **account quota left this window**, not the parent's context-window fullness. Do not print emails, API keys, or dollar spend. Percent remaining is the only number that goes in the table.
+Remaining means **account quota left in the current window**, never the parent's context-window fullness. Percent remaining and time-to-reset are the only numbers that go in a table. Never print an email, a token, an account id, or a dollar figure.
 
-## Probe
+## What the probe reads
 
-For each installed provider, take the **first source that returns a number**. Write the snapshot into `manifest.md` (template below). If a probe errors, that provider is `unknown` — do not install helper tools to fix it.
+Per provider, first source that yields a number:
 
-Tightest window wins: if a source reports both a short window (≈5h) and a longer one (daily/weekly), use the **lower** remaining percent.
+1. **`ai-usagebar usage --json`**, if that binary happens to be installed. It already tracks twenty-odd vendors and multiple accounts behind a 60-second atomic cache with a 429 backoff, so preferring it costs nothing and survives an endpoint change.
+2. **The CLI's own OAuth credential**, read directly, then that provider's usage endpoint:
 
-| Provider | Sources, in order |
-|---|---|
-| cursor | `cclimits --cursor --json`; `cursor-cli-usage json`; remaining % the parent already has from `/usage` in this session |
-| claude | `cclimits --claude --json`; remaining % the parent already has from `/usage` in this session |
-| codex | `cclimits --codex --json`; `codex-cli-usage json`; remaining % the parent already has from `/usage` or `/status` in this session |
+| Provider | Credential | Endpoint | Field |
+|---|---|---|---|
+| claude | `~/.claude/.credentials.json` → `claudeAiOauth.accessToken` | `api.anthropic.com/api/oauth/usage` | `five_hour.utilization`, `seven_day.utilization` |
+| codex | `~/.codex/auth.json` → `tokens.access_token` | `chatgpt.com/backend-api/wham/usage` | `rate_limit.primary_window/secondary_window.used_percent` |
+| cursor | `~/.config/cursor/auth.json`, else the IDE's `state.vscdb` key `cursorAuth/accessToken` when `sqlite3` is present | `cursor.com/api/usage-summary` | total percent used |
 
-Parse `remaining` or `100 - used` from JSON. Ignore fields that are dollar amounts.
+3. **Binary present, nothing readable** → `installed`, remaining `unknown`.
 
-Also apply, without a probe:
+Two things the probe deliberately will not do. It **never writes a credential file** — no token refresh, because another process owns that file and a half-written refresh breaks the user's CLI. And it **never installs anything** to make a probe succeed. An expired token reports `unknown` with the fix: run that provider's CLI once to log in.
 
-- User said a provider is out / nearly out → `empty` or `low`.
-- A child this run failed with `rate limit`, `usage limit`, `quota`, or `out of extra usage` → that provider becomes `empty` for later sessions in this run.
+Every reported window is percent **used**; remaining is `100 − used`. Where a provider states several windows, the **tightest** one wins — a provider is only as free as its most binding limit.
 
 ## Buckets
 
-Default `LOW = 20` (percent remaining). A user-stated threshold wins.
+`LOW` defaults to 20 percent remaining; `HANDOFF_LOW_PCT` overrides it, and a user-stated threshold wins over both.
 
 | Bucket | When | Eligible? |
 |---|---|---|
-| `empty` | remaining `0`, or exhausted error | never |
-| `low` | remaining `< LOW` | only if nothing `ok`/`unknown` is left |
-| `ok` | remaining `≥ LOW` | yes, weight = remaining |
-| `unknown` | probe failed | yes, weight = `50` |
+| `absent` | binary not installed | never |
+| `empty` | remaining `0`, or a child died with quota language this run | never |
+| `low` | remaining `< LOW` | **yes if its window reopens inside `horizon_s`** — assigned, then held until the reset. Otherwise only when nothing better exists |
+| `ok` | remaining `≥ LOW` | yes |
+| `unknown` | probe failed | yes, at a neutral weight — an unprobed slot is not a dead slot |
 
-## Assign (weighted round-robin)
+That `low` row is the one that matters. Discarding a slot because its stock is low, when its window reopens in minutes, is how a run ends up crowded onto one provider and then stalls when that one runs out.
 
-Eligible = `ok` ∪ `unknown`. If that set is empty, eligible = the `low` provider with the **highest** remaining (still never `empty`). If every provider is `empty`, stop: show the quota table, do not launch, tell the user.
+## When every slot is unknown
 
-`order` = installed providers cycling **starting after the parent** (`cursor` → `claude` → `codex` → `cursor` …), then drop anyone not eligible.
+The probe failed everywhere. Say so plainly, name the reason each slot gave, and give the user the one-line fix (log in to that CLI, or install `ai-usagebar`). Routing still works — `unknown` carries a neutral weight — but admission control is guessing, so do not promise the pool can hold the cut.
 
-`assigned[p] = 0` for each eligible `p`.
-
-For each session, in NN order:
-
-1. User named a provider for that session → use it, even if `low`. Mark the row `user override`.
-2. Else pick eligible `p` that minimizes `assigned[p] / weight[p]`. Tie → first in `order`.
-3. `assigned[p] += 1`.
-
-Worked example: parent is cursor; remaining claude `80`, codex `70`, cursor `10`. Cursor is `low` (out). Weights `{claude:80, codex:70}`. Four sessions → `claude, codex, claude, codex` — not four on Claude.
-
-A chosen binary missing at launch → next eligible in `order`, same as [`providers.md`](providers.md).
-
-## Quota table (show with the routing table)
-
-```markdown
-| Provider | Remaining | Bucket | Source |
-|---|---|---|---|
-| cursor | 63% | ok | cursor-cli-usage |
-| claude | unknown | unknown | probe failed |
-| codex | 8% | low | skipped |
-```
-
-Add a **Remaining** column to the session routing table (`63%` / `low 8%` / `unknown`).
+This is not a cosmetic failure. A run routed entirely on `unknown` learns each provider's real limit only by killing a session on it, and recovering a dead session costs more than the whole probe ever would.

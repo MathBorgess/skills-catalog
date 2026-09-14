@@ -16,9 +16,11 @@ Per provider, the first source that yields a number wins.
 |---|---|---|---|
 | claude | each `CLAUDE_CONFIG_DIR` entry (or `~/.config/claude`, `~/.claude`) `/.credentials.json`, then the **macOS login Keychain** under service `Claude Code-credentials` | `api.anthropic.com/api/oauth/usage` | `five_hour.utilization`, `seven_day.utilization` |
 | codex | each `CODEX_HOME` entry (or `~/.codex`) `/auth.json` | `chatgpt.com/backend-api/wham/usage` | `rate_limit.primary_window/secondary_window.used_percent` |
-| cursor | `~/.config/cursor`, `~/.config/cursor-agent`, `~/Library/Application Support/cursor`, `~/.cursor` (`auth.json` or `cli-config.json`), then the IDE's `state.vscdb` key `cursorAuth/accessToken` when `sqlite3` is present | `cursor.com/api/usage-summary` | `individualUsage.plan.totalPercentUsed` |
+| cursor | eight known config paths under `~/.config`, `~/Library/Application Support` and `~/.cursor`, then the macOS Keychain under seven candidate service names, then the IDE's `state.vscdb` key `cursorAuth/accessToken` when `sqlite3` is present | `cursor.com/api/usage-summary` | `individualUsage.plan.totalPercentUsed` |
 
 Cursor's session cookie is **not** the raw token: it is `WorkosCursorSessionToken=<user id>%3A%3A<token>`, where the user id is the part of the JWT's `sub` claim after the provider prefix (`auth0|user_abc` → `user_abc`). Sending the bare token returns HTTP 401 with a credential that is perfectly valid.
+
+**A config file is not a credential.** `cursor-agent`'s `cli-config.json` carries settings and an `authInfo` block — email, display name, user id — and no session token at all. So the probe does not look for known key names: it walks the parsed config and takes the first string that decodes as a JWT with a `sub` claim. Key names move between CLI versions; the shape of a session token does not. A file holding identity but no token is reported as `no token`, which is a different problem from `missing` and has a different fix — telling someone to log in again when they already are is the least useful thing the probe can say.
 
 A file that parses is **not** evidence that the file is current. On macOS, Claude Code keeps the live token in the Keychain and the `.credentials.json` in the home directory is frequently a stale copy, so the probe checks expiry and moves to the next source rather than trusting the first hit.
 

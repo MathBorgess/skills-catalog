@@ -121,28 +121,41 @@ function tailOf(path, bytes = 8192) {
 // moves between versions. Each provider lists every place worth looking, and
 // the first source that yields an unexpired token wins; `probe --explain`
 // prints the whole list so a miss is diagnosable instead of mysterious.
-function readKeychain(service) {
+function readKeychainRaw(service) {
   if (process.platform !== "darwin") return null;
   const r = spawnSync("/usr/bin/security", ["find-generic-password", "-s", service, "-w"], {
     encoding: "utf8",
     timeout: 10000,
   });
-  if (r.status !== 0 || !r.stdout) return null;
+  return r.status === 0 && r.stdout ? r.stdout.trim() : null;
+}
+
+function readKeychain(service) {
+  const raw = readKeychainRaw(service);
+  if (!raw) return null;
   try {
-    return JSON.parse(r.stdout.trim());
+    return JSON.parse(raw);
   } catch {
     return null;
   }
 }
 
+// Three outcomes, not two. "The file is not there" and "the file is there and
+// holds no token" call for different fixes, and collapsing them into `missing`
+// throws away the more useful half.
 function firstUsable(sources, isExpired) {
   const tried = [];
   let expiredSeen = false;
   for (const src of sources) {
     const creds = src.read();
-    tried.push({ label: src.label, found: Boolean(creds) });
+    const present = creds ? true : (src.exists?.() ?? false);
+    tried.push({
+      label: src.label,
+      state: creds ? "usable" : present ? "no token" : "missing",
+    });
     if (!creds) continue;
     if (isExpired(creds)) {
+      tried[tried.length - 1].state = "expired";
       expiredSeen = true;
       continue;
     }
@@ -160,6 +173,7 @@ const PROVIDERS = {
     credSources: () => [
       ...claudeConfigDirs().map((dir) => ({
         label: join(dir, ".credentials.json"),
+        exists: () => existsSync(join(dir, ".credentials.json")),
         read: () => readJSON(join(dir, ".credentials.json")),
       })),
       {
@@ -214,6 +228,7 @@ const PROVIDERS = {
         .filter(Boolean)
         .map((dir) => ({
           label: join(dir, "auth.json"),
+          exists: () => existsSync(join(dir, "auth.json")),
           read: () => readJSON(join(dir, "auth.json")),
         })),
     isExpired: (c) => {
@@ -261,14 +276,52 @@ const PROVIDERS = {
         join(h, "Library", "Application Support", "Cursor", "auth.json"),
         join(h, ".cursor", "auth.json"),
         join(h, ".cursor", "cli-config.json"),
+        join(h, ".cursor", "credentials.json"),
+        join(h, ".cursor-agent", "auth.json"),
+      ];
+      const KEYCHAIN = [
+        "cursor-agent",
+        "Cursor Agent",
+        "cursor",
+        "Cursor",
+        "cursor.com",
+        "Cursor-credentials",
+        "cursor-cli",
       ];
       return [
-        ...files.map((f) => ({ label: f, read: () => readJSON(f) })),
+        // A config file only counts as a credential when a token is actually
+        // inside it. cli-config.json, for instance, carries identity and
+        // settings and no token at all.
+        ...files.map((f) => ({
+          label: f,
+          exists: () => existsSync(f),
+          read: () => {
+            const j = readJSON(f);
+            if (!j) return null;
+            const token = findJwt(j);
+            return token ? { token, identity: j.authInfo ?? null, from: f } : null;
+          },
+        })),
+        {
+          label: `macOS Keychain (${KEYCHAIN.join(", ")})`,
+          read: () => {
+            const hit = readKeychainAny(KEYCHAIN);
+            if (!hit) return null;
+            let parsed = null;
+            try {
+              parsed = JSON.parse(hit.raw);
+            } catch {
+              /* a bare token, not JSON */
+            }
+            const token = parsed ? findJwt(parsed) : (jwtClaim(hit.raw, "sub") ? hit.raw : null);
+            return token ? { token, from: `Keychain:${hit.service}` } : null;
+          },
+        },
         {
           label: "Cursor IDE state.vscdb (needs sqlite3)",
           read: () => {
             const t = readCursorIdeToken();
-            return t ? { accessToken: t } : null;
+            return t ? { token: t, from: "state.vscdb" } : null;
           },
         },
       ];
@@ -277,18 +330,18 @@ const PROVIDERS = {
     local: null,
     usagebarIds: ["cursor"],
     async fetchUsage(creds) {
-      const token =
-        creds?.accessToken ?? creds?.access_token ?? readCursorIdeToken();
+      const token = creds?.token;
       if (!token) return null;
       // The session cookie is not the raw token: Cursor expects
       // `<user id>::<token>` (URL-encoded separator), where the user id is the
-      // part of the JWT's `sub` claim after the provider prefix
-      // ("auth0|user_abc" -> "user_abc"). Sending the bare token is a 401.
-      const sub = jwtClaim(token, "sub");
-      if (!sub) {
-        return { error: "token is not a decodable JWT — sign in with `cursor-agent` again" };
+      // part of an id like "github|user_abc" after the provider prefix.
+      // Sending the bare token is a 401. The id comes from the config's own
+      // authInfo when it has one, else from the token's `sub` claim.
+      const rawId = creds?.identity?.authId ?? jwtClaim(token, "sub");
+      if (!rawId) {
+        return { error: "no user id alongside the token — sign in with `cursor-agent` again" };
       }
-      const userId = String(sub).split("|")[1] || String(sub);
+      const userId = String(rawId).split("|")[1] || String(rawId);
       const r = await fetch("https://cursor.com/api/usage-summary", {
         headers: {
           Cookie: `WorkosCursorSessionToken=${userId}%3A%3A${token}`,
@@ -330,6 +383,31 @@ const PROVIDERS = {
 // scheduling blind.
 function pickTightest(windows) {
   return windows.reduce((a, b) => (b.remaining_pct < a.remaining_pct ? b : a));
+}
+
+// Walk a parsed config and return the first string that decodes as a JWT
+// carrying a `sub` claim. Key names move between CLI versions — the shape of a
+// session token does not — so this finds the token without a list of guesses.
+function findJwt(value, depth = 0) {
+  if (depth > 6 || value === null) return null;
+  if (typeof value === "string") {
+    return value.split(".").length === 3 && jwtClaim(value, "sub") ? value : null;
+  }
+  if (typeof value !== "object") return null;
+  for (const v of Array.isArray(value) ? value : Object.values(value)) {
+    const hit = findJwt(v, depth + 1);
+    if (hit) return hit;
+  }
+  return null;
+}
+
+// Try several Keychain service names and return the first that answers.
+function readKeychainAny(services) {
+  for (const svc of services) {
+    const raw = readKeychainRaw(svc);
+    if (raw) return { service: svc, raw };
+  }
+  return null;
 }
 
 // Decode a JWT payload claim. No signature check — this only reads a claim out
@@ -466,14 +544,38 @@ async function probe() {
       p.isExpired,
     );
     if (!creds) {
-      note = expiredSeen
-        ? `every credential found is expired — run \`${bin}\` once to refresh`
-        : `no credential found — run \`${bin}\` once to log in (probe --explain lists the paths tried)`;
+      const tokenless = tried.filter((t) => t.state === "no token").map((t) => t.label);
+      if (expiredSeen) {
+        note = `every credential found is expired — run \`${bin}\` once to refresh`;
+      } else if (tokenless.length) {
+        // Logged in, but the session token is not in the file this probe can
+        // read. Telling someone to log in again when they already are is the
+        // least useful thing to say.
+        note =
+          `${tokenless[0]} holds settings or identity but no session token — ` +
+          `\`${bin}\` keeps its token somewhere this probe does not know ` +
+          `(probe --explain lists every path tried)` +
+          (process.platform === "darwin"
+            ? `. To find it: security dump-keychain 2>/dev/null | grep -i '"svce".*${name}' ` +
+              `— that prints attribute names only, never a secret, and the service it names ` +
+              `can be added to this provider's Keychain list`
+            : "");
+      } else {
+        note = `no credential found — run \`${bin}\` once to log in (probe --explain lists the paths tried)`;
+      }
     } else {
       try {
         result = await p.fetchUsage(creds);
         if (result?.error) {
           note = `${result.error} (via ${credLabel})`;
+          result = null;
+        } else if (!result?.windows?.length) {
+          // A file that exists and parses can still hold no usable token. That
+          // is a failed source, not a source reporting "unknown" — saying
+          // otherwise hides the one fact that would let someone fix it.
+          note = `${credLabel} has no usable token — ${
+            result === null ? "no credential field this probe recognises" : "no windows in the response"
+          }`;
           result = null;
         } else source = `${name}-oauth`;
       } catch (e) {
@@ -532,10 +634,10 @@ function renderExplain(quota) {
   for (const s of quota.slots) {
     out.push(`**${s.key}** — ${s.installed ? `binary \`${s.bin}\`` : "not installed"}`);
     for (const t of s.tried ?? []) {
-      out.push(`  ${t.found ? "found  " : "missing"}  ${t.label}`);
+      out.push(`  ${String(t.state).padEnd(8)}  ${t.label}`);
     }
     for (const lp of localSearchPaths(s.provider)) {
-      out.push(`  ${existsSync(lp) ? "found  " : "missing"}  ${lp}  (transcripts)`);
+      out.push(`  ${(existsSync(lp) ? "found" : "missing").padEnd(8)}  ${lp}  (transcripts)`);
     }
     out.push("");
   }

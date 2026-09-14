@@ -196,14 +196,14 @@ const PROVIDERS = {
         ["seven_day", j.seven_day, 604800],
       ].filter(([, w]) => w && typeof w.utilization === "number");
       if (!windows.length) return { error: "no usage windows in response" };
-      return pickTightest(
-        windows.map(([name, w, secs]) => ({
-          window: name,
+      return {
+        windows: windows.map(([name, w, secs]) => ({
+          name,
           remaining_pct: 100 - w.utilization,
           resets_at: w.resets_at ?? null,
           window_secs: secs,
         })),
-      );
+      };
     },
   },
   codex: {
@@ -239,13 +239,13 @@ const PROVIDERS = {
       const windows = [rl.primary_window, rl.secondary_window]
         .filter((w) => w && typeof w.used_percent === "number")
         .map((w) => ({
-          window: w.limit_window_seconds === 604800 ? "weekly" : "session",
+          name: w.limit_window_seconds === 604800 ? "weekly" : "session",
           remaining_pct: 100 - w.used_percent,
           resets_at: w.reset_at ? new Date(w.reset_at * 1000).toISOString() : null,
           window_secs: w.limit_window_seconds ?? null,
         }));
       if (!windows.length) return { error: "no rate_limit windows in response" };
-      return pickTightest(windows);
+      return { windows };
     },
   },
   cursor: {
@@ -280,9 +280,18 @@ const PROVIDERS = {
       const token =
         creds?.accessToken ?? creds?.access_token ?? readCursorIdeToken();
       if (!token) return null;
+      // The session cookie is not the raw token: Cursor expects
+      // `<user id>::<token>` (URL-encoded separator), where the user id is the
+      // part of the JWT's `sub` claim after the provider prefix
+      // ("auth0|user_abc" -> "user_abc"). Sending the bare token is a 401.
+      const sub = jwtClaim(token, "sub");
+      if (!sub) {
+        return { error: "token is not a decodable JWT — sign in with `cursor-agent` again" };
+      }
+      const userId = String(sub).split("|")[1] || String(sub);
       const r = await fetch("https://cursor.com/api/usage-summary", {
         headers: {
-          Cookie: `WorkosCursorSessionToken=${token}`,
+          Cookie: `WorkosCursorSessionToken=${userId}%3A%3A${token}`,
           Origin: "https://cursor.com",
           Referer: "https://cursor.com/dashboard",
           "User-Agent":
@@ -315,9 +324,25 @@ const PROVIDERS = {
   },
 };
 
+// The headline number: a provider is as free as its most binding limit right
+// now. Every window is still carried on the slot — collapsing to this one is
+// what hid the five-hour window behind the weekly one and made short-horizon
+// scheduling blind.
 function pickTightest(windows) {
-  // Tightest = least remaining. A provider is as free as its most binding limit.
   return windows.reduce((a, b) => (b.remaining_pct < a.remaining_pct ? b : a));
+}
+
+// Decode a JWT payload claim. No signature check — this only reads a claim out
+// of a token the user's own CLI already holds.
+function jwtClaim(token, claim) {
+  try {
+    const part = String(token).split(".")[1];
+    if (!part) return null;
+    const json = Buffer.from(part.replace(/-/g, "+").replace(/_/g, "/"), "base64").toString("utf8");
+    return JSON.parse(json)?.[claim] ?? null;
+  } catch {
+    return null;
+  }
 }
 
 function readCursorIdeToken() {
@@ -364,18 +389,38 @@ function fromUsagebar(report, ids) {
       (s) => s.type === "metric" && typeof s.percent === "number",
     );
     if (!metrics.length) continue;
-    const w = pickTightest(
-      metrics.map((m) => ({
-        window: m.label,
-        remaining_pct: 100 - m.percent,
-        resets_at: m.reset_at ?? null,
-        window_secs: m.window_secs ?? null,
-      })),
-    );
+    const windows = metrics.map((m) => ({
+      name: m.label,
+      remaining_pct: 100 - m.percent,
+      resets_at: m.reset_at ?? null,
+      window_secs: m.window_secs ?? null,
+    }));
     // `id` is "vendor" or "vendor:account" — the account half is the slot key.
-    out.push({ account: id.includes(":") ? id.split(":")[1] : "default", ...w });
+    out.push({ account: id.includes(":") ? id.split(":")[1] : "default", windows });
   }
   return out.length ? out : null;
+}
+
+// A slot carries EVERY window the provider reports. `remaining_pct` and
+// `window` are only the headline — the binding one right now. Supply is
+// computed per window and then taken at the minimum, because a plan gates on
+// all of its windows at once and each refills on its own schedule.
+function makeSlot({ key, provider, account, bin, windows, source, estimated, note, tried }) {
+  const usable = (windows ?? []).filter((w) => typeof w.remaining_pct === "number");
+  const head = usable.length ? pickTightest(usable) : null;
+  return {
+    key, provider, account, installed: true, bin,
+    windows: windows?.length ? windows : undefined,
+    remaining_pct: head?.remaining_pct ?? null,
+    window: head?.name ?? windows?.[0]?.name ?? null,
+    resets_at: head?.resets_at ?? windows?.[0]?.resets_at ?? null,
+    window_secs: head?.window_secs ?? windows?.[0]?.window_secs ?? null,
+    bucket: bucketOf(head?.remaining_pct),
+    estimated: estimated || undefined,
+    source,
+    note: note || undefined,
+    tried,
+  };
 }
 
 function bucketOf(remaining) {
@@ -401,14 +446,14 @@ async function probe() {
 
     const viaBar = fromUsagebar(report, p.usagebarIds);
     if (viaBar) {
-      for (const w of viaBar) {
-        slots.push({
-          key: w.account === "default" ? name : `${name}:${w.account}`,
-          provider: name, account: w.account, installed: true, bin,
-          remaining_pct: w.remaining_pct, window: w.window,
-          resets_at: w.resets_at, window_secs: w.window_secs,
-          bucket: bucketOf(w.remaining_pct), source: "ai-usagebar",
-        });
+      for (const v of viaBar) {
+        slots.push(
+          makeSlot({
+            key: v.account === "default" ? name : `${name}:${v.account}`,
+            provider: name, account: v.account, bin,
+            windows: v.windows, source: "ai-usagebar",
+          }),
+        );
       }
       continue;
     }
@@ -441,14 +486,24 @@ async function probe() {
     let estimated = false;
     if (!result && p.local) {
       const local = localSnapshot(p.local);
+      const asWindow = (l) => ({
+        windows: [
+          {
+            name: l.window,
+            remaining_pct: l.remaining_pct,
+            resets_at: l.resets_at,
+            window_secs: l.window_secs,
+          },
+        ],
+      });
       if (local && !local.error && local.remaining_pct !== null) {
-        result = local;
+        result = asWindow(local);
         estimated = true;
         source = "local-transcript";
         note = note ? `${note}; estimated from transcripts: ${local.detail}` : local.detail;
       } else if (local?.resets_at) {
         // No usable percent, but a real reset time is still worth having.
-        result = { ...local, remaining_pct: null };
+        result = asWindow({ ...local, remaining_pct: null });
         estimated = true;
         source = "local-transcript";
         note = local.detail;
@@ -457,18 +512,15 @@ async function probe() {
       }
     }
 
-    slots.push({
-      key: name, provider: name, account: "default", installed: true, bin,
-      remaining_pct: result?.remaining_pct ?? null,
-      window: result?.window ?? null,
-      resets_at: result?.resets_at ?? null,
-      window_secs: result?.window_secs ?? null,
-      bucket: bucketOf(result?.remaining_pct),
-      estimated: estimated || undefined,
-      source: source ?? "probe failed",
-      note: note || undefined,
-      tried: arg("explain") ? tried : undefined,
-    });
+    slots.push(
+      makeSlot({
+        key: name, provider: name, account: "default", bin,
+        windows: result?.windows ?? [],
+        source: source ?? "probe failed",
+        estimated, note,
+        tried: arg("explain") ? tried : undefined,
+      }),
+    );
   }
 
   return { ts: nowISO(), low_pct: LOW_PCT, slots };
@@ -494,8 +546,11 @@ function renderExplain(quota) {
 // rich over the horizon. It is eligible — just not yet. That distinction is the
 // difference between waiting ten minutes and burning a session on a wall.
 function refillsInHorizon(slot, horizonS) {
-  const r = resetsInS(slot);
-  return r !== null && slot.window_secs !== null && r <= horizonS;
+  const windows = slot.windows?.length ? slot.windows : [slot];
+  return windows.some((w) => {
+    const r = resetsInS(w);
+    return r !== null && w.window_secs && r <= horizonS;
+  });
 }
 
 function resetsInS(slot) {
@@ -507,16 +562,56 @@ function resetsInS(slot) {
 // Weight by rate, not stock. A 5h window that refills inside the run horizon is
 // cheap to spend now; a weekly window at 30% is not. `unknown` gets a neutral
 // 50 so an unprobed provider still takes a share instead of being starved.
-function effectiveSupply(slot, horizonS) {
-  if (slot.bucket === "absent" || slot.bucket === "empty") return 0;
-  if (slot.remaining_pct === null) return 50;
-  let supply = slot.remaining_pct;
-  const r = resetsInS(slot);
-  if (r !== null && slot.window_secs && r <= horizonS) {
+function windowSupply(w, horizonS) {
+  if (typeof w.remaining_pct !== "number") return 50;
+  let supply = w.remaining_pct;
+  const r = resetsInS(w);
+  if (r !== null && w.window_secs && r <= horizonS) {
     const after = horizonS - r;
-    supply += 100 * (1 + Math.floor(after / slot.window_secs));
+    supply += 100 * (1 + Math.floor(after / w.window_secs));
   }
   return Math.max(0, supply);
+}
+
+// A plan gates on all of its windows at once, so a slot is worth the LEAST of
+// them over the horizon. Each window refills on its own clock, which is why
+// they cannot be collapsed before this point: a five-hour window at 8% that
+// reopens in twenty minutes stops binding a two-hour run, while a weekly
+// window at 8% binds it the whole way.
+function effectiveSupply(slot, horizonS) {
+  if (slot.bucket === "absent" || slot.bucket === "empty") return 0;
+  const windows = slot.windows?.length
+    ? slot.windows
+    : [{ remaining_pct: slot.remaining_pct, resets_at: slot.resets_at, window_secs: slot.window_secs }];
+  return Math.min(...windows.map((w) => windowSupply(w, horizonS)));
+}
+
+// The latest reset among windows that are under the floor right now and reopen
+// within the horizon. Null when nothing is currently blocking a start.
+function holdUntil(slot, horizonS) {
+  const windows = slot.windows?.length ? slot.windows : [slot];
+  let latest = null;
+  for (const w of windows) {
+    if (typeof w.remaining_pct !== "number" || w.remaining_pct >= LOW_PCT) continue;
+    const r = resetsInS(w);
+    if (r === null || !w.resets_at || r > horizonS) continue;
+    const at = Date.parse(w.resets_at);
+    if (latest === null || at > latest) latest = at;
+  }
+  return latest === null ? null : new Date(latest).toISOString();
+}
+
+// The window that actually binds this slot over the horizon — the one whose
+// reset a held session is waiting for.
+function bindingWindow(slot, horizonS) {
+  const windows = slot.windows ?? [];
+  if (!windows.length) return null;
+  let best = null, bestSupply = Infinity;
+  for (const w of windows) {
+    const sup = windowSupply(w, horizonS);
+    if (sup < bestSupply) { bestSupply = sup; best = w; }
+  }
+  return best;
 }
 
 // -------------------------------------------------------- independence gate
@@ -696,14 +791,18 @@ function route(dir) {
       bin: slot.bin,
       model: s.model ?? null,
       remaining_pct: slot.remaining_pct,
+      windows: slot.windows,
       isolation: (s.writes ?? []).length ? `wt/${s.id}` : "cwd",
       brief: join(dir, "sessions", `${s.id}.md`),
       est_cost_pct: estimateCost(slot.provider, size, history),
-      // Assigned on its post-reset supply: do not launch it before then.
-      not_before:
-        slot.remaining_pct !== null && slot.remaining_pct < LOW_PCT && slot.resets_at
-          ? slot.resets_at
-          : null,
+      // "Worth assigning" and "safe to start now" are different questions.
+      // Assignment weighs supply across the horizon, so a window that reopens
+      // mid-run stops counting against the slot. Starting is about this
+      // instant: a session launched while any window is still under the floor
+      // walks straight into that wall. So hold until the LAST such window has
+      // reset — and only when it resets inside the horizon, otherwise waiting
+      // buys nothing.
+      not_before: holdUntil(slot, horizonS),
       user_override: Boolean(s.provider),
     });
   }
@@ -733,15 +832,32 @@ const fmtDur = (s) => {
 
 const pct = (v) => (v === null || v === undefined ? "unknown" : `${v}%`);
 
+const SHORT_WINDOW = { five_hour: "5h", session: "5h", seven_day: "7d", weekly: "7d", billing_cycle: "cycle", "five_hour~": "5h~" };
+
+// Every window, not just the binding one. A reader who cannot see that the
+// five-hour window is nearly spent cannot decide whether to start now or in
+// forty minutes, which is the decision this whole table exists to support.
+function renderWindows(s) {
+  if (!s.windows?.length) return "—";
+  return s.windows
+    .map((w) => {
+      const label = SHORT_WINDOW[w.name] ?? w.name;
+      const left = typeof w.remaining_pct === "number" ? `${w.remaining_pct}%` : "?";
+      const r = resetsInS(w);
+      return `${label} ${left}${r === null ? "" : ` (${fmtDur(r)})`}`;
+    })
+    .join(" · ");
+}
+
 function renderQuota(quota) {
   const rows = quota.slots.map(
     (s) =>
-      `| ${s.key} | ${pct(s.remaining_pct)}${s.estimated ? "~" : ""} | ${s.bucket} | ${s.window ?? "—"} | ${fmtDur(resetsInS(s))} | ${s.source} |`,
+      `| ${s.key} | ${pct(s.remaining_pct)}${s.estimated ? "~" : ""} | ${s.bucket} | ${renderWindows(s)} | ${s.source} |`,
   );
   return [
     "",
-    "| Slot | Remaining | Bucket | Window | Resets in | Source |",
-    "|---|---|---|---|---|---|",
+    "| Slot | Binding | Bucket | Windows | Source |",
+    "|---|---|---|---|---|",
     ...rows,
     ...quota.slots.filter((s) => s.note).map((s) => `> ${s.key}: ${s.note}`),
   ].join("\n");

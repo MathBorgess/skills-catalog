@@ -279,15 +279,6 @@ const PROVIDERS = {
         join(h, ".cursor", "credentials.json"),
         join(h, ".cursor-agent", "auth.json"),
       ];
-      const KEYCHAIN = [
-        "cursor-agent",
-        "Cursor Agent",
-        "cursor",
-        "Cursor",
-        "cursor.com",
-        "Cursor-credentials",
-        "cursor-cli",
-      ];
       return [
         // A config file only counts as a credential when a token is actually
         // inside it. cli-config.json, for instance, carries identity and
@@ -303,22 +294,8 @@ const PROVIDERS = {
           },
         })),
         {
-          label: `macOS Keychain (${KEYCHAIN.join(", ")})`,
-          read: () => {
-            const hit = readKeychainAny(KEYCHAIN);
-            if (!hit) return null;
-            let parsed = null;
-            try {
-              parsed = JSON.parse(hit.raw);
-            } catch {
-              /* a bare token, not JSON */
-            }
-            const token = parsed ? findJwt(parsed) : (jwtClaim(hit.raw, "sub") ? hit.raw : null);
-            return token ? { token, from: `Keychain:${hit.service}` } : null;
-          },
-        },
-        {
-          label: "Cursor IDE state.vscdb (needs sqlite3)",
+          label: `Cursor IDE state.vscdb — ${cursorDbState()}`,
+          exists: () => CURSOR_DB_PATHS().some((p) => existsSync(p)),
           read: () => {
             const t = readCursorIdeToken();
             return t ? { token: t, from: "state.vscdb" } : null;
@@ -328,21 +305,73 @@ const PROVIDERS = {
     },
     isExpired: () => false,
     local: null,
+    // Learned the hard way, and worth stating rather than re-deriving: the
+    // usage token is the Cursor IDE's, kept in its state.vscdb. cursor-agent's
+    // cli-config.json carries identity and settings and no token at all, so a
+    // machine with the CLI and no IDE simply has nothing to read.
+    noCredentialHint:
+      "cursor-agent does not store a usage token — the one this endpoint needs belongs to the " +
+      "Cursor IDE, in its state.vscdb. Without the IDE signed in on this machine the slot stays " +
+      "unprobed, and routing gives it a neutral weight rather than dropping it.",
     usagebarIds: ["cursor"],
     async fetchUsage(creds) {
       const token = creds?.token;
       if (!token) return null;
-      // The session cookie is not the raw token: Cursor expects
-      // `<user id>::<token>` (URL-encoded separator), where the user id is the
-      // part of an id like "github|user_abc" after the provider prefix.
-      // Sending the bare token is a 401. The id comes from the config's own
-      // authInfo when it has one, else from the token's `sub` claim.
-      const rawId = creds?.identity?.authId ?? jwtClaim(token, "sub");
-      if (!rawId) {
-        return { error: "no user id alongside the token — sign in with `cursor-agent` again" };
+
+      // Primary: the dashboard service the Cursor IDE itself calls. It takes a
+      // bearer token and nothing else — no user id, no composite cookie — and
+      // answers with the billing period alongside the usage, which is exactly
+      // what the window model needs.
+      const r = await fetch(
+        "https://api2.cursor.sh/aiserver.v1.DashboardService/GetCurrentPeriodUsage",
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Connect-Protocol-Version": "1",
+            "Content-Type": "application/json",
+          },
+          body: "{}",
+        },
+      );
+      if (r.ok) {
+        const j = await r.json();
+        const plan = j.planUsage ?? {};
+        let usedPct = plan.totalPercentUsed;
+        if (typeof usedPct !== "number" && typeof plan.limit === "number" && plan.limit > 0) {
+          const used =
+            typeof plan.used === "number" ? plan.used : plan.limit - (plan.remaining ?? 0);
+          usedPct = (used / plan.limit) * 100;
+        }
+        if (typeof usedPct === "number") {
+          // billingCycleStart/End arrive as epoch-millisecond strings.
+          const startMs = Number(j.billingCycleStart);
+          const endMs = Number(j.billingCycleEnd);
+          return {
+            windows: [
+              {
+                name: "billing_cycle",
+                remaining_pct: Math.max(0, Math.round(100 - usedPct)),
+                resets_at:
+                  Number.isFinite(endMs) && endMs > 0 ? new Date(endMs).toISOString() : null,
+                window_secs:
+                  Number.isFinite(startMs) && Number.isFinite(endMs) && endMs > startMs
+                    ? Math.round((endMs - startMs) / 1000)
+                    : null,
+              },
+            ],
+          };
+        }
       }
-      const userId = String(rawId).split("|")[1] || String(rawId);
-      const r = await fetch("https://cursor.com/api/usage-summary", {
+      const dashStatus = r.status;
+
+      // Fallback: the older summary endpoint, which authenticates with a
+      // composite session cookie `<user id>::<token>` instead of a bearer.
+      const userId = cursorUserId(creds?.identity?.authId ?? jwtClaim(token, "sub"));
+      if (!userId) {
+        return { error: `dashboard HTTP ${dashStatus}; no user id for the fallback` };
+      }
+      const r2 = await fetch("https://cursor.com/api/usage-summary", {
         headers: {
           Cookie: `WorkosCursorSessionToken=${userId}%3A%3A${token}`,
           Origin: "https://cursor.com",
@@ -351,27 +380,32 @@ const PROVIDERS = {
             "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125 Safari/537.36",
         },
       });
-      if (!r.ok) return { error: `HTTP ${r.status}` };
-      const j = await r.json();
-      if (j.isUnlimited) {
-        return { window: "unlimited", remaining_pct: 100, resets_at: null, window_secs: null };
+      if (!r2.ok) {
+        return { error: `dashboard HTTP ${dashStatus}, usage-summary HTTP ${r2.status}` };
       }
-      // Shape: individualUsage.plan.{auto,api,total}PercentUsed, and the same
-      // under teamUsage for a seat on a team plan. The billing cycle is the
-      // window, so its end is the reset.
-      const plan = j.individualUsage?.plan ?? j.teamUsage?.plan ?? null;
-      const pct = plan?.totalPercentUsed ?? plan?.autoPercentUsed ?? null;
-      if (typeof pct !== "number") return { error: "no plan usage in response" };
-      const end = j.billingCycleEnd ? Date.parse(j.billingCycleEnd) : NaN;
-      const start = j.billingCycleStart ? Date.parse(j.billingCycleStart) : NaN;
+      const j2 = await r2.json();
+      if (j2.isUnlimited) {
+        return {
+          windows: [{ name: "unlimited", remaining_pct: 100, resets_at: null, window_secs: null }],
+        };
+      }
+      const plan2 = j2.individualUsage?.plan ?? j2.teamUsage?.plan ?? null;
+      const pct2 = plan2?.totalPercentUsed ?? plan2?.autoPercentUsed ?? null;
+      if (typeof pct2 !== "number") return { error: "no plan usage in usage-summary response" };
+      const end2 = Date.parse(j2.billingCycleEnd ?? "");
+      const start2 = Date.parse(j2.billingCycleStart ?? "");
       return {
-        window: "billing_cycle",
-        remaining_pct: Math.round(100 - pct),
-        resets_at: Number.isFinite(end) ? new Date(end).toISOString() : null,
-        window_secs:
-          Number.isFinite(end) && Number.isFinite(start)
-            ? Math.round((end - start) / 1000)
-            : null,
+        windows: [
+          {
+            name: "billing_cycle",
+            remaining_pct: Math.round(100 - pct2),
+            resets_at: Number.isFinite(end2) ? new Date(end2).toISOString() : null,
+            window_secs:
+              Number.isFinite(end2) && Number.isFinite(start2)
+                ? Math.round((end2 - start2) / 1000)
+                : null,
+          },
+        ],
       };
     },
   },
@@ -383,6 +417,14 @@ const PROVIDERS = {
 // scheduling blind.
 function pickTightest(windows) {
   return windows.reduce((a, b) => (b.remaining_pct < a.remaining_pct ? b : a));
+}
+
+// An oauth id looks like "github|user_abc123" or "auth0|user_abc123"; the half
+// that matters is whichever part starts with `user_`, not blindly the second.
+function cursorUserId(rawId) {
+  if (typeof rawId !== "string" || !rawId) return null;
+  const part = rawId.split("|").find((p) => p.startsWith("user_"));
+  return part ?? (rawId.startsWith("user_") ? rawId : null);
 }
 
 // Walk a parsed config and return the first string that decodes as a JWT
@@ -423,23 +465,57 @@ function jwtClaim(token, claim) {
   }
 }
 
-function readCursorIdeToken() {
-  if (!which("sqlite3")) return null;
-  const candidates = [
-    join(homedir(), "Library", "Application Support", "Cursor", "User", "globalStorage", "state.vscdb"),
-    join(homedir(), ".config", "Cursor", "User", "globalStorage", "state.vscdb"),
+// The Cursor IDE's session token lives in its SQLite state file under the key
+// `cursorAuth/accessToken`. cursor-agent's own config does not carry a token at
+// all, so this file is the only source — which also means a machine with the
+// CLI but no IDE has nothing to read, and saying so is the honest answer.
+//
+// Two readers, because neither is guaranteed: the sqlite3 binary, then a
+// python3 one-liner. state.vscdb can exceed 2GB, which rules out slurping it.
+const CURSOR_DB_PATHS = () => {
+  const h = homedir();
+  return [
+    join(h, "Library", "Application Support", "Cursor", "User", "globalStorage", "state.vscdb"),
+    join(h, ".config", "Cursor", "User", "globalStorage", "state.vscdb"),
+    join(h, "AppData", "Roaming", "Cursor", "User", "globalStorage", "state.vscdb"),
   ];
-  for (const db of candidates) {
-    if (!existsSync(db)) continue;
-    const r = spawnSync(
-      "sqlite3",
-      [db, "SELECT value FROM ItemTable WHERE key = 'cursorAuth/accessToken'"],
-      { encoding: "utf8" },
-    );
+};
+
+const CURSOR_TOKEN_SQL =
+  "SELECT value FROM ItemTable WHERE key = 'cursorAuth/accessToken' LIMIT 1";
+
+function readCursorIdeToken() {
+  const db = CURSOR_DB_PATHS().find((p) => existsSync(p));
+  if (!db) return null;
+
+  if (which("sqlite3")) {
+    const r = spawnSync("sqlite3", [db, CURSOR_TOKEN_SQL], { encoding: "utf8", timeout: 15000 });
+    const v = (r.stdout || "").trim();
+    if (v) return v;
+  }
+  for (const py of ["python3", "python"]) {
+    if (!which(py)) continue;
+    const script =
+      "import sqlite3,sys\n" +
+      "c=sqlite3.connect(sys.argv[1]);r=c.execute(sys.argv[2]).fetchone()\n" +
+      "print(r[0] if r and r[0] else '');c.close()";
+    const r = spawnSync(py, ["-c", script, db, CURSOR_TOKEN_SQL], {
+      encoding: "utf8",
+      timeout: 15000,
+    });
     const v = (r.stdout || "").trim();
     if (v) return v;
   }
   return null;
+}
+
+function cursorDbState() {
+  const db = CURSOR_DB_PATHS().find((p) => existsSync(p));
+  if (!db) return "no Cursor IDE state.vscdb on this machine";
+  if (!which("sqlite3") && !which("python3") && !which("python")) {
+    return `${db} found but neither sqlite3 nor python3 is available to read it`;
+  }
+  return `${db} has no cursorAuth/accessToken — sign in to the Cursor IDE`;
 }
 
 function usagebarSnapshot() {
@@ -552,9 +628,9 @@ async function probe() {
         // read. Telling someone to log in again when they already are is the
         // least useful thing to say.
         note =
-          `${tokenless[0]} holds settings or identity but no session token — ` +
-          `\`${bin}\` keeps its token somewhere this probe does not know ` +
-          `(probe --explain lists every path tried)` +
+          p.noCredentialHint ??
+          `${tokenless[0]} holds settings or identity but no session token ` +
+            `(probe --explain lists every path tried)`;
           (process.platform === "darwin"
             ? `. To find it: security dump-keychain 2>/dev/null | grep -i '"svce".*${name}' ` +
               `— that prints attribute names only, never a secret, and the service it names ` +

@@ -29,7 +29,9 @@ HANDOFF_RUN="${TMPDIR:-/tmp}/handoff/$(date -u +%Y%m%dT%H%M%SZ)"
 node <skill>/scripts/handoff.mjs probe --run "$HANDOFF_RUN"
 ```
 
-That prints the slot table and writes `quota.json`. A slot is **provider × account**, not a binary — one machine can hold several. Read [`references/quota.md`](references/quota.md) only if a slot comes back `unknown` and you need to tell the user why.
+That prints the slot table and writes `quota.json`. A slot is **provider × account**, not a binary — one machine can hold several. The probe falls back through three sources (vendor tool, OAuth credential, local transcripts), so a reading marked `~` is estimated from this machine's own transcripts rather than read from the account — usable for routing, never quoted as the real limit.
+
+If a slot still reads `unknown`, run the same command with `--explain`: it prints every credential path and transcript directory it consulted, found or missing. Give the user that list and the one-line fix. Details: [`references/quota.md`](references/quota.md).
 
 ## 3. Cut the work into a graph
 

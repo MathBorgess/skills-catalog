@@ -40,6 +40,11 @@ import {
 } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import {
+  claudeConfigDirs,
+  localSearchPaths,
+  localSnapshot,
+} from "./local-usage.mjs";
 
 const LOW_PCT = Number(process.env.HANDOFF_LOW_PCT ?? 20);
 const PROBE_TTL_S = 300;
@@ -112,10 +117,61 @@ function tailOf(path, bytes = 8192) {
 // Reads are strictly read-only. An expired token is reported as `unknown` with
 // a fix; refreshing another process's credential is not this script's business.
 
+// A credential is wherever the CLI actually put it, which differs by OS and
+// moves between versions. Each provider lists every place worth looking, and
+// the first source that yields an unexpired token wins; `probe --explain`
+// prints the whole list so a miss is diagnosable instead of mysterious.
+function readKeychain(service) {
+  if (process.platform !== "darwin") return null;
+  const r = spawnSync("/usr/bin/security", ["find-generic-password", "-s", service, "-w"], {
+    encoding: "utf8",
+    timeout: 10000,
+  });
+  if (r.status !== 0 || !r.stdout) return null;
+  try {
+    return JSON.parse(r.stdout.trim());
+  } catch {
+    return null;
+  }
+}
+
+function firstUsable(sources, isExpired) {
+  const tried = [];
+  let expiredSeen = false;
+  for (const src of sources) {
+    const creds = src.read();
+    tried.push({ label: src.label, found: Boolean(creds) });
+    if (!creds) continue;
+    if (isExpired(creds)) {
+      expiredSeen = true;
+      continue;
+    }
+    return { creds, source: src.label, tried, expiredSeen };
+  }
+  return { creds: null, source: null, tried, expiredSeen };
+}
+
 const PROVIDERS = {
   claude: {
     bin: ["claude"],
-    creds: () => join(homedir(), ".claude", ".credentials.json"),
+    // macOS Claude Code keeps the live token in the login Keychain; the
+    // .credentials.json left in the home directory is often a stale copy, so a
+    // file that parses is not evidence the file is current.
+    credSources: () => [
+      ...claudeConfigDirs().map((dir) => ({
+        label: join(dir, ".credentials.json"),
+        read: () => readJSON(join(dir, ".credentials.json")),
+      })),
+      {
+        label: "macOS Keychain: Claude Code-credentials",
+        read: () => readKeychain("Claude Code-credentials"),
+      },
+    ],
+    isExpired: (c) => {
+      const e = c?.claudeAiOauth?.expiresAt;
+      return typeof e === "number" && e < Date.now();
+    },
+    local: "claude",
     usagebarIds: ["anthropic"],
     async fetchUsage(creds) {
       const token = creds?.claudeAiOauth?.accessToken;
@@ -152,7 +208,19 @@ const PROVIDERS = {
   },
   codex: {
     bin: ["codex"],
-    creds: () => join(homedir(), ".codex", "auth.json"),
+    credSources: () =>
+      (process.env.CODEX_HOME ? process.env.CODEX_HOME.split(",") : [join(homedir(), ".codex")])
+        .map((d) => d.trim())
+        .filter(Boolean)
+        .map((dir) => ({
+          label: join(dir, "auth.json"),
+          read: () => readJSON(join(dir, "auth.json")),
+        })),
+    isExpired: (c) => {
+      const e = Date.parse(c?.tokens?.expires_at ?? "");
+      return Number.isFinite(e) && e < Date.now();
+    },
+    local: "codex",
     usagebarIds: ["openai"],
     async fetchUsage(creds) {
       const token = creds?.tokens?.access_token ?? creds?.access_token;
@@ -182,10 +250,31 @@ const PROVIDERS = {
   },
   cursor: {
     bin: ["cursor-agent", "agent"],
-    // The headless CLI's own credential. The IDE's sqlite state.vscdb is read
-    // only when `sqlite3` happens to be present — handoff launches the headless
-    // agent, so its auth.json is the credential that matters.
-    creds: () => join(homedir(), ".config", "cursor", "auth.json"),
+    // cursor-agent's login has lived at several paths across versions and
+    // platforms, and the IDE keeps its own token in a SQLite state file.
+    credSources: () => {
+      const h = homedir();
+      const files = [
+        join(h, ".config", "cursor", "auth.json"),
+        join(h, ".config", "cursor-agent", "auth.json"),
+        join(h, "Library", "Application Support", "cursor", "auth.json"),
+        join(h, "Library", "Application Support", "Cursor", "auth.json"),
+        join(h, ".cursor", "auth.json"),
+        join(h, ".cursor", "cli-config.json"),
+      ];
+      return [
+        ...files.map((f) => ({ label: f, read: () => readJSON(f) })),
+        {
+          label: "Cursor IDE state.vscdb (needs sqlite3)",
+          read: () => {
+            const t = readCursorIdeToken();
+            return t ? { accessToken: t } : null;
+          },
+        },
+      ];
+    },
+    isExpired: () => false,
+    local: null,
     usagebarIds: ["cursor"],
     async fetchUsage(creds) {
       const token =
@@ -324,20 +413,47 @@ async function probe() {
       continue;
     }
 
-    let result = null, note = "";
-    const credPath = p.creds();
-    const creds = readJSON(credPath);
+    let result = null, note = "", source = null;
+
+    // Source 2: the CLI's own credential, wherever it really lives.
+    const { creds, source: credLabel, tried, expiredSeen } = firstUsable(
+      p.credSources(),
+      p.isExpired,
+    );
     if (!creds) {
-      note = `no credential at ${credPath} — run \`${bin}\` once to log in`;
+      note = expiredSeen
+        ? `every credential found is expired — run \`${bin}\` once to refresh`
+        : `no credential found — run \`${bin}\` once to log in (probe --explain lists the paths tried)`;
     } else {
       try {
         result = await p.fetchUsage(creds);
         if (result?.error) {
-          note = `${result.error} — token may be expired; run \`${bin}\` once`;
+          note = `${result.error} (via ${credLabel})`;
           result = null;
-        }
+        } else source = `${name}-oauth`;
       } catch (e) {
         note = `probe failed: ${e.message}`;
+      }
+    }
+
+    // Source 3: the transcripts this machine already wrote. No credential, no
+    // network — so it still answers when every OAuth path above has failed.
+    let estimated = false;
+    if (!result && p.local) {
+      const local = localSnapshot(p.local);
+      if (local && !local.error && local.remaining_pct !== null) {
+        result = local;
+        estimated = true;
+        source = "local-transcript";
+        note = note ? `${note}; estimated from transcripts: ${local.detail}` : local.detail;
+      } else if (local?.resets_at) {
+        // No usable percent, but a real reset time is still worth having.
+        result = { ...local, remaining_pct: null };
+        estimated = true;
+        source = "local-transcript";
+        note = local.detail;
+      } else if (local?.error) {
+        note = note ? `${note}; local: ${local.error}` : `local: ${local.error}`;
       }
     }
 
@@ -348,12 +464,30 @@ async function probe() {
       resets_at: result?.resets_at ?? null,
       window_secs: result?.window_secs ?? null,
       bucket: bucketOf(result?.remaining_pct),
-      source: result ? `${name}-oauth` : "probe failed",
+      estimated: estimated || undefined,
+      source: source ?? "probe failed",
       note: note || undefined,
+      tried: arg("explain") ? tried : undefined,
     });
   }
 
   return { ts: nowISO(), low_pct: LOW_PCT, slots };
+}
+
+// `probe --explain`: every path consulted, so a miss names its own cause.
+function renderExplain(quota) {
+  const out = ["", "## Where the probe looked", ""];
+  for (const s of quota.slots) {
+    out.push(`**${s.key}** — ${s.installed ? `binary \`${s.bin}\`` : "not installed"}`);
+    for (const t of s.tried ?? []) {
+      out.push(`  ${t.found ? "found  " : "missing"}  ${t.label}`);
+    }
+    for (const lp of localSearchPaths(s.provider)) {
+      out.push(`  ${existsSync(lp) ? "found  " : "missing"}  ${lp}  (transcripts)`);
+    }
+    out.push("");
+  }
+  return out.join("\n");
 }
 
 // A slot that is poor now but whose window reopens inside the run horizon is
@@ -602,7 +736,7 @@ const pct = (v) => (v === null || v === undefined ? "unknown" : `${v}%`);
 function renderQuota(quota) {
   const rows = quota.slots.map(
     (s) =>
-      `| ${s.key} | ${pct(s.remaining_pct)} | ${s.bucket} | ${s.window ?? "—"} | ${fmtDur(resetsInS(s))} | ${s.source} |`,
+      `| ${s.key} | ${pct(s.remaining_pct)}${s.estimated ? "~" : ""} | ${s.bucket} | ${s.window ?? "—"} | ${fmtDur(resetsInS(s))} | ${s.source} |`,
   );
   return [
     "",
@@ -921,8 +1055,13 @@ async function score(dir) {
     JSON.stringify(metrics, null, 2),
     "```",
     "",
-    `Cost of this run, in plan quota: ${
-      Object.entries(cost).map(([k, v]) => `${k} −${v}pt`).join(", ") || "not measurable (probes were unknown)"
+    `Cost of this run: ${
+      Object.entries(cost)
+        .map(([k, v]) => {
+          const est = before.slots.find((x) => x.key === k)?.estimated;
+          return `${k} −${v}pt${est ? " (estimated from transcripts)" : " of plan quota"}`;
+        })
+        .join(", ") || "not measurable (every probe was unknown)"
     }`,
     `Wall clock ${fmtDur(wall)} across ${state.parent_turns} parent turn(s).`,
   ];
@@ -952,6 +1091,7 @@ if (cmd === "probe") {
     writeJSON(join(resolve(dir), "quota.json"), snapshot);
   }
   console.log(arg("json") ? JSON.stringify(snapshot, null, 2) : renderQuota(snapshot));
+  if (arg("explain") && !arg("json")) console.log(renderExplain(snapshot));
 } else if (cmd === "route") {
   route(runDir());
 } else if (cmd === "dispatch") {
@@ -965,7 +1105,9 @@ if (cmd === "probe") {
   console.log(
     `handoff — orchestration for the handoff skill
 
-  probe    [--run DIR] [--json]     supply snapshot per slot
+  probe    [--run DIR] [--json] [--explain]
+                                    supply snapshot per slot; --explain lists
+                                    every credential and transcript path tried
   route    --run DIR                admission control + assignment (refuses overlapping writers)
   dispatch --run DIR [--budget S]   launch ready sessions, wait, reroute on quota death
   status   --run DIR                one line per session

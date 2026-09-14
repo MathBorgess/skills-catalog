@@ -120,6 +120,10 @@ const PROVIDERS = {
     async fetchUsage(creds) {
       const token = creds?.claudeAiOauth?.accessToken;
       if (!token) return null;
+      const exp = creds.claudeAiOauth.expiresAt;
+      if (typeof exp === "number" && exp < Date.now()) {
+        return { error: "credential expired" };
+      }
       const r = await fetch("https://api.anthropic.com/api/oauth/usage", {
         headers: {
           Authorization: `Bearer ${token}`,
@@ -153,6 +157,10 @@ const PROVIDERS = {
     async fetchUsage(creds) {
       const token = creds?.tokens?.access_token ?? creds?.access_token;
       if (!token) return null;
+      const exp = Date.parse(creds?.tokens?.expires_at ?? "");
+      if (Number.isFinite(exp) && exp < Date.now()) {
+        return { error: "credential expired" };
+      }
       const headers = { Authorization: `Bearer ${token}`, "User-Agent": "codex-cli" };
       const accountId = creds?.tokens?.account_id ?? creds?.account_id;
       if (accountId) headers["ChatGPT-Account-Id"] = accountId;
@@ -194,14 +202,25 @@ const PROVIDERS = {
       });
       if (!r.ok) return { error: `HTTP ${r.status}` };
       const j = await r.json();
-      const pct =
-        j.totalPercentUsed ?? j.percentUsed ?? j.usagePercent ?? null;
-      if (typeof pct !== "number") return { error: "no percent field in response" };
+      if (j.isUnlimited) {
+        return { window: "unlimited", remaining_pct: 100, resets_at: null, window_secs: null };
+      }
+      // Shape: individualUsage.plan.{auto,api,total}PercentUsed, and the same
+      // under teamUsage for a seat on a team plan. The billing cycle is the
+      // window, so its end is the reset.
+      const plan = j.individualUsage?.plan ?? j.teamUsage?.plan ?? null;
+      const pct = plan?.totalPercentUsed ?? plan?.autoPercentUsed ?? null;
+      if (typeof pct !== "number") return { error: "no plan usage in response" };
+      const end = j.billingCycleEnd ? Date.parse(j.billingCycleEnd) : NaN;
+      const start = j.billingCycleStart ? Date.parse(j.billingCycleStart) : NaN;
       return {
         window: "billing_cycle",
         remaining_pct: Math.round(100 - pct),
-        resets_at: j.resetsAt ?? null,
-        window_secs: null,
+        resets_at: Number.isFinite(end) ? new Date(end).toISOString() : null,
+        window_secs:
+          Number.isFinite(end) && Number.isFinite(start)
+            ? Math.round((end - start) / 1000)
+            : null,
       };
     },
   },

@@ -31,6 +31,7 @@ Known incompatibilities worth keeping:
 
 - Codex rejects `--sandbox` together with `--approve-for-me`. Because the dispatcher sets the child's working directory to the worktree, `--sandbox workspace-write` alone is sufficient and `--approve-for-me` is never needed.
 - `agy -p` hangs in a non-TTY while stdin stays open. The dispatcher spawns every child with stdin ignored, which is exactly the documented fix — so if that recipe is ever changed to pipe anything into a child, Antigravity sessions will hang instead of failing, and nothing will say why. `-p` takes the prompt, so it goes last, after `--model` and `--effort`.
+- `agy`'s `--print-timeout` defaults to 5m and ignores the cwd unless `--add-dir` is given, so the recipe passes both. Without `--add-dir`, agy works in its own scratch project instead of the worktree. Without the longer timeout, every real session dies at ~5 minutes.
 
 ## Missing binary
 

@@ -1691,7 +1691,7 @@ function renderRouting(r) {
 // vocabulary — so the tier that picks the lane picks this too.
 const AGY_EFFORT = { mechanical: "low", review: "medium", design: "high" };
 
-function launchArgs(s, promptPath) {
+function launchArgs(s, promptPath, cwd) {
   const prompt = readFileSync(promptPath, "utf8").trim();
   switch (s.provider) {
     case "claude": {
@@ -1715,7 +1715,9 @@ function launchArgs(s, promptPath) {
       // `-p` is the documented headless flag and takes the prompt, so it goes
       // last. The CLI is known to hang in a non-TTY while stdin stays open,
       // which is why the dispatcher spawns every child with stdin ignored.
-      const a = ["--dangerously-skip-permissions", "--output-format", "text"];
+      // Without --add-dir agy works in its own scratch project, not the cwd;
+      // --print-timeout defaults to 5m, which kills any real session.
+      const a = ["--dangerously-skip-permissions", "--add-dir", cwd, "--print-timeout", "4h", "--output-format", "text"];
       if (s.model) a.push("--model", s.model);
       if (AGY_EFFORT[s.tier]) a.push("--effort", AGY_EFFORT[s.tier]);
       return [s.bin, [...a, "-p", prompt]];
@@ -1837,7 +1839,7 @@ async function dispatch(dir) {
           st.reason = "no prompt file — the brief was never written";
           continue;
         }
-        const [bin, args] = launchArgs(s, promptPath);
+        const [bin, args] = launchArgs(s, promptPath, cwd);
         const logFd = openSync(join(dir, "logs", `${s.id}.log`), "a");
         const child = spawn(bin, args, {
           cwd,

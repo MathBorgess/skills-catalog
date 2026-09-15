@@ -25,6 +25,7 @@
   ],
   "files": [
     "skills",
+    "hooks",
     ".claude-plugin",
     "scripts",
     "README.md",

@@ -1,86 +1,71 @@
-# Routing
+# Cutting and routing
 
-How to cut work into sessions and how to pick a provider and a model for each. Defaults below lose to any user constraint.
+How to cut remaining work into a dependency graph, and what the router does with it. The arithmetic — weights, assignment, admission control — lives in `scripts/handoff.mjs`. This file is the judgment around it.
 
 ## Parent provider
 
-Detect from the environment of this session, then treat that provider as the one whose tokens you are trying not to spend:
+Detect from this session's environment. That is the provider whose tokens you are trying not to spend, and the one the router starts the rotation *after*.
 
 | Signal | Parent |
 |---|---|
 | `CLAUDECODE` or `CLAUDE_CODE_ENTRYPOINT` set | claude |
 | `CODEX_HOME` set and this process is `codex` | codex |
 | Cursor Task/subagent tools, or `CURSOR_AGENT` | cursor |
-| none of the above | unknown — spread across whatever CLIs exist |
+| none of the above | unknown — spread across whatever slots the probe finds |
 
 ## Cutting
 
-1. List remaining work as atomic jobs (one sentence, the paths it would touch).
-2. Two jobs share a write-path, or one needs the other's output → same session, or job B goes in **wave 2**.
-3. Each session in a wave has a disjoint write-set. Read-only overlap is allowed.
-4. Prefer more sessions over fewer, until a session would be only "glue" (merge that glue into a neighbor).
-5. Cap a wave at the number of installed provider CLIs times two. Leftovers become the next wave.
+1. List remaining work as atomic jobs: one sentence, plus the paths each would write.
+2. Job B needs job A's output → `"deps": ["A"]`. Do not batch them into rounds; the dispatcher starts B the moment A is done, whatever else is still running.
+3. Two jobs with no dependency path between them must have **disjoint write-sets**. Read-only overlap is fine and needs no dependency.
+4. Prefer more sessions over fewer, until a session would be only glue — merge glue into a neighbour.
+5. There is no wave cap. Concurrency is bounded by supply, and the router already accounts for it.
 
-False independence (this is an `independence_miss` if you launch it anyway): two sessions both editing the same module, barrel file, lockfile, or generated snapshot.
+**False independence.** `route` refuses the plan when two concurrent sessions write overlapping paths, so this cannot reach a launch. It compares literal path prefixes and always treats lockfiles as shared, which catches the ordinary cases; it cannot reason about two globs that overlap only in the middle. Still yours to notice: two sessions editing the same barrel file, the same generated snapshot, or the same migration sequence through different paths.
 
-## Provider and model
+## Sizing and tiering
 
-Pool = binaries that `command -v` finds: `agent` or `cursor-agent` → cursor; `claude` → claude; `codex` → codex.
+`size` drives the cost estimate and therefore admission control. `tier` drives the model.
 
-Load [`quota.md`](quota.md) and probe remaining percent **before** this list.
+| `size` | A session that… |
+|---|---|
+| `s` | touches one or two files, mechanical, no design left open |
+| `m` | one module, a handful of files, the shape is already decided |
+| `l` | a subsystem, or any job where the design is still being made |
 
-Assignment, in order:
+| `tier` | Model to pick |
+|---|---|
+| `mechanical` | the cheaper/faster id the CLI lists — implementation, tests, lint, renames |
+| `design` | a stronger id — architecture, ambiguous spec, anything with a judgment call inside |
+| `review` | a stronger id, read-only, no worktree |
 
-1. User named a provider or model for a session → that session gets it (even if the provider is `low`).
-2. Drop `empty` providers. Avoid `low` (`< 20%` remaining, unless the user set another floor).
-3. Weighted round-robin over the eligible set (`ok` ∪ `unknown`), `assigned[p] / weight[p]`, tie → next after the parent in `cursor → claude → codex`. Two eligible providers must not all land on one row.
-4. One session and compact mode → do not launch unless a provider was named; the brief is the product.
-5. Only the parent CLI exists and it is not `empty` → sessions go there (still as separate processes/worktrees).
-6. A chosen binary is missing at launch → next eligible provider, note it on the table.
+Leave `model` unset unless the user named one or the tier clearly demands a specific id. An unset model means the CLI default, which never goes stale. Never invent a model id from memory; probe the CLI's own list.
 
-Model, after the provider is set:
+## Lanes
 
-- Probe ids as in [`providers.md`](providers.md). Never invent a stale id.
-- Mechanical implementation, tests, lint → the cheaper/faster id the probe lists (or the CLI default).
-- Design, architecture, review, ambiguous spec → a stronger id from the same probe (or the CLI default).
-- If the probe fails, omit `--model` / `-m` and write `default` in the table.
+A provider that bills **several pools inside one billing cycle** carries lanes. Cursor is the one that does: **Cursor Models** (Auto, Composer, the Grok tiers) and **Other Models** (named third-party models, at that model's API price). Lanes are alternatives, not gates — a session draws from exactly one — so a slot is worth its *best* lane, and the model id is what decides which one it spends. Why the split exists and how it is read: [`references/quota.md`](quota.md).
+
+| `tier` | Lane it prefers | Why |
+|---|---|---|
+| `mechanical` | Cursor Models | a rename on a frontier model spends metered credit for nothing |
+| `design`, `review` | Other Models | a judgment call traded down to a small own-model is a real downgrade |
+
+The preference is steep but not a wall: the other lane still wins when the preferred one is far more loaded, and the routing table marks that session `↓`. A lane with no supply left is not a candidate at all — so a design session is never routed into a pool already at 100%, it goes to another provider instead.
+
+`route` **pins** the lane by taking a model id from the CLI's own `--list-models` output, never one from memory, and prefers a named own-model over bare `auto` (on team plans Auto's router can land in the other pool). When a CLI does not list its models the lane stays a preference its default model may ignore, and the cell is marked `*`. A model you set yourself always wins, and pins the lane that model belongs to.
+
+At dispatch, a lane that dies of quota blacklists **that lane**, not the slot: a session that exhausts Other Models is relaunched on Cursor Models with a model from that pool, without a parent turn.
+
+## What the router does with it
+
+In order:
+
+1. **Independence gate.** Overlapping concurrent write-sets → the plan is refused with the colliding paths named. Fix the cut, do not argue with it.
+2. **Supply per slot**, measured over `horizon_s`, **per window and then at the minimum**. A slot's worth is a *rate*, not a stock: a five-hour window sitting at 15% that reopens in ten minutes is worth more across a two-hour run than a weekly window at 30% that does not. Because a plan gates on every window at once, the slot is worth the least of them — but each refills on its own clock, so the five-hour window stops binding a long run while a weekly window binds it the whole way. A slot blocked only by a window that reopens inside the horizon is assigned work and **held** until that reset instead of being discarded; the table shows it as `holds 30m`. Which window binds depends on the horizon, which is why `horizon_s` is worth setting honestly.
+3. **Admission control.** Estimated demand (per-session cost by provider and size, from this machine's own history once it has three samples, a built-in prior before that) against total supply. Over budget → the table carries a warning naming the shortfall. Act on it: cut fewer and bigger sessions, or dispatch after the soonest reset. Launching into a wall costs a whole session and produces nothing.
+4. **Assignment**, minimising projected utilisation per **lane** rather than counting sessions — a five-minute lint job and a subsystem refactor are not one each, and two lanes of the same slot compete for work independently. A user-named provider wins and is marked as an override.
+5. **Rerouting**, at dispatch time: a session that dies with quota language is relaunched on the next eligible lane — which may be the other lane of the same provider — up to three attempts, without a parent turn.
 
 ## Isolation
 
-File-writing session → own worktree, named `handoff-<run-id>-<NN>`. Read-only session → current checkout.
-
-## `manifest.md`
-
-Write this before launch. Update status and metrics after the wave.
-
-```markdown
-# Handoff <run-id>
-
-- mode: compact | fan-out
-- parent_provider: cursor | claude | codex | unknown
-- skill_version: <SKILL.md metadata.version>
-- workspace: <cwd, not a home path expansion>
-
-## Quota
-
-| Provider | Remaining | Bucket | Source |
-|---|---|---|---|
-| cursor | | ok \| low \| empty \| unknown | |
-| claude | | | |
-| codex | | | |
-
-## Routing
-
-| Session | Goal | Provider | Model | Remaining | Isolation | Brief | Pid | Status |
-|---|---|---|---|---|---|---|---|---|
-| 01 | | | | | | $RUN/sessions/01.md | | launched \| done \| blocked \| failed |
-
-## Waves
-
-- wave 1: 01, 02
-- wave 2: 03 (after 01)
-
-## Metrics
-
-See [`metrics.md`](metrics.md). Fill after the run.
-```
+A session with a non-empty `writes` gets its own git worktree under the run directory, on branch `handoff/<run-id>-<NN>`. A session with an empty `writes` runs read-only in the current checkout. The script creates the worktree and sets the child's working directory — no provider-specific worktree flag is involved, which removes a whole class of launch failure.

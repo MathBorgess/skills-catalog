@@ -11,9 +11,15 @@ skills/<skill-name>/
   SKILL.md              # required — frontmatter + the workflow
   agents/openai.yaml    # required — Codex picker metadata
   references/*.md       # optional — depth loaded on demand
+  scripts/*.mjs         # optional — deterministic steps, zero dependencies
+hooks/hooks.json        # plugin root — hooks any skill here ships
 ```
 
 One skill per directory. Directory name is the skill name: lowercase, hyphenated, no version suffix.
+
+A skill may ship `scripts/` when a step is **procedure, not judgment**: arithmetic, probing, spawning, polling, scoring. Prose that asks a model to execute a procedure pays tokens every run and is obeyed probabilistically; a script does it once, for free, the same way every time. Keep the markdown for what needs a model and move the rest. Scripts are Node ESM, standard library only, and must run from a plugin install path.
+
+A rule the model is asked to *follow* is guidance; a rule a hook can *refuse* is enforcement. When a skill has a rule that matters and keeps being dropped under pressure, it belongs in `hooks/hooks.json` at the plugin root. Because those hooks run in every session that has the plugin installed, a hook must be **inert unless its skill is actively running**, and must exit 0 (allow) on any error of its own.
 
 Install commands for consumers live in [`.agents/install-block.md`](.agents/install-block.md). Change that file first, then `README.md`.
 

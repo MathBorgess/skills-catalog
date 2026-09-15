@@ -1,59 +1,38 @@
 # Provider CLIs
 
-Recipes for launching one child. Probe with `command -v` before using a binary. If flags on the installed binary disagree with this file, believe `--help` and record `launch_fail` so the next review can patch this page.
+The launch recipes live in `scripts/handoff.mjs` (`launchArgs`), not here — a recipe in prose is a recipe that drifts from the installed binary. This file is what to do when one breaks.
 
-Cursor binary: `agent`, or `cursor-agent` if `agent` is missing.
+## What every launch does
 
-Every launch must:
+The dispatcher, for each session:
 
-- pass `$RUN/sessions/NN.prompt.md` as the prompt (absolute path inside the prompt text, or stdin)
-- be non-interactive
-- not block the parent from launching the rest of the wave (background process, `persist`, or `--bg`)
-- write pid (or session id) into `manifest.md`
+1. Creates the git worktree itself (`handoff/<run-id>-<NN>` under the run directory) and sets it as the child's working directory. **No provider-specific worktree flag is used.** Those flags differ per CLI and per version, and guessing one wrong is a launch failure that costs a whole session.
+2. Passes `sessions/NN.prompt.md` — three lines pointing at the brief — as the prompt argument. Never a long prompt on the command line, never an API key.
+3. Redirects stdout and stderr to `logs/NN.log`, detached, so the whole set goes out together and nothing blocks on anything else.
+4. On exit, reads `sessions/NN.result.md` for a status. No result file plus quota language in the log tail → the slot — or, on a provider with lanes, the one lane that died — is marked empty and the session is relaunched elsewhere. No result file and no quota language → `failed`.
 
-Do not pass API keys on the command line.
+Read-only sessions (`"writes": []`) skip the worktree and run in the current checkout.
 
-## Cursor
+## Model ids
 
-File-writing:
+Probe, never remember: `agent --list-models`, `claude --help`, `codex --help`. Put the id in the plan's `model` field, or leave it unset for the CLI default. A stale id from training is a launch failure.
 
-```bash
-agent -p --trust --force --model <id> -w "handoff-<run-id>-<NN>" "$(cat "$RUN/sessions/NN.prompt.md")"
-```
+`route` already runs `--list-models` itself on a provider that bills more than one pool, to pin a session's lane to an id that exists (see [`routing.md`](routing.md)). A `model` you set in the plan always wins over that, and pins the lane that model belongs to.
 
-Read-only: drop `-w`. Long-running across disconnects: `agent persist` with the same prompt; poll with `agent persist list`. If `persist` rejects `--trust`/`--force`/`--model`, drop those flags or fall back to a background `agent -p`.
+## When a launch fails
 
-Model ids: `agent --list-models`. Pick from that list. If the list fails, omit `--model` and table it as `default`.
+`score` counts `launch_fails`. When one happens:
 
-## Claude
+1. Check the installed binary's own `--help`. Believe it over any file in this repository.
+2. Fix `launchArgs` in `scripts/handoff.mjs` for that provider, and say in the report which flag changed.
+3. Relaunch that session id. Do not fall back to doing its work yourself.
 
-File-writing:
+Known incompatibility worth keeping: Codex rejects `--sandbox` together with `--approve-for-me`. Because the dispatcher sets the child's working directory to the worktree, `--sandbox workspace-write` alone is sufficient and `--approve-for-me` is never needed.
 
-```bash
-claude -p --dangerously-skip-permissions --output-format text --model <id> -w "handoff-<run-id>-<NN>" "$(cat "$RUN/sessions/NN.prompt.md")"
-```
+## Missing binary
 
-Read-only: drop `-w`. To return immediately: add `--bg` and poll with `claude agents`.
+A provider that is not installed never reaches assignment — `probe` reports it `absent` and the router ignores it. If a binary disappears between probe and dispatch, that session fails to launch and is rerouted on the next dispatch tick.
 
-Model: `--model` takes an alias (`sonnet`, `opus`) or a full id from `--help`. If unknown, omit `--model` and table it as `default`.
+## Parent in-process subagents
 
-## Codex
-
-Worktree first, then exec. Worktrees live under the run dir so they are not left in the project:
-
-```bash
-git worktree add -b "handoff/<run-id>-<NN>" "$RUN/wt/<NN>" HEAD
-codex exec --sandbox workspace-write --model <id> -C "$RUN/wt/<NN>" -o "$RUN/sessions/NN.last.md" "$(cat "$RUN/sessions/NN.prompt.md")"
-```
-
-Read-only: skip the worktree and `-C`, use `--sandbox read-only`. If the child blocks on approvals, rerun that session with `--sandbox workspace-write` and `--approve-for-me`; still not `--dangerously-bypass-approvals-and-sandbox` unless the user asked.
-
-Model: `-m` / `--model`. If unknown, omit it and table it as `default`.
-
-## Parallelism
-
-Issue every launch for the current wave in one turn (several background shells). Waiting for session 01 before starting 02 is a sequential dispatch — do not do that inside a wave.
-
-## Fallback when a CLI is missing
-
-Reassign that row to the next **eligible** provider ([`quota.md`](quota.md)), rewrite the prompt, relaunch, and leave the original provider name struck through in the table (`codex → claude`).
+Only when no provider CLI is installed at all, or the session is read-only and finishes in seconds. A subagent runs on the parent's own quota, which is the quota this skill exists to protect, and it is invisible to the scorecard.

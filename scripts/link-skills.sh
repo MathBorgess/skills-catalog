@@ -58,3 +58,19 @@ for DEST in "${DESTS[@]}"; do
     echo "linked $name -> $src ($DEST)"
   done
 done
+
+# A README line asking someone to run `git config core.hooksPath .githooks` is
+# guidance; setting it here is what makes the post-merge hook actually fire, and
+# this script is the one command a maintainer cannot skip. Only claimed when
+# nothing else has: a clone that points somewhere else keeps its own choice and
+# is told, rather than overridden.
+if [ -d "$REPO/.githooks" ] && git -C "$REPO" rev-parse --git-dir >/dev/null 2>&1; then
+  current="$(git -C "$REPO" config --local --get core.hooksPath || true)"
+  if [ -z "$current" ]; then
+    git -C "$REPO" config core.hooksPath .githooks
+    echo "enabled .githooks — a pull on main that adds or removes a skill now relinks automatically"
+  elif [ "$current" != ".githooks" ]; then
+    echo "note: core.hooksPath is '$current', so .githooks/post-merge will not run;" >&2
+    echo "      re-run this script after a pull that adds or removes a skill." >&2
+  fi
+fi

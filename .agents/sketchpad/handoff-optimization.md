@@ -222,6 +222,7 @@ Providers were pinned by hand, using run 1's sandbox facts: nothing that needs s
 
    It missed two gaps: shellcheck fails on the new e2e script, which the repo's CI runs, and one probe test still mutates the process environment.
    - **Lesson:** a brief's diagnosis is a hypothesis. The pass did right to follow the evidence instead of the parent's theory, and the parent's own re-run caught what the pass didn't check.
+9. **Local green, CI red.** The branch the parent verified and pushed failed hosted CI on its first run. A probe test compared discovery against the live `lsof` of whatever machine ran it: it passes on the owner's Mac, which listens on many ports, and fails on a fresh macOS runner. Neither the session's gates nor the parent's re-run could catch it, because both ran on the same host.
 
 ### New proposals
 
@@ -261,7 +262,14 @@ A session may declare its gate commands in the plan (for example `"verify": ["ca
 
 A child's pasted output is a claim; the dispatcher's own run is the evidence. Running the gates more than once, in parallel, is what catches order-dependent tests.
 
-*Evidence:* ### Scorecard
+*Evidence:* items 7 and 8.
+
+#### P18. Verify where it ships, not only where it was built
+When the target repo has CI, the integration session's `done` waits for a hosted run on the pushed branch, not just local gates. Until then, briefs ask every session to list tests that read host state (real ports, `$HOME`, Keychain) and to inject those values instead.
+
+*Evidence:* item 9.
+
+### Scorecard
 
 `handoff score` on 20260915T182254Z:
 

@@ -8,9 +8,7 @@ Remaining means **account quota left in the current window**, never the parent's
 
 Per provider, the first source that yields a number wins.
 
-**1. `ai-usagebar usage --json`**, if that binary happens to be installed. It tracks twenty-odd vendors and multiple accounts behind a 60-second atomic cache with a 429 backoff, so preferring it costs nothing and survives an endpoint change.
-
-**2. The CLI's own OAuth credential**, read directly, then that provider's usage endpoint.
+**1. The CLI's own OAuth credential**, read directly, then that provider's usage endpoint.
 
 | Provider | Credential, in order | Endpoint | Field |
 |---|---|---|---|

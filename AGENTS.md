@@ -12,12 +12,12 @@ Pick **one**. Do not install the plugin and skills.sh into the same project.
 
 ```bash
 claude plugin marketplace add MathBorgess/skills-catalog
-claude plugin install skills-catalog@MathBorgess
+claude plugin install skills-catalog@mathborgess
 ```
 
 ```
 /plugin marketplace add MathBorgess/skills-catalog
-/plugin install skills-catalog@MathBorgess
+/plugin install skills-catalog@mathborgess
 ```
 
 **Cursor, Codex, and other agents — skills.sh**

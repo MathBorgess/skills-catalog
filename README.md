@@ -16,17 +16,17 @@ Pick **one** route. The Claude Code plugin is a managed bundle. skills.sh writes
 
 ```bash
 claude plugin marketplace add MathBorgess/skills-catalog
-claude plugin install skills-catalog@MathBorgess
+claude plugin install skills-catalog@mathborgess
 ```
 
 Or, from inside a session:
 
 ```
 /plugin marketplace add MathBorgess/skills-catalog
-/plugin install skills-catalog@MathBorgess
+/plugin install skills-catalog@mathborgess
 ```
 
-This repo is its own marketplace (it is not on Anthropic's official listing). After a release, update with `claude plugin marketplace update MathBorgess` and `claude plugin update skills-catalog@MathBorgess`.
+This repo is its own marketplace (it is not on Anthropic's official listing). After a release, update with `claude plugin marketplace update mathborgess` and `claude plugin update skills-catalog@mathborgess`.
 
 ### Cursor, Codex, and other agents — skills.sh
 
@@ -59,7 +59,24 @@ Pick the skills you want and which coding agents to install them on. Add `-g` fo
 npm run link
 ```
 
-Symlinks every skill into `~/.claude/skills`, `~/.cursor/skills`, `~/.codex/skills`, and `~/.agents/skills`. A `git pull` refreshes them. Not the end-user installer.
+Symlinks every skill into `~/.claude/skills`, `~/.cursor/skills`, `~/.codex/skills`, and `~/.agents/skills`. Not the end-user installer.
+
+Because those are symlinks into this working tree, **a `git pull` refreshes the content of every linked skill on its own** — the link points at the file that just changed. The one thing a pull cannot do by itself is link a skill that did not exist before, or drop one that was removed: that only happens when the script runs again.
+
+So `npm run link` also points this clone's `core.hooksPath` at `.githooks` (only if nothing else claims it). From then on, `.githooks/post-merge` runs after a `git pull` on `main` and re-links **when that pull added or removed a skill**, staying silent otherwise:
+
+```
+skills-catalog: 1 skill(s) added or removed in this pull — local links refreshed.
+```
+
+To wire it without running the link script, or to check it is on:
+
+```bash
+git config core.hooksPath .githooks
+git config --get core.hooksPath
+```
+
+Two things it deliberately does not cover: a pull on a branch other than `main`, and a **rebasing** pull (`pull.rebase=true`), which fires `post-rewrite` instead of `post-merge` — run `npm run link` by hand after one of those if the skill set changed.
 
 ## Catalog
 
@@ -135,7 +152,7 @@ Open the PR, wait for **Catalog**, merge. Merging to `main` publishes [`@mathbor
 claude plugin tag --push   # skills-catalog--vX.Y.Z for Claude Code
 ```
 
-Claude Code users who already added the marketplace run `claude plugin marketplace update MathBorgess` then `claude plugin update skills-catalog@MathBorgess`.
+Claude Code users who already added the marketplace run `claude plugin marketplace update mathborgess` then `claude plugin update skills-catalog@mathborgess`.
 
 To submit the plugin to Anthropic's community marketplace later, follow [Discover plugins](https://code.claude.com/docs/en/discover-plugins). Until that listing exists, the self-hosted marketplace commands above are the Claude install path.
 

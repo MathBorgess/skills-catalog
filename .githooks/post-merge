@@ -1,0 +1,41 @@
+#!/bin/sh
+# post-merge — keep the maintainer's linked skills in step with `git pull`.
+#
+# `scripts/link-skills.sh` creates SYMLINKS into this working tree, so a pull
+# that edits an existing skill is already live the moment it lands: the link
+# points at the file that just changed. What a pull cannot do by itself is link
+# a skill that did not exist before, or drop one that was removed — the set of
+# links only changes when this script runs again. That is what this hook is for,
+# and why it stays quiet the rest of the time.
+#
+# Runs after `git pull` on `main` when the pull touched `skills/`. Git ignores
+# this hook's exit status, so a failure is reported rather than raised.
+#
+# Not active until `core.hooksPath` points at `.githooks`. `npm run link` sets
+# that for you on a clone where it is unset.
+
+set -e
+
+branch="$(git symbolic-ref --quiet --short HEAD 2>/dev/null || echo '')"
+[ "$branch" = "main" ] || exit 0
+
+# `git pull` leaves ORIG_HEAD at the commit the merge started from. Without it
+# there is nothing to compare against, so there is nothing to decide on.
+base="$(git rev-parse --quiet --verify ORIG_HEAD 2>/dev/null || true)"
+[ -n "$base" ] || exit 0
+
+# A skill added or removed is the case the symlinks cannot absorb on their own.
+churn="$(git diff --name-only --diff-filter=ADR "$base" HEAD -- 'skills/*/SKILL.md' 2>/dev/null || true)"
+[ -n "$churn" ] || exit 0
+
+repo="$(git rev-parse --show-toplevel)"
+[ -x "$repo/scripts/link-skills.sh" ] || [ -f "$repo/scripts/link-skills.sh" ] || exit 0
+
+if out="$(bash "$repo/scripts/link-skills.sh" 2>&1)"; then
+  count="$(printf '%s\n' "$churn" | grep -c 'SKILL.md' || true)"
+  printf 'skills-catalog: %s skill(s) added or removed in this pull — local links refreshed.\n' "$count"
+else
+  printf 'skills-catalog: link-skills.sh failed after the pull; your local skill links may be stale.\n' >&2
+  printf '%s\n' "$out" >&2
+  printf 'Re-run it yourself with: npm run link\n' >&2
+fi

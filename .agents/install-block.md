@@ -2,7 +2,7 @@
 
 One install story, one wording. `README.md` must say **this** and nothing else. Change it here first, then propagate.
 
-This catalog is **not** in Claude Code's official marketplace. The repo is its own marketplace. GitHub-sourced marketplaces register locally under the GitHub **owner** (`MathBorgess`), not under `marketplace.json`'s `name`.
+This catalog is **not** in Claude Code's official marketplace. The repo is its own marketplace. It is **added** by GitHub path (`MathBorgess/skills-catalog`, the owner's spelling) but **registers locally under `marketplace.json`'s `name`** — which is lowercase **`mathborgess`**. So every command that names the marketplace rather than the repo takes the lowercase form: `skills-catalog@mathborgess`, `marketplace update mathborgess`.
 
 The npm package this repo publishes is **`@mathborgess/skills-catalog`** on **GitHub Packages** (the scope has to match the GitHub owner). `.npmrc` in the repo maps that scope. A copy already exists on npmjs.org as `@borgesmathai/skills-catalog@1.0.0`.
 
@@ -14,14 +14,14 @@ The two consumer routes are exclusive: the plugin is a managed bundle; skills.sh
 
 ```bash
 claude plugin marketplace add MathBorgess/skills-catalog
-claude plugin install skills-catalog@MathBorgess
+claude plugin install skills-catalog@mathborgess
 ```
 
 Or, from inside a session:
 
 ```
 /plugin marketplace add MathBorgess/skills-catalog
-/plugin install skills-catalog@MathBorgess
+/plugin install skills-catalog@mathborgess
 ```
 
 </canonical-block>

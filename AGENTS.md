@@ -52,3 +52,5 @@ skills/<skill-name>/
 ```
 
 `name` in frontmatter matches the directory. Every skill is listed in `README.md` and in `.claude-plugin/plugin.json`. Run `npm run check` before you finish.
+
+Touching anything under `skills/` also requires bumping `package.json`'s version (`npm version patch|minor|major`) in the same PR — CI (`scripts/check-version-bump.mjs`) fails the PR otherwise, because a push to `main` only publishes to GitHub Packages when the version is new. Details: `CLAUDE.md` § Release.

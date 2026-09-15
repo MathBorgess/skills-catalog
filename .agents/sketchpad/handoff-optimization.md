@@ -262,6 +262,8 @@ A session may declare its gate commands in the plan (for example `"verify": ["ca
 
 A child's pasted output is a claim; the dispatcher's own run is the evidence. Running the gates more than once, in parallel, is what catches order-dependent tests.
 
+The same rule binds the verifier. In run 20260915T225713Z the parent's own gate script printed `rc=0` for a clippy invocation that had failed outright, because `$?` after a pipeline reports the last stage — `tail` — not the compiler. A gate harness that pipes its output needs `pipefail`, or an explicit status capture, before any green it prints means anything. Whatever runs the gates, child or dispatcher, has to be checked the same way.
+
 *Evidence:* items 7 and 8.
 
 #### P18. Verify where it ships, not only where it was built

@@ -15,6 +15,7 @@ Per provider, the first source that yields a number wins.
 | claude | each `CLAUDE_CONFIG_DIR` entry (or `~/.config/claude`, `~/.claude`) `/.credentials.json`, then the **macOS login Keychain** under service `Claude Code-credentials` | `api.anthropic.com/api/oauth/usage` | `five_hour.utilization`, `seven_day.utilization` |
 | codex | each `CODEX_HOME` entry (or `~/.codex`) `/auth.json` | `chatgpt.com/backend-api/wham/usage` | `rate_limit.primary_window/secondary_window.used_percent` |
 | cursor | the Cursor **IDE**'s `state.vscdb`, key `cursorAuth/accessToken`, read with `sqlite3` or a `python3` one-liner | `POST api2.cursor.sh/aiserver.v1.DashboardService/GetCurrentPeriodUsage` with `Authorization: Bearer` and `Connect-Protocol-Version: 1` | `planUsage.totalPercentUsed` plus the two pools, `autoPercentUsed` and `apiPercentUsed`; `billingCycleStart/End` |
+| antigravity | none on disk — a **running product's** loopback RPC, else the Google session in the OS keyring under service `gemini`, account `antigravity` | `POST <discovered base>/exa.language_server_pb.LanguageServerService/RetrieveUserQuotaSummary`, else `POST cloudcode-pa.googleapis.com/v1internal:retrieveUserQuotaSummary` with `Authorization: Bearer` | `groups[].buckets[]` keyed `gemini-5h`, `gemini-weekly`, `3p-5h`, `3p-weekly`; `remainingFraction`, `resetTime` |
 
 Cursor's session cookie is **not** the raw token: it is `WorkosCursorSessionToken=<user id>%3A%3A<token>`, where the user id is the part of the JWT's `sub` claim after the provider prefix (`auth0|user_abc` → `user_abc`). Sending the bare token returns HTTP 401 with a credential that is perfectly valid.
 
@@ -28,6 +29,12 @@ The dashboard endpoint takes a bearer token and nothing else. An older summary e
 
 A file that parses is **not** evidence that the file is current. On macOS, Claude Code keeps the live token in the Keychain and the `.credentials.json` in the home directory is frequently a stale copy, so the probe checks expiry and moves to the next source rather than trusting the first hit.
 
+**Antigravity has no credential file at all.** Google ships three products that share one account-wide quota — the Antigravity app, the IDE, and the `agy` CLI — and each runs the same CSRF-guarded JSON-RPC surface on a loopback port bound with `--https_server_port 0`. The port is drawn from the ephemeral range, so it cannot be hardcoded: the probe discovers it from the listening sockets of a process named `agy`, `antigravity`, or `language_server` (`lsof -nP -iTCP -sTCP:LISTEN -F pcn`, falling back to `ss -ltnpH` on Linux), and `ANTIGRAVITY_LS_ADDRESS=host:port` overrides the search. Each product binds two listeners — RPC in the clear, then HTTPS — so ports are grouped per process, sorted high-to-low, and taken rank by rank: the likely-RPC port of every product is tried before any product's TLS port.
+
+The desktop products embed a CSRF token in the HTML they serve at `/` (`csrfToken":"`); the `agy` CLI serves no such page, so a missing token is not treated as fatal — the RPC's own rejection decides. When nothing is running, the same summary is served by Google's Cloud Code API to the session every Antigravity product saves through Go's `go-keyring`: a login Keychain item on macOS, a Secret Service item on Linux, under service `gemini` and account `antigravity`, holding JSON that is sometimes wrapped as `go-keyring-base64:<base64>` and sometimes nests the tokens under `token`. That session is read, never refreshed — renewing it needs Antigravity's own OAuth client, and rewriting another program's session is not this script's business, so an expired one is reported as expired.
+
+One field is inverted against every other provider here: `remainingFraction` is what is **left**, `0..1`, where everyone else reports what is spent. A value outside that range is dropped rather than clamped, because a clamp would invent a reassuring number for a window whose real state is unknown.
+
 **3. Local transcripts.** No credential, no network, no login. Every CLI writes a JSONL transcript per session recording token usage per turn, and those turns group into the same rolling five-hour windows the plans bill against. The method is [ccusage](https://github.com/ccusage/ccusage)'s.
 
 | Provider | Transcripts |
@@ -35,6 +42,7 @@ A file that parses is **not** evidence that the file is current. On macOS, Claud
 | claude | `<config dir>/projects/**/*.jsonl`, deduplicated by session + message id so a sidechain replay of a parent turn is not counted twice |
 | codex | `<CODEX_HOME>/sessions/**/*.jsonl` and `archived_sessions/**/*.jsonl`, taking `payload.info.last_token_usage` per turn, or recovering the delta from the cumulative total |
 | cursor | none verified — `--explain` is how you find where its login landed |
+| antigravity | none verified: `agy` keeps conversations in a SQLite store whose schema this script has not read, and a guessed reading is worse than an honest `unknown` |
 
 A window opens at the containing hour of its first turn and closes when a turn arrives more than five hours after that opening, or more than five hours after the previous turn. The denominator is the **heaviest completed window in the last seven days on this machine**, so the reading answers "how heavy is this window against my own heaviest". Newest files first, bounded by seven days and 64 MB, so a probe stays a probe.
 
@@ -58,22 +66,28 @@ So a slot whose five-hour window sits at 8% but reopens in thirty minutes is ass
 
 ## Two lanes are not two windows
 
-Cursor bills **two independent pools inside the same billing cycle**, and its own dashboard names them:
+Two providers here bill **several independent pools**, and each names its own:
 
-| Lane | Field | What draws on it |
-|---|---|---|
-| **Cursor Models** | `autoPercentUsed` | Auto, Composer, the Grok tiers — Cursor's own models, with their own included usage |
-| **Other Models** | `apiPercentUsed` | named third-party models (Claude, GPT, Gemini), charged at that model's API price against the plan's included credit |
+| Provider | Lane | Where it comes from | What draws on it |
+|---|---|---|---|
+| cursor | **Cursor Models** (`cursor-models`, kind `own`) | `autoPercentUsed` | Auto, Composer, the Grok tiers — Cursor's own models, with their own included usage |
+| cursor | **Other Models** (`other-models`, kind `frontier`) | `apiPercentUsed` | named third-party models (Claude, GPT, Gemini), charged at that model's API price against the plan's included credit |
+| antigravity | **Gemini** (`gemini`, kind `own`) | buckets `gemini-5h`, `gemini-weekly` | Antigravity's own Gemini models |
+| antigravity | **Claude/GPT** (`third-party`, kind `frontier`) | buckets `3p-5h`, `3p-weekly` | the third-party models Antigravity can drive |
 
-`totalPercentUsed` is the blend of the two, and it is the number that hides the case that decides a run. A live Ultra account has been observed at `auto 98.1% · api 100% · total 98.5%`: the headline says the slot has 1.5% left, and a session routed there on a named model dies on its first call while Composer would have worked all day.
+The **names** are each vendor's vocabulary and go in the table; the **kind** — `own` or `frontier` — is what routing reasons about, so a third provider that splits its plan needs no new branch in the router.
+
+The two differ in shape, and the difference matters. Cursor's lanes are percentages inside **one shared cycle**: the lane caps the window. Antigravity's lanes each carry **their own five-hour and weekly windows**, with their own resets — so its Gemini pool can be wide open while its Claude/GPT five-hour window is spent and reopens in twenty minutes. Supply, the hold decision and the start time are all computed per lane, which is what makes that case schedulable instead of fatal.
+
+For Cursor, `totalPercentUsed` is the blend of the two, and it is the number that hides the case that decides a run. A live Ultra account has been observed at `auto 98.1% · api 100% · total 98.5%`: the headline says the slot has 1.5% left, and a session routed there on a named model dies on its first call while Composer would have worked all day.
 
 **Windows are simultaneous; lanes are alternatives.** A plan gates on every window at once, so a slot is worth the **least** of its windows. A session draws from exactly one lane, so a slot is worth the **best** of its lanes — and which one it draws from is decided by the model id, which is why routing pins a model rather than stating a preference. A lane at 0% is out even while the cycle it sits inside reads 55%.
 
-Both pools reset with the monthly cycle, so a lane caps the windows it shares that cycle with rather than carrying a reset of its own.
+Cursor's two pools reset with the monthly cycle, so a lane caps the windows it shares that cycle with rather than carrying a reset of its own. Antigravity's carry their own, which is why a lane may hold windows instead of a single percentage.
 
 **Both pools or neither.** A payload that reports one and not the other yields no lanes at all and the slot falls back to the blended total — a half-known split would send routing off a guess, and the total is at least a real number. Team and enterprise accounts report no `plan` object; there the two percentages come from the prose fields `autoModelSelectedDisplayMessage` and `namedModelSelectedDisplayMessage`, under the same rule.
 
-The other providers report one undivided pool, so they carry no lanes and every line above collapses to the behaviour they already had.
+Claude and Codex report one undivided pool, so they carry no lanes and every line above collapses to the behaviour they already had.
 
 ## Two things the probe will not do
 

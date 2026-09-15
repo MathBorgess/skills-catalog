@@ -1,15 +1,15 @@
 ---
 name: handoff
-description: Use when the user wants a handoff document for another agent, to split remaining work into parallel sessions, to dispatch Cursor, Claude, or Codex via CLI, to spread work across providers to save tokens, to skip a provider that is out of quota, or says /handoff, fan-out, compact this, routing table, or end of task.
+description: Use when the user wants a handoff document for another agent, to split remaining work into parallel sessions, to dispatch Cursor, Claude, Codex, or Antigravity (agy) via CLI, to spread work across providers to save tokens, to skip a provider or a model pool that is out of quota, or says /handoff, fan-out, compact this, routing table, or end of task.
 argument-hint: "compact | fan-out | provider or model constraints"
 metadata:
   author: Matheus Borges
-  version: 1.1.0
+  version: 1.2.0
 ---
 
 # Handoff
 
-Package the current conversation into self-contained session briefs another agent can execute without this context. Two modes of that one job: **compact** (one successor) and **fan-out** (N independent sessions across every provider on the machine).
+Package the current conversation into self-contained session briefs another agent can execute without this context. Two modes of that one job: **compact** (one successor) and **fan-out** (N independent sessions across every provider on the machine — Claude, Codex, Cursor, Antigravity).
 
 Your job is the part a script cannot do: **cut the work, scope each session, write the goals.** Quota probing, admission control, independence checking, slot assignment, launching, waiting, rerouting a dead session and scoring are `scripts/handoff.mjs` — call it, read its table, move on. Do not redo its arithmetic in prose, and do not launch a child by hand.
 
@@ -29,7 +29,7 @@ HANDOFF_RUN="${TMPDIR:-/tmp}/handoff/$(date -u +%Y%m%dT%H%M%SZ)"
 node <skill>/scripts/handoff.mjs probe --run "$HANDOFF_RUN"
 ```
 
-That prints the slot table and writes `quota.json`. A slot is **provider × account**, not a binary — one machine can hold several, and each carries **every window the plan gates on** (`5h 8% (30m) · 7d 43% (3d)`). `Binding` is only the headline; the five-hour window is what decides whether a session starts now or in forty minutes, so never route off the headline alone. A slot may also carry **lanes** — pools it bills separately inside the same window. Cursor has two (`cursor-models 45% · other-models 0%`): they are alternatives, not gates, and the model id picks which one a session spends. A lane at 0% does not make the slot dead, and a slot at 55% does not make the lane alive, so read both columns. The probe falls back through three sources (vendor tool, OAuth credential, local transcripts), so a reading marked `~` is estimated from this machine's own transcripts rather than read from the account — usable for routing, never quoted as the real limit.
+That prints the slot table and writes `quota.json`. A slot is **provider × account**, not a binary — one machine can hold several, and each carries **every window the plan gates on** (`5h 8% (30m) · 7d 43% (3d)`). `Binding` is only the headline; the five-hour window is what decides whether a session starts now or in forty minutes, so never route off the headline alone. A slot may also carry **lanes** — pools the provider bills separately. Cursor has two inside one cycle (`cursor-models 45% · other-models 0%`); Antigravity has two that each carry their own five-hour and weekly windows (`gemini[5h 88% (2h) · 7d 62%] · third-party[5h 8% (24m) · 7d 71%]`). Lanes are alternatives, not gates, and the model id picks which one a session spends. A lane at 0% does not make the slot dead, and a healthy slot headline does not make a lane alive, so read both columns. The probe falls back through three sources (vendor tool, OAuth credential, local transcripts), so a reading marked `~` is estimated from this machine's own transcripts rather than read from the account — usable for routing, never quoted as the real limit.
 
 If a slot still reads `unknown`, run the same command with `--explain`: it prints every credential path and transcript directory it consulted, found or missing. Give the user that list and the one-line fix. Details: [`references/quota.md`](references/quota.md).
 

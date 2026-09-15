@@ -121,9 +121,13 @@ function tailOf(path, bytes = 8192) {
 // moves between versions. Each provider lists every place worth looking, and
 // the first source that yields an unexpired token wins; `probe --explain`
 // prints the whole list so a miss is diagnosable instead of mysterious.
-function readKeychainRaw(service) {
+function readKeychainRaw(service, account) {
   if (process.platform !== "darwin") return null;
-  const r = spawnSync("/usr/bin/security", ["find-generic-password", "-s", service, "-w"], {
+  const args = ["find-generic-password", "-s", service];
+  // Some items are only unique per (service, account) — go-keyring writes every
+  // Antigravity product's session under one service.
+  if (account) args.push("-a", account);
+  const r = spawnSync("/usr/bin/security", [...args, "-w"], {
     encoding: "utf8",
     timeout: 10000,
   });
@@ -411,6 +415,58 @@ const PROVIDERS = {
       };
     },
   },
+  antigravity: {
+    bin: ["agy", "antigravity"],
+    // Not a credential file anywhere: quota comes from a running product's
+    // loopback RPC, and from the saved Google session when none is running. Both
+    // are modelled as sources so `--explain` names whichever one was missing.
+    credSources: () => {
+      const bases = agyBases();
+      return [
+        {
+          label: bases.length
+            ? `Antigravity language server on ${bases.join(", ")}`
+            : "Antigravity language server — no product listening on this machine",
+          exists: () => bases.length > 0,
+          read: () => (bases.length ? { bases } : null),
+        },
+        {
+          label: `OS keyring: service gemini, account antigravity${
+            process.platform === "darwin"
+              ? " (login Keychain)"
+              : process.platform === "linux"
+                ? " (Secret Service)"
+                : " — unreadable on this platform"
+          }`,
+          read: () => antigravitySession(),
+        },
+      ];
+    },
+    // The live-server source carries no expiry; the saved session does.
+    isExpired: (c) => Boolean(c?.expires_at && c.expires_at < Date.now()),
+    // agy keeps its conversations in a SQLite store whose schema this script has
+    // not verified. A guessed reading is worse than an honest `unknown`.
+    local: null,
+    usagebarIds: ["antigravity"],
+    noCredentialHint:
+      "Antigravity serves quota from a running product — the app, the IDE, or an interactive " +
+      "`agy` session — on a loopback port, or from the Google session it saved in the OS keyring. " +
+      "With no product running and nothing saved, the slot stays unprobed and routing gives it a " +
+      "neutral weight. Point ANTIGRAVITY_LS_ADDRESS at host:port if the server is somewhere this " +
+      "cannot discover.",
+    async fetchUsage(creds) {
+      if (creds?.bases?.length) {
+        const local = await agyLocal(creds.bases);
+        if (local && !local.error) return local;
+        // A server that is up but signed out, or `agy`'s CSRF token that it does
+        // not publish, both leave the saved session as the way through.
+        const cloud = await agyCloud(antigravitySession());
+        if (cloud && !cloud.error) return cloud;
+        return local ?? cloud;
+      }
+      return agyCloud(creds);
+    },
+  },
 };
 
 // The headline number: a provider is as free as its most binding limit right
@@ -443,22 +499,36 @@ function cursorUserId(rawId) {
 // them at once, so a slot is worth the LEAST of them. Lanes are alternatives — a
 // session draws from exactly one, so a slot is worth the BEST of them, and which
 // one it draws from is decided by the model id.
+//
+// Every lane declares a `kind`: `own` for the provider's own models, `frontier`
+// for named third-party ones. The names are each provider's own vocabulary and
+// belong in the table; `kind` is what routing reasons about, so a provider with
+// a third pair of names needs no new branch in the router.
+//
+// A lane holds EITHER a single percentage capping windows it shares with the
+// slot (Cursor: two pools inside one billing cycle) OR its own windows
+// (Antigravity: a five-hour and a weekly bucket per pool). Both shapes reduce to
+// the same question — how much can this lane supply over the horizon — which is
+// why `laneCapped` is the only place that has to know which shape it is.
 const LANE_LABEL = {
-  "cursor-models": "Cursor Models — Auto, Composer, Grok",
-  "other-models": "Other Models — named third-party, at API price",
+  "cursor-models": "Auto, Composer, Grok",
+  "other-models": "named third-party models, at their API price",
+  gemini: "Antigravity's own Gemini models",
+  "third-party": "Claude and GPT on Antigravity",
 };
 
-// Which lane a model id draws from. A pattern, not a list of ids: Cursor adds
-// and renames its own models faster than any hardcoded list survives, and an
-// unrecognised name falls to the metered lane rather than quietly spending the
-// pool it does not belong to.
-const CURSOR_OWN_MODEL_RE = new RegExp(
-  process.env.HANDOFF_CURSOR_OWN_MODELS ?? "composer|grok|^auto$",
-  "i",
-);
-const cursorLaneOf = (model) =>
-  !model ? null : CURSOR_OWN_MODEL_RE.test(model) ? "cursor-models" : "other-models";
-const laneOfModel = (provider, model) => (provider === "cursor" ? cursorLaneOf(model) : null);
+// Which lane kind a model id draws from. A pattern, not a list of ids: these
+// vendors add and rename their own models faster than any hardcoded list
+// survives, and an unrecognised name falls to the frontier lane rather than
+// quietly spending the pool it does not belong to.
+const OWN_MODEL_RE = {
+  cursor: new RegExp(process.env.HANDOFF_CURSOR_OWN_MODELS ?? "composer|grok|^auto$", "i"),
+  antigravity: new RegExp(process.env.HANDOFF_ANTIGRAVITY_OWN_MODELS ?? "^gemini", "i"),
+};
+const laneKindOfModel = (provider, model) => {
+  const re = OWN_MODEL_RE[provider];
+  return !re || !model ? null : re.test(model) ? "own" : "frontier";
+};
 
 // "You've used 42% of your included total usage" — on team and enterprise
 // accounts, which report no `plan` object, the prose is the only place the split
@@ -478,21 +548,25 @@ function cursorLanes(plan, payload) {
   if (typeof auto !== "number" || typeof api !== "number") return undefined;
   const left = (used) => Math.max(0, Math.min(100, Math.round(100 - used)));
   return [
-    { name: "cursor-models", remaining_pct: left(auto) },
-    { name: "other-models", remaining_pct: left(api) },
+    { name: "cursor-models", kind: "own", remaining_pct: left(auto) },
+    { name: "other-models", kind: "frontier", remaining_pct: left(api) },
   ];
 }
 
 // The CLI's own model list, so a lane can be pinned to a real id instead of an
-// invented one. `--list-models` is the documented flag; a CLI without it exits
-// non-zero and the lane stays a preference the default model may ignore, which
-// the routing table then marks rather than pretending otherwise.
+// invented one. Each CLI publishes it differently — `cursor-agent
+// --list-models`, `agy models` — and a CLI with no such command exits non-zero,
+// which leaves the lane a preference its default model may ignore; the routing
+// table marks that rather than pretending otherwise.
+const MODEL_LIST_ARGS = { cursor: ["--list-models"], antigravity: ["models"] };
 const modelListCache = new Map();
-function cliModels(bin) {
+function cliModels(bin, provider) {
+  const listArgs = MODEL_LIST_ARGS[provider];
+  if (!listArgs) return [];
   if (modelListCache.has(bin)) return modelListCache.get(bin);
   let out = [];
   try {
-    const r = spawnSync(bin, ["--list-models"], { encoding: "utf8", timeout: 20000 });
+    const r = spawnSync(bin, listArgs, { encoding: "utf8", timeout: 20000 });
     if (r.status === 0 && r.stdout) {
       out = r.stdout
         .split("\n")
@@ -504,10 +578,14 @@ function cliModels(bin) {
   return out;
 }
 
-const pickModelForLane = (bin, provider, laneName) => {
-  const inLane = cliModels(bin).filter((m) => laneOfModel(provider, m) === laneName);
-  // `auto` hands the choice to Cursor's router, and on team plans that choice can
-  // land in the other pool — so a named own-model wins over it when one is listed.
+const pickModelForLane = (bin, provider, lane) => {
+  if (!lane?.kind) return null;
+  const inLane = cliModels(bin, provider).filter(
+    (m) => laneKindOfModel(provider, m) === lane.kind,
+  );
+  // `auto` hands the choice to the provider's own router, and that choice can
+  // land in the other pool — so a named own-model wins over it when one is
+  // listed.
   return inLane.find((m) => m.toLowerCase() !== "auto") ?? inLane[0] ?? null;
 };
 
@@ -602,6 +680,316 @@ function cursorDbState() {
   return `${db} has no cursorAuth/accessToken — sign in to the Cursor IDE`;
 }
 
+// ------------------------------------------------------- antigravity reading
+//
+// Antigravity has no credential file and no public usage endpoint. Google ships
+// three products that share one account-wide quota — the Antigravity app, the
+// IDE, and the `agy` CLI — and each runs the same CSRF-guarded JSON-RPC surface
+// on a loopback port it binds with `--https_server_port 0`. The port is drawn
+// from the ephemeral range, so it cannot be hardcoded: it has to be discovered
+// from the listening sockets of a matching process. Method reverse-engineered
+// from ai-usagebar's `src/antigravity`.
+//
+// When no product is running, the same summary is served by Google's Cloud Code
+// API to the session Antigravity saved in the OS keyring. That is the fallback,
+// and it is read-only: no token refresh, because renewing it needs Antigravity's
+// own OAuth client and rewriting another program's session is not this script's
+// business.
+const AGY_QUOTA_RPC =
+  "exa.language_server_pb.LanguageServerService/RetrieveUserQuotaSummary";
+const AGY_CLOUD_QUOTA = [
+  // The daily channel first, which is the order the product itself uses.
+  "https://daily-cloudcode-pa.googleapis.com/v1internal:retrieveUserQuotaSummary",
+  "https://cloudcode-pa.googleapis.com/v1internal:retrieveUserQuotaSummary",
+];
+const AGY_HTTP_MS = 5000;
+const GO_KEYRING_PREFIX = "go-keyring-base64:";
+
+// Antigravity 2.0 and the IDE spawn a separate `language_server` child; the CLI
+// embeds the same surface in its own process. Matching only the server binary
+// would miss a CLI-only install.
+const AGY_PROCESS = /(^|\/)agy$|language_server|antigravity/i;
+
+function readSecretTool(attrs) {
+  if (process.platform !== "linux" || !which("secret-tool")) return null;
+  const r = spawnSync("secret-tool", ["lookup", ...attrs], {
+    encoding: "utf8",
+    timeout: 10000,
+  });
+  return r.status === 0 && r.stdout ? r.stdout.trim() : null;
+}
+
+const epochToMs = (n) =>
+  // 1e11 seconds is the year 5138; 1e11 milliseconds is 1973. Anything at or
+  // above it is already milliseconds.
+  n >= 1e11 ? n : n * 1000;
+
+function agyExpiry(value) {
+  if (typeof value === "number" && Number.isFinite(value)) return epochToMs(value);
+  if (typeof value !== "string" || !value.trim()) return null;
+  const asNumber = Number(value);
+  if (Number.isFinite(asNumber) && value.trim() !== "") return epochToMs(asNumber);
+  const parsed = Date.parse(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+// Every Antigravity product saves its Google session through Go's go-keyring,
+// under service `gemini` and account `antigravity`: a login Keychain item on
+// macOS, a Secret Service item on Linux. Backends that cannot hold raw text get
+// the JSON base64-wrapped behind a fixed prefix.
+function antigravitySession() {
+  const raw =
+    readKeychainRaw("gemini", "antigravity") ??
+    readSecretTool(["service", "gemini", "username", "antigravity"]);
+  if (!raw) return null;
+  let json = raw.trim();
+  if (json.startsWith(GO_KEYRING_PREFIX)) {
+    try {
+      json = Buffer.from(json.slice(GO_KEYRING_PREFIX.length).trim(), "base64").toString("utf8");
+    } catch {
+      return null;
+    }
+  }
+  let root;
+  try {
+    root = JSON.parse(json);
+  } catch {
+    return null;
+  }
+  const t = root?.token && typeof root.token === "object" ? root.token : root;
+  const token = [
+    "access_token", "accessToken", "token", "id_token",
+    "idToken", "bearerToken", "auth_token", "authToken",
+  ]
+    .map((k) => t?.[k])
+    .find((v) => typeof v === "string" && v.trim());
+  if (!token) return null;
+  const expiry = ["expiry", "expires_at", "expiresAt"].map((k) => t?.[k]).find((v) => v != null);
+  return { token, expires_at: agyExpiry(expiry) };
+}
+
+// Each product binds two listeners — JSON-RPC in the clear and HTTPS — in that
+// order, so within one process the RPC port tends to draw the higher ephemeral
+// number. Group ports per pid, sort high-to-low inside each group, then take
+// them rank by rank, so every product's likely-RPC port is probed before any
+// product's TLS one. A mis-ranked guess costs one round trip, nothing more.
+function agyProbeOrder(perPid) {
+  const groups = [...perPid.values()].map((ports) => [...new Set(ports)].sort((a, b) => b - a));
+  const out = [];
+  for (let rank = 0; ; rank += 1) {
+    const row = groups.map((g) => g[rank]).filter((p) => p !== undefined);
+    if (!row.length) return out;
+    out.push(...row);
+  }
+}
+
+function discoverLsPorts() {
+  const perPid = new Map();
+  const add = (pid, port) => {
+    if (!Number.isInteger(port) || port <= 0) return;
+    if (!perPid.has(pid)) perPid.set(pid, []);
+    perPid.get(pid).push(port);
+  };
+
+  // `-F pcn` is the machine-parsable form: a `p<pid>` line, then a `c<command>`
+  // line, then one `n<address>` line per listening socket.
+  if (which("lsof")) {
+    const r = spawnSync("lsof", ["-nP", "-iTCP", "-sTCP:LISTEN", "-F", "pcn"], {
+      encoding: "utf8",
+      timeout: 15000,
+    });
+    // A non-zero exit still prints the descriptors it could read.
+    let pid = null;
+    let owned = null;
+    for (const line of (r.stdout ?? "").split("\n")) {
+      const rest = line.slice(1);
+      if (line.startsWith("p")) {
+        pid = Number(rest) || null;
+        owned = null;
+      } else if (line.startsWith("c")) {
+        owned = pid && AGY_PROCESS.test(rest.trim()) ? pid : null;
+      } else if (line.startsWith("n") && owned) {
+        add(owned, Number(rest.split(":").pop()));
+      }
+    }
+  }
+
+  // Linux without lsof: iproute2 prints the owning process inline.
+  if (!perPid.size && which("ss")) {
+    const r = spawnSync("ss", ["-ltnpH"], { encoding: "utf8", timeout: 15000 });
+    for (const line of (r.stdout ?? "").split("\n")) {
+      const proc = line.match(/users:\(\("([^"]+)",pid=(\d+)/);
+      if (!proc || !AGY_PROCESS.test(proc[1])) continue;
+      const local = line.trim().split(/\s+/)[3] ?? "";
+      add(Number(proc[2]), Number(local.split(":").pop()));
+    }
+  }
+
+  return agyProbeOrder(perPid);
+}
+
+function agyBases() {
+  const bases = [];
+  const override = (process.env.ANTIGRAVITY_LS_ADDRESS ?? "").trim();
+  if (override) {
+    const [scheme, rest] = override.includes("://")
+      ? [override.split("://")[0], override.split("://").slice(1).join("://")]
+      : ["http", override];
+    const authority = rest.replace(/\/+$/, "");
+    if (authority) bases.push(`${scheme}://${authority}`);
+  }
+  for (const port of discoverLsPorts()) {
+    const base = `http://127.0.0.1:${port}`;
+    if (!bases.includes(base)) bases.push(base);
+  }
+  return bases;
+}
+
+// The desktop products embed a CSRF token in the HTML they serve at `/`. The
+// `agy` CLI serves no such page, which is why a missing token is not fatal here:
+// the RPC's own rejection is what decides whether to fall back to the cloud.
+async function agyCsrf(base) {
+  try {
+    const r = await fetch(base, { signal: AbortSignal.timeout(AGY_HTTP_MS) });
+    if (!r.ok) return null;
+    const html = await r.text();
+    return html.split('csrfToken":"')[1]?.split('"')[0] || null;
+  } catch {
+    return null;
+  }
+}
+
+// Four buckets, two lanes: `gemini-5h`, `gemini-weekly`, `3p-5h`, `3p-weekly`.
+// The group display name is the fallback key, so a renamed bucket id still lands
+// in the right lane, and an unrecognised cadence or group is skipped rather than
+// defaulted into a slot it might not belong to.
+function agyQuota(payload) {
+  const groups = payload?.response?.groups ?? payload?.groups;
+  if (!Array.isArray(groups)) return { error: "quota summary has no groups" };
+  const byLane = { gemini: [], "third-party": [] };
+  const seen = [];
+  for (const group of groups) {
+    const groupName = typeof group?.displayName === "string" ? group.displayName : "";
+    for (const bucket of group?.buckets ?? []) {
+      const id = typeof bucket?.bucketId === "string" ? bucket.bucketId : "";
+      const win = typeof bucket?.window === "string" ? bucket.window : "";
+      seen.push(id || "<unnamed>");
+      const weekly =
+        id.endsWith("weekly") || win === "weekly"
+          ? true
+          : id.endsWith("5h") || win === "5h"
+            ? false
+            : null;
+      if (weekly === null) continue;
+      const lane = id.startsWith("gemini")
+        ? "gemini"
+        : id.startsWith("3p")
+          ? "third-party"
+          : groupName.includes("Gemini")
+            ? "gemini"
+            : /Claude|GPT/.test(groupName)
+              ? "third-party"
+              : null;
+      if (!lane) continue;
+      // `remainingFraction` is what is LEFT, 0..1 — the inverse of every other
+      // provider here, which reports what is spent. No inversion, and a value
+      // outside the range is dropped rather than clamped into a reassuring one.
+      const frac = bucket?.remainingFraction;
+      if (typeof frac !== "number" || !Number.isFinite(frac) || frac < 0 || frac > 1) continue;
+      const reset = Date.parse(bucket?.resetTime ?? "");
+      byLane[lane].push({
+        name: weekly ? "weekly" : "five_hour",
+        remaining_pct: Math.round(frac * 100),
+        resets_at: Number.isFinite(reset) ? new Date(reset).toISOString() : null,
+        window_secs: weekly ? 604800 : 18000,
+      });
+    }
+  }
+  const lanes = Object.entries(byLane)
+    .filter(([, windows]) => windows.length)
+    .map(([name, windows]) => ({
+      name,
+      kind: name === "gemini" ? "own" : "frontier",
+      windows,
+    }));
+  if (!lanes.length) {
+    return {
+      error: `no 5h or weekly bucket in the quota summary (it offered: ${seen.join(", ") || "nothing"})`,
+    };
+  }
+  return { windows: [], lanes };
+}
+
+async function agyLocal(bases) {
+  const errors = [];
+  for (const base of bases) {
+    const csrf = await agyCsrf(base);
+    try {
+      const r = await fetch(`${base}/${AGY_QUOTA_RPC}`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(csrf ? { "x-codeium-csrf-token": csrf } : {}),
+        },
+        body: "{}",
+        signal: AbortSignal.timeout(AGY_HTTP_MS),
+      });
+      if (!r.ok) {
+        errors.push(`${base} HTTP ${r.status}`);
+        continue;
+      }
+      const parsed = agyQuota(await r.json());
+      if (parsed.error) {
+        errors.push(`${base}: ${parsed.error}`);
+        continue;
+      }
+      return { ...parsed, source: "agy-language-server" };
+    } catch (e) {
+      errors.push(`${base}: ${e.message}`);
+    }
+  }
+  return errors.length ? { error: errors[0] } : null;
+}
+
+async function agyCloud(session) {
+  if (!session?.token) return null;
+  if (session.expires_at && session.expires_at < Date.now()) {
+    return { error: "the saved Google session expired — open Antigravity to sign in again" };
+  }
+  let last = null;
+  for (const url of AGY_CLOUD_QUOTA) {
+    try {
+      const r = await fetch(url, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${session.token}`,
+          "Content-Type": "application/json",
+          "User-Agent": "antigravity",
+        },
+        body: "{}",
+        signal: AbortSignal.timeout(10000),
+      });
+      if (r.status === 401 || r.status === 403) {
+        // Google's verdict on the session, not a transport hiccup: trying the
+        // next base would only repeat it.
+        return {
+          error: "the saved Google session was rejected — open Antigravity to sign in again",
+        };
+      }
+      if (!r.ok) {
+        last = `HTTP ${r.status}`;
+        continue;
+      }
+      const parsed = agyQuota(await r.json());
+      if (parsed.error) return parsed;
+      return { ...parsed, source: "google-cloud-code" };
+    } catch (e) {
+      last = e.message;
+    }
+  }
+  return { error: `no Cloud Code endpoint answered${last ? ` (${last})` : ""}` };
+}
+
 function usagebarSnapshot() {
   if (!which("ai-usagebar")) return null;
   const r = spawnSync("ai-usagebar", ["usage", "--json"], {
@@ -644,15 +1032,37 @@ function fromUsagebar(report, ids) {
 // computed per window and then taken at the minimum, because a plan gates on
 // all of its windows at once and each refills on its own schedule.
 function makeSlot({ key, provider, account, bin, windows, lanes, source, estimated, note, tried }) {
-  const usable = (windows ?? []).filter((w) => typeof w.remaining_pct === "number");
-  const head = usable.length ? pickTightest(usable) : null;
+  const usableOf = (ws) => (ws ?? []).filter((w) => typeof w.remaining_pct === "number");
+  // A lane with its own windows is worth its tightest one — the same rule that
+  // makes a slot worth the least of its windows, applied one level down.
+  const lanesOut = lanes?.length
+    ? lanes.map((l) => {
+        const own = usableOf(l.windows);
+        const remaining_pct = own.length ? pickTightest(own).remaining_pct : l.remaining_pct;
+        return { ...l, remaining_pct, bucket: bucketOf(remaining_pct) };
+      })
+    : undefined;
+  const usable = usableOf(windows);
+  let head = usable.length ? pickTightest(usable) : null;
+  if (!head && lanesOut?.length) {
+    // No window is shared across the lanes, so the slot's headline is its BEST
+    // lane's tightest window: a slot with one spent lane beside a full one is
+    // not an empty slot, and `bucket` decides whether it is offered at all.
+    const best = lanesOut
+      .filter((l) => typeof l.remaining_pct === "number")
+      .sort((a, b) => b.remaining_pct - a.remaining_pct)[0];
+    const bw = usableOf(best?.windows);
+    head = bw.length
+      ? pickTightest(bw)
+      : best
+        ? { name: best.name, remaining_pct: best.remaining_pct, resets_at: null, window_secs: null }
+        : null;
+  }
   return {
     key, provider, account, installed: true, bin,
     windows: windows?.length ? windows : undefined,
     // Alternatives, not gates — see the lanes block above.
-    lanes: lanes?.length
-      ? lanes.map((l) => ({ ...l, bucket: bucketOf(l.remaining_pct) }))
-      : undefined,
+    lanes: lanesOut,
     remaining_pct: head?.remaining_pct ?? null,
     window: head?.name ?? windows?.[0]?.name ?? null,
     resets_at: head?.resets_at ?? windows?.[0]?.resets_at ?? null,
@@ -732,7 +1142,7 @@ async function probe() {
         if (result?.error) {
           note = `${result.error} (via ${credLabel})`;
           result = null;
-        } else if (!result?.windows?.length) {
+        } else if (!result?.windows?.length && !result?.lanes?.length) {
           // A file that exists and parses can still hold no usable token. That
           // is a failed source, not a source reporting "unknown" — saying
           // otherwise hides the one fact that would let someone fix it.
@@ -740,7 +1150,7 @@ async function probe() {
             result === null ? "no credential field this probe recognises" : "no windows in the response"
           }`;
           result = null;
-        } else source = `${name}-oauth`;
+        } else source = result.source ?? `${name}-oauth`;
       } catch (e) {
         note = `probe failed: ${e.message}`;
       }
@@ -866,6 +1276,9 @@ function supplyFor(slot, lane, horizonS) {
 }
 
 function laneCapped(slot, lane) {
+  // A lane that carries its own windows IS its own set of gates — same reset
+  // clocks, same rate math, just not shared with the other lane.
+  if (lane?.windows?.length) return lane.windows;
   const windows = slotWindows(slot);
   if (!lane) return windows;
   return windows.map((w) => ({
@@ -1004,7 +1417,9 @@ function estimateCost(provider, size, history) {
 // not load-balancing, and it should take a wide utilisation gap to trade a
 // design session down to a small model while the frontier pool is still full.
 const LANE_PENALTY = 3;
-const preferredLane = (tier) => (tier === "mechanical" ? "cursor-models" : "other-models");
+// A kind, not a name: every provider that splits its plan has an own-model pool
+// and a frontier one, whatever it calls them.
+const preferredLane = (tier) => (tier === "mechanical" ? "own" : "frontier");
 
 function route(dir) {
   const plan = readJSON(join(dir, "plan.json"));
@@ -1083,13 +1498,13 @@ function route(dir) {
   const load = Object.fromEntries(candidates.map((c) => [c.key, 0]));
   const assigned = [];
   const pickBest = (field, size, wanted, pinned) => {
-    const lanePinned = pinned ? field.filter((c) => c.lane?.name === pinned) : [];
+    const lanePinned = pinned ? field.filter((c) => c.lane?.kind === pinned) : [];
     return (lanePinned.length ? lanePinned : field)
       .map((c) => ({
         c,
         score:
           ((load[c.key] + estimateCost(c.slot.provider, size, history)) / c.supply) *
-          (c.lane && c.lane.name !== wanted ? LANE_PENALTY : 1),
+          (c.lane && c.lane.kind !== wanted ? LANE_PENALTY : 1),
       }))
       .sort((a, b) => a.score - b.score)[0].c;
   };
@@ -1102,7 +1517,7 @@ function route(dir) {
         (c) => c.slot.key === s.provider || c.slot.provider === s.provider,
       );
       if (named.length) {
-        cand = pickBest(named, size, wanted, laneOfModel(named[0].slot.provider, s.model));
+        cand = pickBest(named, size, wanted, laneKindOfModel(named[0].slot.provider, s.model));
       } else {
         // The user named a provider whose every lane is spent. Their call wins;
         // the zero supply is what the admission warning is for.
@@ -1121,7 +1536,7 @@ function route(dir) {
     // Pin the lane to a model id the CLI actually lists. Without a pin the lane
     // is only a preference and the CLI's default model decides the pool, so the
     // table says so rather than claiming a routing decision it did not make.
-    const model = s.model ?? (laneName ? pickModelForLane(slot.bin, slot.provider, laneName) : null);
+    const model = s.model ?? (cand.lane ? pickModelForLane(slot.bin, slot.provider, cand.lane) : null);
     assigned.push({
       ...s,
       size,
@@ -1133,7 +1548,7 @@ function route(dir) {
       lane: laneName ?? undefined,
       lane_remaining_pct: cand.lane?.remaining_pct,
       lane_pinned: laneName ? Boolean(model) : undefined,
-      lane_fallback: laneName && laneName !== wanted ? true : undefined,
+      lane_fallback: laneName && cand.lane.kind !== wanted ? true : undefined,
       remaining_pct: slot.remaining_pct,
       windows: slot.windows,
       lanes: slot.lanes,
@@ -1200,7 +1615,13 @@ function renderWindows(s) {
 function renderLanes(s) {
   if (!s.lanes?.length) return "—";
   return s.lanes
-    .map((l) => `${l.name} ${typeof l.remaining_pct === "number" ? `${l.remaining_pct}%` : "?"}`)
+    .map((l) =>
+      // Brackets, not a separator: these cells are printed inside a markdown
+      // table, where a `|` between lanes would split the row into new columns.
+      l.windows?.length
+        ? `${l.name}[${renderWindows(l)}]`
+        : `${l.name} ${typeof l.remaining_pct === "number" ? `${l.remaining_pct}%` : "?"}`,
+    )
     .join(" · ");
 }
 
@@ -1220,8 +1641,9 @@ function renderQuota(quota) {
         .filter((l) => l.bucket === "empty" || l.bucket === "low")
         .map(
           (l) =>
-            `> ${s.key}: ${LANE_LABEL[l.name] ?? l.name} is ${l.bucket} at ${l.remaining_pct}% — ` +
-            `the other lane is still open, so route by model, not by dropping the slot`,
+            `> ${s.key}: the ${l.name} lane (${LANE_LABEL[l.name] ?? "—"}) is ${l.bucket} at ` +
+            `${l.remaining_pct}% — the other lane is still open, so route by model, not by ` +
+            `dropping the slot`,
         ),
     ),
   ].join("\n");
@@ -1232,7 +1654,9 @@ function renderQuota(quota) {
 function renderModel(s) {
   const model = s.model ?? "default";
   if (!s.lane) return model;
-  const tag = s.lane.replace("-models", "");
+  // Antigravity's own bucket ids call the frontier pool `3p`; the tag stays in
+  // each provider's vocabulary so the cell matches what its dashboard says.
+  const tag = s.lane.replace("-models", "").replace("third-party", "3p");
   return `${model} [${tag}${s.lane_fallback ? "\u2193" : ""}${s.lane_pinned === false ? "*" : ""}]`;
 }
 
@@ -1263,6 +1687,10 @@ function renderRouting(r) {
 
 // ---------------------------------------------------------------- dispatch
 
+// Reasoning intensity is the same decision as model choice, in this CLI's own
+// vocabulary — so the tier that picks the lane picks this too.
+const AGY_EFFORT = { mechanical: "low", review: "medium", design: "high" };
+
 function launchArgs(s, promptPath) {
   const prompt = readFileSync(promptPath, "utf8").trim();
   switch (s.provider) {
@@ -1283,6 +1711,15 @@ function launchArgs(s, promptPath) {
       if (s.model) a.push("--model", s.model);
       return [s.bin, [...a, prompt]];
     }
+    case "antigravity": {
+      // `-p` is the documented headless flag and takes the prompt, so it goes
+      // last. The CLI is known to hang in a non-TTY while stdin stays open,
+      // which is why the dispatcher spawns every child with stdin ignored.
+      const a = ["--dangerously-skip-permissions", "--output-format", "text"];
+      if (s.model) a.push("--model", s.model);
+      if (AGY_EFFORT[s.tier]) a.push("--effort", AGY_EFFORT[s.tier]);
+      return [s.bin, [...a, "-p", prompt]];
+    }
     default:
       throw new Error(`unknown provider ${s.provider}`);
   }
@@ -1302,7 +1739,7 @@ function ensureWorktree(dir, s) {
 }
 
 const QUOTA_DEATH =
-  /rate.?limit|usage limit|quota|out of extra usage|session limit|too many requests|429|insufficient credits/i;
+  /rate.?limit|usage limit|quota|out of extra usage|session limit|too many requests|429|insufficient credits|resource.?exhausted/i;
 
 function classifyExit(dir, s, code) {
   const resultPath = join(dir, "sessions", `${s.id}.result.md`);
@@ -1378,7 +1815,7 @@ async function dispatch(dir) {
     s.lane = best.lane?.name ?? undefined;
     // Model ids do not travel across providers, and inside a lane the id is what
     // holds the session to that pool — so it is re-pinned, never carried over.
-    s.model = best.lane ? pickModelForLane(best.q.bin, best.q.provider, best.lane.name) : null;
+    s.model = best.lane ? pickModelForLane(best.q.bin, best.q.provider, best.lane) : null;
     s.lane_pinned = best.lane ? Boolean(s.model) : undefined;
     return s;
   };

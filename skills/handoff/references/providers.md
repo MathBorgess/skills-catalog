@@ -15,7 +15,7 @@ Read-only sessions (`"writes": []`) skip the worktree and run in the current che
 
 ## Model ids
 
-Probe, never remember: `agent --list-models`, `claude --help`, `codex --help`. Put the id in the plan's `model` field, or leave it unset for the CLI default. A stale id from training is a launch failure.
+Probe, never remember: `cursor-agent --list-models`, `agy models`, `claude --help`, `codex --help`. Put the id in the plan's `model` field, or leave it unset for the CLI default. A stale id from training is a launch failure — and `agy` is explicit about it: headless mode exits with an error on an unknown `--model` rather than falling back.
 
 `route` already runs `--list-models` itself on a provider that bills more than one pool, to pin a session's lane to an id that exists (see [`routing.md`](routing.md)). A `model` you set in the plan always wins over that, and pins the lane that model belongs to.
 
@@ -27,7 +27,10 @@ Probe, never remember: `agent --list-models`, `claude --help`, `codex --help`. P
 2. Fix `launchArgs` in `scripts/handoff.mjs` for that provider, and say in the report which flag changed.
 3. Relaunch that session id. Do not fall back to doing its work yourself.
 
-Known incompatibility worth keeping: Codex rejects `--sandbox` together with `--approve-for-me`. Because the dispatcher sets the child's working directory to the worktree, `--sandbox workspace-write` alone is sufficient and `--approve-for-me` is never needed.
+Known incompatibilities worth keeping:
+
+- Codex rejects `--sandbox` together with `--approve-for-me`. Because the dispatcher sets the child's working directory to the worktree, `--sandbox workspace-write` alone is sufficient and `--approve-for-me` is never needed.
+- `agy -p` hangs in a non-TTY while stdin stays open. The dispatcher spawns every child with stdin ignored, which is exactly the documented fix — so if that recipe is ever changed to pipe anything into a child, Antigravity sessions will hang instead of failing, and nothing will say why. `-p` takes the prompt, so it goes last, after `--model` and `--effort`.
 
 ## Missing binary
 

@@ -58,7 +58,7 @@ function liveRuns() {
 // a hand-rolled launch is invisible to it — no worktree, no reroute on quota
 // death, no cost attribution.
 const RAW_LAUNCH =
-  /\b(claude\s+(-p|--print)|codex\s+exec|cursor-agent\s+(-p|--print)|(^|[;&|]\s*)agent\s+(-p|--print))/;
+  /\b(claude\s+(-p|--print)|codex\s+exec|cursor-agent\s+(-p|--print)|(^|[;&|]\s*)a(gent|gy)\s+(-p|--print|--prompt))/;
 
 function main() {
   let input;

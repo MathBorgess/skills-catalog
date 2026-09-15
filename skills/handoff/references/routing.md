@@ -11,6 +11,7 @@ Detect from this session's environment. That is the provider whose tokens you ar
 | `CLAUDECODE` or `CLAUDE_CODE_ENTRYPOINT` set | claude |
 | `CODEX_HOME` set and this process is `codex` | codex |
 | Cursor Task/subagent tools, or `CURSOR_AGENT` | cursor |
+| an `agy` session — no environment marker is published, so say so rather than guessing one | antigravity |
 | none of the above | unknown — spread across whatever slots the probe finds |
 
 ## Cutting
@@ -43,16 +44,20 @@ Leave `model` unset unless the user named one or the tier clearly demands a spec
 
 ## Lanes
 
-A provider that bills **several pools inside one billing cycle** carries lanes. Cursor is the one that does: **Cursor Models** (Auto, Composer, the Grok tiers) and **Other Models** (named third-party models, at that model's API price). Lanes are alternatives, not gates — a session draws from exactly one — so a slot is worth its *best* lane, and the model id is what decides which one it spends. Why the split exists and how it is read: [`references/quota.md`](quota.md).
+A provider that bills **several pools** carries lanes. Two do: Cursor splits one billing cycle into **Cursor Models** (Auto, Composer, the Grok tiers) and **Other Models** (named third-party, at that model's API price); Antigravity splits into **Gemini** and **Claude/GPT**, each with its own five-hour and weekly windows. Lanes are alternatives, not gates — a session draws from exactly one — so a slot is worth its *best* lane, and the model id is what decides which one it spends. Why the splits exist and how they are read: [`references/quota.md`](quota.md).
 
-| `tier` | Lane it prefers | Why |
-|---|---|---|
-| `mechanical` | Cursor Models | a rename on a frontier model spends metered credit for nothing |
-| `design`, `review` | Other Models | a judgment call traded down to a small own-model is a real downgrade |
+Every lane declares a **kind**, and that is what tier selection matches on — never the vendor's name for it:
+
+| `tier` | Lane kind it prefers | Cursor | Antigravity | Why |
+|---|---|---|---|---|
+| `mechanical` | `own` | Cursor Models | Gemini | a rename on a frontier model spends metered credit for nothing |
+| `design`, `review` | `frontier` | Other Models | Claude/GPT | a judgment call traded down to a small own-model is a real downgrade |
 
 The preference is steep but not a wall: the other lane still wins when the preferred one is far more loaded, and the routing table marks that session `↓`. A lane with no supply left is not a candidate at all — so a design session is never routed into a pool already at 100%, it goes to another provider instead.
 
-`route` **pins** the lane by taking a model id from the CLI's own `--list-models` output, never one from memory, and prefers a named own-model over bare `auto` (on team plans Auto's router can land in the other pool). When a CLI does not list its models the lane stays a preference its default model may ignore, and the cell is marked `*`. A model you set yourself always wins, and pins the lane that model belongs to.
+`route` **pins** the lane by taking a model id from the CLI's own list — `cursor-agent --list-models`, `agy models` — never one from memory, and prefers a named own-model over bare `auto` (a vendor's Auto router can land in the other pool). When a CLI publishes no list the lane stays a preference its default model may ignore, and the cell is marked `*`. A model you set yourself always wins, and pins the lane that model belongs to.
+
+On Antigravity the tier also sets `--effort` (`mechanical` → `low`, `review` → `medium`, `design` → `high`): reasoning intensity is the same spend decision as model choice, in that CLI's own vocabulary.
 
 At dispatch, a lane that dies of quota blacklists **that lane**, not the slot: a session that exhausts Other Models is relaunched on Cursor Models with a model from that pool, without a parent turn.
 

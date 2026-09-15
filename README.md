@@ -59,7 +59,7 @@ Pick the skills you want and which coding agents to install them on. Add `-g` fo
 npm run link
 ```
 
-Symlinks every skill into `~/.claude/skills`, `~/.cursor/skills`, `~/.codex/skills`, and `~/.agents/skills`. Not the end-user installer.
+Symlinks every skill into `~/.claude/skills`, `~/.cursor/skills`, `~/.codex/skills`, `~/.agents/skills`, and `~/.gemini/config/skills`. Not the end-user installer.
 
 Because those are symlinks into this working tree, **a `git pull` refreshes the content of every linked skill on its own** — the link points at the file that just changed. The one thing a pull cannot do by itself is link a skill that did not exist before, or drop one that was removed: that only happens when the script runs again.
 

@@ -2,9 +2,9 @@
 set -euo pipefail
 
 # Maintainer install: symlink every skill in this repo into the local skill
-# directories used by Claude Code, Cursor, Codex, and other Agent Skills
-# harnesses. Not a supported end-user installer — that is the plugin or
-# `npx skills add`. A `git pull` is enough to refresh the linked copy.
+# directories used by Claude Code, Cursor, Codex, Antigravity / Gemini, and
+# other Agent Skills harnesses. Not a supported end-user installer — that is the
+# plugin or `npx skills add`. A `git pull` is enough to refresh the linked copy.
 
 REPO="$(cd "$(dirname "$0")/.." && pwd)"
 DESTS=(
@@ -12,6 +12,7 @@ DESTS=(
   "$HOME/.agents/skills"
   "$HOME/.cursor/skills"
   "$HOME/.codex/skills"
+  "$HOME/.gemini/config/skills"
 )
 
 realpath_portable() {
@@ -56,6 +57,27 @@ for DEST in "${DESTS[@]}"; do
 
     ln -sfn "$src" "$target"
     echo "linked $name -> $src ($DEST)"
+  done
+
+  for item in "$DEST"/*; do
+    [ -L "$item" ] || continue
+    resolved="$(realpath_portable "$item" 2>/dev/null || true)"
+    case "$resolved" in
+      "$REPO/skills"/*)
+        base="$(basename "$item")"
+        found=0
+        for n in "${names[@]}"; do
+          if [ "$n" = "$base" ]; then
+            found=1
+            break
+          fi
+        done
+        if [ "$found" -eq 0 ]; then
+          rm -f "$item"
+          echo "unlinked removed skill $base ($DEST)"
+        fi
+        ;;
+    esac
   done
 done
 

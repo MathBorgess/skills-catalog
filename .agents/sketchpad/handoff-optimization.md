@@ -97,7 +97,7 @@ Today the brief has to carry a copy rule instead.
 ### P4. Session capability needs
 A plan field such as `"needs": ["network", "unix-socket", "git-write"]`. `route` excludes any slot whose launch sandbox forbids one of them. Codex `workspace-write` forbids all three.
 
-*Evidence:* 01 pinned by hand; 08 blocked.
+*Evidence:* 01 pinned by hand; 08 blocked. In the third run it cost a session again: a brief rule said "stop if a test needs a socket bind", and the crate's *pre-existing* HTTP-timeout test binds a loopback listener, so a Codex session finished its work and then blocked on the gates. The capability belongs to the session's write-set, not to a sentence in the brief: `route` should have kept that crate off a sandbox that forbids binds.
 
 ### P5. Dispatcher resilience
 - Catch write errors on `state.json` and keep supervising.

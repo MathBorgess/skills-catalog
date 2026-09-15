@@ -4,7 +4,7 @@ description: Use when the user wants a handoff document for another agent, to sp
 argument-hint: "compact | fan-out | provider or model constraints"
 metadata:
   author: Matheus Borges
-  version: 1.0.0
+  version: 1.1.0
 ---
 
 # Handoff

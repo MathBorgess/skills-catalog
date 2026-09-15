@@ -88,6 +88,12 @@ Then merge the PR. After merge: `claude plugin tag --push`.
 
 Do not `git push origin main`. See [`.agents/adr/0002-prs-only-on-main.md`](.agents/adr/0002-prs-only-on-main.md).
 
+### Any change under `skills/` bumps the package version — enforced, not requested
+
+`validate.yml`'s publish job runs on every push to `main`, but it only actually `npm publish`s when `package.json`'s version is not already on GitHub Packages (it checks with `npm view`). A PR that edits anything under `skills/` — a `SKILL.md`, a reference, a script — and merges without bumping `package.json` therefore merges cleanly and then **ships nothing**: the publish step sees a version it has already published and skips.
+
+So this is not left to a contributor remembering it. `scripts/check-version-bump.mjs` runs as a required check on every pull request (`validate.yml`, the `check` job): it diffs the PR against its base branch, and if any file under `skills/` changed, it fails unless `package.json`'s version also changed. Bump with `npm version patch|minor|major` (see above) — that alone satisfies it, whether or not you also bump the specific skill's own `metadata.version` in the same PR.
+
 ## Do not
 
 - Do not add a second catalog index. `README.md` is the catalog; `plugin.json` is the ship list and must match it (`npm run check`).

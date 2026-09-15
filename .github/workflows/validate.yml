@@ -15,6 +15,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -23,6 +25,12 @@ jobs:
 
       - name: Check catalog, plugin, and README
         run: node scripts/check-catalog.mjs
+
+      - name: Require a version bump when skills/ changes
+        if: github.event_name == 'pull_request'
+        run: node scripts/check-version-bump.mjs
+        env:
+          GITHUB_BASE_REF: ${{ github.base_ref }}
 
   publish:
     name: GitHub Packages

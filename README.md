@@ -65,7 +65,7 @@ Symlinks every skill into `~/.claude/skills`, `~/.cursor/skills`, `~/.codex/skil
 
 | Skill | Version | What it does |
 |---|---|---|
-| [`handoff`](skills/handoff/) | 1.0.0 | Compacts a conversation into a session brief, or cuts remaining work into a dependency graph of parallel Cursor, Claude, and Codex sessions: it probes each provider\'s remaining plan quota, refuses a cut whose sessions collide, assigns slots by refill rate rather than raw balance, dispatches and reroutes around a provider that runs out, and scores what the run cost in quota. |
+| [`handoff`](skills/handoff/) | 1.1.0 | Compacts a conversation into a session brief, or cuts remaining work into a dependency graph of parallel Cursor, Claude, and Codex sessions: it probes each provider\'s remaining plan quota (every window, and every lane a provider bills separately), refuses a cut whose sessions collide, assigns slots by refill rate rather than raw balance, dispatches and reroutes around a provider or lane that runs out, and scores what the run cost in quota. Ships a guard hook that blocks reading a live run's child logs and worktrees. |
 | [`study-wiki`](skills/study-wiki/) | 1.0.0 | Interviews you about the certifications you are chasing, then builds and operates a personal study repository: a knowledge graph of notes, a question bank, an error log, and a daily study loop that injects questions, grades your answers, and records where you are weak. |
 | [`teach-me`](skills/teach-me/) | 1.1.0 | Runs one study session against a wiki that already exists: a phone-sized HTML lesson plus a session note and error log. Not for bootstrapping an empty wiki — that is study-wiki. |
 

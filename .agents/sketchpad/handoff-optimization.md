@@ -5,6 +5,7 @@ Working backlog for the next optimization round of `skills/handoff`. It is not a
 Runs recorded here:
 - `20260914T030353Z`: daily reports, 18 sessions, Codex parent.
 - `20260915T135101Z`: aihub, an 8-crate Rust workspace, 11 sessions, Claude Code parent.
+- `20260915T182254Z`: aihub production round (fixes for a 14-finding review, setup, CI), 11 sessions, same parent.
 
 ## Run 20260915T135101Z — aihub
 
@@ -171,3 +172,138 @@ Two of those numbers are wrong in ways the proposals above would fix.
 - **10, integration:** the whole workspace builds, 89 tests pass and clippy is clean, all offline. Headless e2e covers socket permissions, a `/bin/sh` PTY session, detach/reattach with scrollback replay, and a two-step squash merge. It also wrote the README and a verification matrix.
 - **11, review:** 14 findings, 5 high and 9 medium, plus a per-item coverage matrix against the plan. Two of the high ones are work-loss paths in the git finish flow, one is a secret-redaction gap in the handoff brief writer, and the matrix names two plan items as missing outright.
 - **Fast wasn't worse.** Cursor's 3–4 minute sessions (03, 05, 07) survived integration with their tests passing, and the review found defects spread evenly across crates, not concentrated in theirs. Wall time per session was a function of the provider, not of quality.
+
+## Run 20260915T182254Z — aihub production round
+
+**Status: finished, NO-GO.** Everything below is from `state.json`, probe snapshots, session progress and result files, `handoff score`, and the parent's own re-run of the gates.
+
+### Shape
+
+- 01: an additive contract.
+- 02–09: eight parallel fixes, one crate each, every review finding tied to a regression test named after it.
+- 10: integration, plus a real ai-memory loop in temp dirs.
+- 11: a read-only go/no-go review.
+
+Providers were pinned by hand, using run 1's sandbox facts: nothing that needs sockets or network went to Codex.
+
+### What went wrong
+
+1. **Disk peaks during the concurrent first build, not in the final size.**
+   - Build variables `CARGO_PROFILE_DEV_DEBUG=0`, `CARGO_PROFILE_TEST_DEBUG=0` and `CARGO_INCREMENTAL=0` shrank each worktree's final `target/` from 0.9–1.4 GB (run 1) to 170–285 MB.
+   - Even so, eight sessions compiling dependencies at the same moment took free space from 5.1 GB down to 1.1 GB.
+   - Two sessions (Codex and Antigravity) stopped themselves under the brief's 2 GB rule, and had to be relaunched after the parent cleaned finished targets.
+2. **A resumed session would have destroyed its own work.** Every brief orders "rsync the contract from `wt/01` first". When relaunching a session with 5 of 6 items done on disk, that same step would have overwritten its changed files with the old versions. The parent had to patch the brief to skip it.
+3. **False quota deaths blacklisted healthy lanes.**
+   - The integration session died three times, each classified as a quota death:
+     - Antigravity gemini, after 16 min;
+     - Antigravity third-party, after 18 min;
+     - Codex, after 6 min.
+   - Only Codex was real (5h at 0%).
+   - Minutes later the probe read Antigravity third-party at 100% on both windows, and gemini at 27%.
+   - The two Antigravity attempts exited without a result file, and the death regex ran over a log tail from a project whose vocabulary is literally "quota" and "rate limit".
+4. **Reroute gave up with supply left.** After the three deaths, `dispatch` returned "no slot with quota left", while Claude (5h 48%) and Cursor (cursor-models 57%) were both available. The cause was not verified.
+5. **One probe reading never moves.** Antigravity third-party read 100% on both windows all day. That covers 79 minutes of the contract session and three other sessions plus two integration attempts. The reading is either insensitive or stale.
+6. **Codex 5h is the scarcest pool.** Two short sessions and one aborted attempt took it from 66% to 0%.
+7. **A `done` result claimed gates that didn't hold.** The integration session reported fmt, clippy, the full test suite (158 tests) and a release build all green, plus a proven ai-memory loop. The parent re-ran the gates on the committed tree:
+   - **fmt:** failed.
+   - **Tests:** 151 passed, 8 failed.
+   - **ai-memory loop:** its test panicked at once, because it depends on four environment variables that only the session's own shell had set.
+   - **The parent's first diagnosis was wrong.** Seven of the failures passed under `--test-threads=1` and failed in parallel, so the correction brief blamed process-global shared state and asked for isolation.
+   - **The actual causes, found by the correction pass,** were none of that:
+     - the daemon's quota loop pushes an unscoped update on its first tick, which can land between any request and its reply, while the tests assumed strict request/response ordering;
+     - a test's fake HTTP server closed the socket with the request body still unread, so the kernel sent a reset instead of a clean close;
+     - the daemon's check for a live socket could read a just-closed listener as live. The pass found this one through its own stress runs, at about 2 in 30.
+   - **Consequence:** the scorecard counted the first attempt `done`, and it would have shipped.
+8. **The correction pass held up, and still missed two things.** It was relaunched on Claude with the parent's failing output pasted into the brief, and told to fix root causes without timeouts, retries, `#[ignore]` or serial runs. The parent re-ran everything on the result:
+   - fmt and clippy were clean;
+   - the workspace passed 159 / 0 failed three times in a row;
+   - the two previously flaky suites passed 5 times each in parallel;
+   - the release build and the ai-memory end-to-end script both passed.
+
+   It missed two gaps: shellcheck fails on the new e2e script, which the repo's CI runs, and one probe test still mutates the process environment.
+   - **Lesson:** a brief's diagnosis is a hypothesis. The pass did right to follow the evidence instead of the parent's theory, and the parent's own re-run caught what the pass didn't check.
+
+### New proposals
+
+#### P12. Classify quota death from the provider, not from prose
+Use the provider's own error envelope, an exit code, or a known final-line format. When a session exits without a result file, try the other classifications first:
+- **Launch failure** (P2): the session died within seconds and left no progress.
+- **Plain failure:** the session made progress and then exited.
+
+Treat a regex hit on free text as a hint that a re-probe of that slot has to confirm before the slot is blacklisted.
+
+*Evidence:* the two Antigravity deaths above.
+
+#### P13. Reroute must exhaust candidates before blocking
+When `reassign` finds nothing, re-probe every slot and retry once before returning "no slot with quota left". Log why each candidate was rejected.
+
+*Evidence:* Claude and Cursor were skipped.
+
+#### P14. Sync is a dispatcher step, not a brief instruction
+The dispatcher seeds a dependent's worktree once, at creation, and never again on relaunch. This is the resume-safe half of P3: a brief can't re-run it by mistake.
+
+*Evidence:* the near-overwrite in item 2.
+
+#### P15. Seed build caches instead of rebuilding them
+- **Seed.** On APFS, `cp -c` clones a finished dependency's `target/` into each new worktree for free, so eight sessions stop compiling the same dependency graph at once.
+- **Admit.** Otherwise, admission control caps concurrent first builds by free disk.
+- **Unverified:** whether cargo reuses registry-dependency artifacts across different worktree paths.
+
+*Evidence:* the 5.1 → 1.1 GB dip.
+
+#### P16. Sanity-check a probe reading that never moves
+A lane reading 100% across hours of sessions assigned to it should be flagged as suspect in the quota table, not trusted as supply.
+
+*Evidence:* item 5.
+
+#### P17. `done` is verified, not reported
+A session may declare its gate commands in the plan (for example `"verify": ["cargo fmt --check", "cargo test --workspace --no-fail-fast"]`). `dispatch` runs them in the session's worktree after the child exits. If any fails, the result is downgraded to `failed`, and the failing command's summary goes into the relaunch brief.
+
+A child's pasted output is a claim; the dispatcher's own run is the evidence. Running the gates more than once, in parallel, is what catches order-dependent tests.
+
+*Evidence:* ### Scorecard
+
+`handoff score` on 20260915T182254Z:
+
+| Field | Value |
+|---|---|
+| sessions | 11, all `done` |
+| wall clock | 4h (4.5h from launch to the review result) |
+| parent turns (as counted) | 4 |
+| relaunches | 7 |
+| quota_deaths / launch_fails / blocked / failed / abandoned | 0 / 0 / 0 / 0 / 0 |
+| quota_delta_pct | claude 4 · codex −45 · cursor 0 · antigravity 0 |
+| session_cost_pct | claude only: m 2 %, l 2 % |
+
+Every field that should have caught this run's problems reads clean.
+
+- **`quota_deaths: 0`.** The dispatcher classified three integration exits as quota deaths and blacklisted two healthy Antigravity lanes on that basis (item 3). The counter doesn't record its own classifications.
+- **`failed: 0`.** The first integration attempt was accepted as `done` with fmt failing and 8 tests broken (item 7). Only P17 makes this number mean anything.
+- **`quota_delta_pct` for codex is −45.** The 5h window reset between the start and end snapshots, so the sign says Codex gained quota over a run that drained it to 0 %. Start-vs-end diffs are unusable on runs longer than the shortest window (P11).
+- **`parent turns: 4`.** Real parent work included disk cleanup, three brief patches, two provider re-pins, a manual `state.json` reset, and a full independent gate run. That's at least fifteen turns.
+
+### Outcomes
+
+- **01–09 all done.** Two relaunches came from the disk dip and one from a session that exited without a result file.
+- **10, integration.**
+  - **First attempt:** claimed green, re-run failed (item 7).
+  - **Correction pass (Claude, ~29 min):** reproduced by the parent, with fmt and clippy clean and 159 passed / 0 failed three times in a row; the release build and the ai-memory end-to-end script also passed.
+  - **Parent's own fix:** shellcheck on the new script, which the repo's CI runs and the pass never ran.
+  - **Result:** committed and opened as a draft stacked PR.
+- **11, review (Codex, read-only, ~8 min): NO-GO.**
+  - **F1–F14:** 11 closed; F4, F5 and F9 partial.
+  - **F4/F5 residual:** the stop barrier trusts the direct child's exit, not the process group's extinction. A same-group descendant that ignores TERM and redirects its stdio keeps writing after the barrier returns.
+  - **Ten new medium findings,** none of which a test covered:
+    - an external call with no deadline holds the daemon's global lock (the sidecar delivery, and a model-list CLI);
+    - the spool acknowledges false MCP successes, truncates before rewriting, stores paths instead of content, and has no size bound;
+    - the launchd setup can't find harnesses on the user's shell PATH;
+    - an `&` in the home path breaks the rendered plist;
+    - readiness is checked once, with no polling.
+- **What the review adds that the gates can't.** 159 green tests prove the tests pass, not that they cover failure modes. The review found its defects by asking what happens when a peer accepts and never answers, when a process dies mid-rewrite, or when a descendant ignores signals. None of those cases existed as a test. A cheap static review after the gates caught what four correction loops of "make the gates green" would not.
+
+### Carry to the next round
+
+- Worktrees seeded from the merged branch, so no rsync step.
+- A build seed cloned from the last `target/`, to test P15.
+- `verify` commands checked by the parent before accepting `done` (P17, by hand until the dispatcher does it).
+- The review's blocker order used as the cut.

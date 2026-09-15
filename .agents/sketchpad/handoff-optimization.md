@@ -243,7 +243,7 @@ When `reassign` finds nothing, re-probe every slot and retry once before returni
 #### P14. Sync is a dispatcher step, not a brief instruction
 The dispatcher seeds a dependent's worktree once, at creation, and never again on relaunch. This is the resume-safe half of P3: a brief can't re-run it by mistake.
 
-*Evidence:* the near-overwrite in item 2.
+*Evidence:* the near-overwrite in item 2. In the third run the copy rule was still there: the daemon session's first task was to rsync three crates from three sibling worktrees before it could build.
 
 #### P15. Seed build caches instead of rebuilding them
 - **Seed.** On APFS, `cp -c` clones a finished dependency's `target/` into each new worktree for free, so eight sessions stop compiling the same dependency graph at once.
@@ -275,6 +275,13 @@ When the target repo has CI, the integration session's `done` waits for a hosted
 Give the skill a command (`handoff mark <id> done|failed --note …`) that a live dispatcher honors, or have the dispatcher merge from disk before each write.
 
 *Evidence:* run 20260915T225713Z. A Codex session finished its crate work and stopped at the brief's socket-bind rule, leaving `blocked`. The parent ran the full production bar itself — fmt and clippy clean, 53 passed / 0 failed three times — and set the session to `done`; the running dispatcher restored `blocked` minutes later, along with dropping the note. The dependent integration session cannot start until the dispatcher exits.
+
+#### P20. A file that belongs to no write-set has no owner
+`Cargo.lock`, and any shared manifest like it, sits outside every session's write-set while belonging to all of them. A session that adds a dependency its own manifest already declares changes the lockfile as a side effect of building.
+
+Give the plan a way to name shared files as integration-owned: sessions leave them dirty, and the integrator regenerates them once. Silently reverting them is worse than leaving them changed.
+
+*Evidence:* run 20260915T225713Z. The router session reverted its two lockfile lines to keep its diff inside its write-set, which left the workspace unresolvable offline; the daemon session then had to restore them before it could build. Two sessions spent work on one file neither was allowed to own.
 
 ### Scorecard
 

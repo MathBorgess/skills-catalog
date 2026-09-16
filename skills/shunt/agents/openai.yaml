@@ -1,0 +1,5 @@
+interface:
+  display_name: "Shunt"
+  short_description: "Keep the large model off heavy reads and grunt writes"
+policy:
+  allow_implicit_invocation: true

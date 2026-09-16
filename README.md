@@ -85,10 +85,11 @@ Two things it deliberately does not cover: a pull on a branch other than `main`,
 | [`handoff`](skills/handoff/) | 1.2.0 | Compacts a conversation into a session brief, or cuts remaining work into a dependency graph of parallel Cursor, Claude, Codex, and Antigravity sessions: it probes each provider\'s remaining plan quota (every window, and every lane a provider bills separately), refuses a cut whose sessions collide, assigns slots by refill rate rather than raw balance, dispatches and reroutes around a provider or lane that runs out, and scores what the run cost in quota. Ships a guard hook that blocks reading a live run's child logs and worktrees. |
 | [`study-wiki`](skills/study-wiki/) | 1.0.0 | Interviews you about the certifications you are chasing, then builds and operates a personal study repository: a knowledge graph of notes, a question bank, an error log, and a daily study loop that injects questions, grades your answers, and records where you are weak. |
 | [`teach-me`](skills/teach-me/) | 1.1.0 | Runs one study session against a wiki that already exists: a phone-sized HTML lesson plus a session note and error log. Not for bootstrapping an empty wiki — that is study-wiki. |
+| [`shunt`](skills/shunt/) | 0.0.0 | Keeps a large model off heavy I/O: activate a guard that refuses full-file reads over a line/byte threshold and points the parent at an outline script or a small/fast subagent; boilerplate, config, and mechanical tests are spawned the same way and not read back. |
 
 ## Using a skill
 
-After install, start a session and type `/handoff`, `/study-wiki`, or `/teach-me`, or just say what you want — the skill's `description` is what makes the model reach for it on its own.
+After install, start a session and type `/handoff`, `/study-wiki`, `/teach-me`, or `/shunt`, or just say what you want — the skill's `description` is what makes the model reach for it on its own.
 
 **Anywhere else (chat, Cowork, an API app)**
 

@@ -261,7 +261,7 @@ A lane reading 100% across hours of sessions assigned to it should be flagged as
 #### P17. `done` is verified, not reported
 A session may declare its gate commands in the plan (for example `"verify": ["cargo fmt --check", "cargo test --workspace --no-fail-fast"]`). `dispatch` runs them in the session's worktree after the child exits. If any fails, the result is downgraded to `failed`, and the failing command's summary goes into the relaunch brief.
 
-A child's pasted output is a claim; the dispatcher's own run is the evidence. Running the gates more than once, in parallel, is what catches order-dependent tests.
+A child's pasted output is a claim; the dispatcher's own run is the evidence. Running the gates more than once, in parallel, is what catches order-dependent tests. How they are run decides what they can catch: in run 20260915T225713Z two regression tests passed **3 of 3** when invoked alone and failed **8 of 8** when the whole suite ran in one process, because other tests changed what the daemon was doing. A per-test green and a suite green are different measurements, and only the second one matches how CI runs them.
 
 The same rule binds the verifier. In run 20260915T225713Z the parent's own gate script printed `rc=0` for a clippy invocation that had failed outright, because `$?` after a pipeline reports the last stage — `tail` — not the compiler. A gate harness that pipes its output needs `pipefail`, or an explicit status capture, before any green it prints means anything. Whatever runs the gates, child or dispatcher, has to be checked the same way.
 
@@ -285,6 +285,13 @@ Give the skill a command (`handoff mark <id> done|failed --note …`) that a liv
 Give the plan a way to name shared files as integration-owned: sessions leave them dirty, and the integrator regenerates them once. Silently reverting them is worse than leaving them changed.
 
 *Evidence:* run 20260915T225713Z. The router session reverted its two lockfile lines to keep its diff inside its write-set, which left the workspace unresolvable offline; the daemon session then had to restore them before it could build. Two sessions spent work on one file neither was allowed to own.
+
+#### P21. A session that dies without a result costs the parent a reconstruction
+Three times in one run a session exited without writing `NN.result.md`: one after roughly fifty minutes of real work, with its changes and new tests already on disk; one part-way through its proof when its provider quota ran out; and one that exited 0 about a minute after launch. The dispatcher notes "exited 0 without writing a result file" and moves on, which is honest but not useful: the parent then has to reconstruct what happened by reading the worktree, diffing it against the base, and running the gates by hand before it can write a resume brief.
+
+Have `dispatch` checkpoint what it can observe cheaply at exit — the worktree diffstat, whether the crate still builds, and the last progress line — and attach it to the failure note. A relaunch brief should be writable from the run directory, not from an investigation.
+
+*Evidence:* run 20260915T225713Z, the integration session and the stop-barrier session.
 
 ### Scorecard
 

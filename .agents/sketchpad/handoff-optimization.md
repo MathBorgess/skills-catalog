@@ -248,9 +248,10 @@ The dispatcher seeds a dependent's worktree once, at creation, and never again o
 #### P15. Seed build caches instead of rebuilding them
 - **Seed.** On APFS, `cp -c` clones a finished dependency's `target/` into each new worktree for free, so eight sessions stop compiling the same dependency graph at once.
 - **Admit.** Otherwise, admission control caps concurrent first builds by free disk.
-- **Unverified:** whether cargo reuses registry-dependency artifacts across different worktree paths.
+- **Verified, and it works.** In run 20260915T225713Z every worktree started from a `cp -cR` clone of the previous round's finished `target/`. Cargo accepted the seeded artifacts and rebuilt only the workspace crates. With five sessions launched together, four of them building Rust, the free-disk floor was ~2.4 GB, against ~1.1 GB in the previous round at a comparable fan-out with no seed.
+- **Cleanup afterwards is not the remedy.** A clone only gives back the blocks that diverged from it: deleting six finished worktrees' `target/` dirs, 9.6 GB by `du`, returned 1.4 GB of real space. Seeding prevents the pressure; cleaning after the fact barely touches it.
 
-*Evidence:* the 5.1 → 1.1 GB dip.
+*Evidence:* the 5.1 → 1.1 GB dip in run 20260915T182254Z, and the 2.4 GB floor in run 20260915T225713Z.
 
 #### P16. Sanity-check a probe reading that never moves
 A lane reading 100% across hours of sessions assigned to it should be flagged as suspect in the quota table, not trusted as supply.

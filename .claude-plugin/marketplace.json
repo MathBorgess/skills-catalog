@@ -9,13 +9,14 @@
     {
       "name": "skills-catalog",
       "source": "./",
-      "description": "Study wikis, teaching sessions, and cross-provider handoff.",
+      "description": "Study wikis, teaching sessions, cross-provider handoff, and shunt.",
       "category": "productivity",
       "keywords": [
         "skills",
         "study-wiki",
         "teach-me",
-        "handoff"
+        "handoff",
+        "shunt"
       ]
     }
   ]

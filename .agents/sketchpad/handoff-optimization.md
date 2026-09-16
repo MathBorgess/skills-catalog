@@ -332,3 +332,43 @@ Every field that should have caught this run's problems reads clean.
 - A build seed cloned from the last `target/`, to test P15.
 - `verify` commands checked by the parent before accepting `done` (P17, by hand until the dispatcher does it).
 - The review's blocker order used as the cut.
+
+## Run 20260915T225713Z — the blockers round
+
+**Status: sessions finished; the review's verdict is still out.**
+
+### Shape
+
+- Cut straight from the previous review's blocker list, one session per owner: PTY stop barrier, memory spool, router and probe, daemon, installer and CI, TUI, then integration.
+- Worktrees forked from the merged branch, so no rsync of a contract between rounds — but the daemon session still had to copy three sibling crates by hand (P14).
+- Providers pinned by hand from the quota table.
+
+### What happened
+
+1. **A session finished its work and then blocked on its own sandbox.** The router/probe session did everything, then stopped at the gates: a *pre-existing* test binds a loopback listener, and its sandbox forbids that. The brief's "stop if a test needs a socket bind" rule fired on work that was already done (P4).
+2. **The integration session died of quota mid-proof and left no result file.** It had finished assembly, glue and gates 1–3 (198 tests, three runs) and was partway through the rest. Nothing recorded where it stopped; the progress file and an inspection of the worktree had to reconstruct it. Relaunched on another provider with a resume brief listing exactly what was already done, it finished the remaining gates and the documents.
+3. **Two defects in the parent's own verification tooling**, both found by using it:
+   - a gate script printed `rc=0` for a clippy run that had failed, because `$?` after a pipeline reports the last stage (P17);
+   - a package list held in a shell variable expanded as a single argument under zsh, so three "green" gate runs had never executed at all.
+
+   Both produced *green output for work that never ran* — the same failure the round was meant to police, on the policing side.
+
+### Scorecard
+
+| Field | Value |
+|---|---|
+| sessions | 7, all `done` |
+| wall clock | 4.4h |
+| parent turns (as counted) | 4 |
+| relaunches | 1 |
+| quota_deaths / launch_fails / blocked / failed / abandoned | 0 / 0 / 0 / 0 / 0 |
+| quota_delta_pct | claude 1 · codex 0 · cursor 0 · antigravity 0 |
+
+**The counters now record the parent's edits, not the run's events.** There was one real quota death and one real block. Both read zero because the parent verified the work itself and hand-wrote `done` into `state.json` — which is P19's cost showing up in the metrics: with no supported way to say "I checked this, it passes", the correction leaves no trace, and every counter that should have flagged the run reads clean.
+
+`quota_delta_pct` is useless again for the same reason as the last round: the provider that actually ran out shows −1, because its five-hour window reset between the two snapshots.
+
+### To fill when the review lands
+
+- [ ] Verdict: GO / NO-GO, and the blockers
+- [ ] Whether the parent's independent gate re-run and the static review disagreed anywhere

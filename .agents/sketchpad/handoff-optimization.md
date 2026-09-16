@@ -270,7 +270,7 @@ The same rule binds the verifier. In run 20260915T225713Z the parent's own gate 
 #### P18. Verify where it ships, not only where it was built
 When the target repo has CI, the integration session's `done` waits for a hosted run on the pushed branch, not just local gates. Until then, briefs ask every session to list tests that read host state (real ports, `$HOME`, Keychain) and to inject those values instead.
 
-*Evidence:* item 9.
+*Evidence:* item 9. And a sharper case in run 20260915T225713Z: the same commit produced a **green** hosted run on the `pull_request` event and a **red** one on `push`, minutes apart, on identical content. The failure was a test that sleeps a fixed 100 ms and then asserts a file grew, in a suite that already has a bounded wait helper for exactly that. Eight gate commands had passed locally, three full test runs plus five parallel runs of each stress suite among them. So: a hosted run is necessary, one hosted run is not sufficient, and a fixed sleep before an assertion about another process's work is the usual reason the two disagree.
 
 #### P19. The parent needs a supported way to correct a session's state
 `dispatch` holds its own state in memory and rewrites `state.json` wholesale, so an edit made while it runs is silently reverted on its next write. That cancels P17 in practice: the parent can verify a session's gates but cannot record the verdict, and dependents stay blocked behind a status the parent knows is wrong.

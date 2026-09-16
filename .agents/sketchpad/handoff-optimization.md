@@ -291,7 +291,13 @@ Three times in one run a session exited without writing `NN.result.md`: one afte
 
 Have `dispatch` checkpoint what it can observe cheaply at exit — the worktree diffstat, whether the crate still builds, and the last progress line — and attach it to the failure note. A relaunch brief should be writable from the run directory, not from an investigation.
 
-*Evidence:* run 20260915T225713Z, the integration session and the stop-barrier session.
+*Evidence:* run 20260915T225713Z, four times, across three providers:
+- the integration session, which died part-way through its proof after three clean workspace runs;
+- the stop-barrier session, which left 711 lines of real work on disk after about fifty minutes and wrote nothing;
+- that same session's next attempt, on a different provider, which exited 0 about a minute after launch;
+- the routing session, which wrote 16 files and 1135 lines, ticked one progress item, and stopped.
+
+Three of the four had substantial work on disk. That is the point: "exited without a result" is not "did nothing", so a dispatcher that treats it as a plain failure and relaunches from a fresh worktree would destroy work. The relaunch has to resume, which is why the checkpoint matters.
 
 ### Scorecard
 

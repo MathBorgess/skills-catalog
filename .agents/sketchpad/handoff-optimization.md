@@ -368,7 +368,15 @@ Every field that should have caught this run's problems reads clean.
 
 `quota_delta_pct` is useless again for the same reason as the last round: the provider that actually ran out shows −1, because its five-hour window reset between the two snapshots.
 
-### To fill when the review lands
+### The review, and four instruments that disagreed
 
-- [ ] Verdict: GO / NO-GO, and the blockers
-- [ ] Whether the parent's independent gate re-run and the static review disagreed anywhere
+**Verdict: NO-GO**, with ten new findings, two of them P1. The round closed most of what it was cut for — the spool's atomicity and self-contained records, project identity, plist rendering, the TUI's missing-task and initializer gaps, and model discovery off the registry lock — and the review confirmed those against the source. It also found that the daemon *bypasses* the new stop barrier after a normal leader exit or a failed stop, and that a blocking reap under a lock can defeat the barrier's own deadline. A hold comparing a duration against an epoch timestamp was found by reading, not by any test.
+
+What makes this run worth recording is that **four checks of the same commit disagreed, each catching what the others could not**:
+
+1. **The sessions' own gates:** green. Each session pasted passing commands.
+2. **The parent's re-run of those same gates:** also green — but it caught two false greens in the parent's own harness (a pipeline swallowing the compiler's exit status, and a package list that expanded to one argument under zsh), which had reported success for gates that never ran.
+3. **Hosted CI:** green on one event and red on another, for identical content, minutes apart. A fixed sleep before an assertion about another process's work.
+4. **The static review:** NO-GO, on scenarios no gate exercises — a descendant that outlives a normal leader exit, a lock held across a blocking wait, a unit mismatch on a wire field.
+
+None of the four substitutes for another. A run that only collects green gates ships all three of the other categories.

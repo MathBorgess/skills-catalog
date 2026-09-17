@@ -47,7 +47,8 @@ This is the step that is yours. Write `$HANDOFF_RUN/plan.json`:
 
 - `deps` is a dependency graph, **not waves.** A session starts when its own dependencies finish, not when a whole batch does. Batching is what turns twenty sessions into ten serial rounds.
 - `writes` is the write-set. Two sessions with no dependency path between them **must not** share one — `route` refuses the plan if they do, naming the paths.
-- `tier` (`mechanical` | `design` | `review`) and `size` (`s` | `m` | `l`) drive model choice and cost estimation.
+- `tier` (`mechanical` | `design` | `review`) and `size` (`s` | `m` | `l`) drive model choice, guided by [`prompts/model-routing.md`](../../prompts/model-routing.md).
+- `needs` is an optional list of required capabilities (`network`, `unix-socket`, `git-write`, etc.). `route` filters out candidate slots whose sandbox blocks any requirement (e.g. Codex `workspace-write`).
 - `horizon_s` is how long you expect the whole run to take. It decides whether a provider whose window reopens mid-run counts as supply.
 
 Rules for cutting: [`references/routing.md`](references/routing.md).
@@ -56,16 +57,30 @@ Rules for cutting: [`references/routing.md`](references/routing.md).
 
 One `NN.md` + one `NN.prompt.md` per session, per [`references/brief.md`](references/brief.md). **You author Goal and Constraints yourself** — they carry the conversation knowledge nothing else has. Expansion (scope lists, pointers, boilerplate) may be delegated to a cheap model that writes straight to disk; you do not read it back. Pointers to existing artifacts by path or URL; never paste the artifact. Redact secrets and PII.
 
-## 5. Route, then dispatch — same turn, no approval
+## 5. Route, present plan, and await human approval before dispatch
 
 ```bash
-node <skill>/scripts/handoff.mjs route    --run "$HANDOFF_RUN"
+node <skill>/scripts/handoff.mjs route --run "$HANDOFF_RUN"
+```
+
+`route` prints the quota table and the routing table, refuses a plan whose sessions collide or violate capability `needs`, and warns when the cut costs more quota than the pool holds. Show both tables to the user.
+
+### Supervisor Report to the User
+Before launching any children, you **must** report to the user:
+1. The **implementation graph** (dependencies between sessions, in a mermaid flowchart or structured outline).
+2. The **parallel concurrency** (how many sessions run immediately in parallel and total sessions).
+3. The selected **provider and model** for each session, along with the `tier` and `needs` rationale.
+
+### Human Approval Gate
+**STOP and ask the user for explicit approval to execute the plan.**
+Do **NOT** run `dispatch` in the same turn. Execution of `dispatch` requires explicit human approval of the graph and assignments.
+
+Once the user approves:
+```bash
 node <skill>/scripts/handoff.mjs dispatch --run "$HANDOFF_RUN" --budget 540
 ```
 
-`route` prints the quota table and the routing table, refuses a plan whose sessions collide, and warns when the cut costs more quota than the pool holds. Show both tables to the user.
-
-`dispatch` launches everything whose dependencies are met, waits, relaunches a session whose provider ran out on the next eligible slot, and returns a one-line-per-session digest. It is one call, not a poll loop. If it reports sessions still running, call it again — or run it with `run_in_background` and keep working. A session that fails to start at all is a stale CLI flag: [`references/providers.md`](references/providers.md) says how to fix it and where.
+`dispatch` launches everything whose dependencies are met, waits, relaunches a session whose provider ran out or died on launch/auth on the next eligible slot, and returns a one-line-per-session digest. It is one call, not a poll loop. If it reports sessions still running, call it again — or run it with `run_in_background` and keep working. A session that fails to start at all is a stale CLI flag: [`references/providers.md`](references/providers.md) says how to fix it and where.
 
 **compact:** one session in the plan; write the brief and stop. Launch only if the user named a provider.
 
@@ -88,9 +103,10 @@ Re-probes, writes the scorecard into `manifest.md`, appends one line to `$TMPDIR
 ## Done-check
 
 - [ ] `probe` ran before any launch; the slot table was shown with every window and every lane, not just the binding one.
-- [ ] `plan.json` exists; `route` accepted it (no write-set collisions) and its table was shown.
+- [ ] `plan.json` exists; `route` accepted it (no write-set collisions, capability `needs` satisfied) and its table was shown.
+- [ ] Implementation graph, parallel concurrency count, and provider/model choices presented to user.
+- [ ] Fan-out: plan explicitly approved by the human before running `dispatch`; no child launched by hand.
 - [ ] Every session has a brief written before dispatch; Goal and Constraints are yours.
-- [ ] Fan-out: dispatched without waiting for approval; no child launched by hand.
 - [ ] Parent implemented nothing a session owned, and read no child log or worktree.
 - [ ] Secrets and PII redacted; existing artifacts referenced, not copied.
 - [ ] `score` ran; the report gives the run path, both tables, per-session status, and the quota cost.

@@ -12,6 +12,7 @@ import {
   openSync,
   readFileSync,
   readSync,
+  realpathSync,
   rmSync,
   statSync,
   writeFileSync,
@@ -29,7 +30,13 @@ export const LIVE_MAX_AGE_S = 7200;
 const nowISO = () => new Date().toISOString();
 
 export function workspaceId(cwd = process.cwd()) {
-  return createHash("sha256").update(resolve(cwd)).digest("hex").slice(0, 12);
+  let p;
+  try {
+    p = realpathSync.native ? realpathSync.native(cwd) : realpathSync(cwd);
+  } catch {
+    p = resolve(cwd);
+  }
+  return createHash("sha256").update(p).digest("hex").slice(0, 12);
 }
 
 export function runDir(cwd = process.cwd()) {

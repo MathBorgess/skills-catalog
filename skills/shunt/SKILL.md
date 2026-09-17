@@ -31,7 +31,7 @@ node <skill>/scripts/shunt.mjs inspect --file PATH
 - **Under** the threshold (see inspect) → `Read` PATH.
 - **Over** → `Read` only the outline inspect wrote. Never `Read` PATH.
 - Outline is enough to pick a span → `excerpt --file PATH --start N --end M`, then `Read` the excerpt.
-- Outline is not enough → spawn a **small/fast** subagent to write a summary into the run dir (cap in [`references/read-path.md`](references/read-path.md)). `Read` only that summary. Do not read the subagent transcript.
+- Outline is not enough → spawn a **small/fast** subagent (class `fast_cheap_own` in [`prompts/model-routing.md`](../../prompts/model-routing.md), e.g. Flash, Haiku, Composer) to write a summary into the run dir (cap in [`references/read-path.md`](references/read-path.md)). `Read` only that summary. Do not read the subagent transcript.
 
 Deny-reason from the hook is this same flow. Follow it; do not retry the full `Read`.
 
@@ -41,7 +41,7 @@ You edit. Cheap models do not. Use `path:line` from the outline, excerpt that sp
 
 ## 4. Writes — boilerplate, config, mechanical tests
 
-Spawn the small/fast subagent **before you draft the file**. `track-write --file PATH` → child writes to disk → `write-done --file PATH`. Do not `Read` the result. Do not compose the blob in this context.
+Spawn a **small/fast** subagent (class `fast_cheap_own` in [`prompts/model-routing.md`](../../prompts/model-routing.md)) **before you draft the file**. `track-write --file PATH` → child writes to disk → `write-done --file PATH`. Do not `Read` the result. Do not compose the blob in this context.
 
 When the writer is running, the hook refuses your Read/Edit/Write on those paths. After it finishes, full `Read` stays refused; excerpts are allowed if you later edit.
 

@@ -6,7 +6,7 @@ Mechanical generation (boilerplate, config, tests whose shape is already decided
 
 1. Decide the path and the constraints (you). Name a reference file the child may read, not a paste of it.
 2. `track-write --file PATH` — marks write-delegate **running**.
-3. Spawn a **small/fast** subagent: write PATH, then stop. It may `Read` PATH's reference and the brief; it does not talk back except `write-done` materialised as the file on disk.
+3. Spawn a **small/fast** subagent (class `fast_cheap_own` per [`prompts/model-routing.md`](../../../prompts/model-routing.md)): write PATH, then stop. It may `Read` PATH's reference and the brief; it does not talk back except `write-done` materialised as the file on disk.
 4. `write-done --file PATH` — running → done.
 5. You do not `Read` PATH. Existence, tests, or `status` are the check.
 

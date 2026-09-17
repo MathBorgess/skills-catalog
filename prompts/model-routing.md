@@ -10,8 +10,8 @@ Agents and orchestrators categorize candidate models into two fundamental classe
 
 | Class | Profile | Archetypal Roles | Typical Models |
 |---|---|---|---|
-| `fast_cheap_own` | High throughput, minimal token/quota cost, lower reasoning depth, fast execution. | Outlines, summaries, mechanical file generation, lint fixes, repetitive tests, boilerplate, syntactic renames. | Gemini Flash, Claude Haiku, Cursor Composer/Auto, GPT-4o-mini. |
-| `frontier_reasoning` | High reasoning capacity, complex constraint satisfaction, expensive token/quota budget. | Architecture design, ambiguous specification analysis, cross-module integration, root-cause debugging, security and logic review. | Gemini Pro, Claude Sonnet/Opus, GPT-4o, o1, o3-mini. |
+| `fast_cheap_own` | High throughput, minimal token/quota cost, lower reasoning depth, fast execution. | Outlines, summaries, mechanical file generation, lint fixes, repetitive tests, boilerplate, syntactic renames. | Gemini 3.8 Flash, Claude Haiku 4.5 / 3.5 Haiku, Cursor Grok 4.5, Composer, GPT-5.4 Mini / Nano. |
+| `frontier_reasoning` | High reasoning capacity, complex constraint satisfaction, expensive token/quota budget. | Architecture design, ambiguous specification analysis, cross-module integration, root-cause debugging, security and logic review. | GPT-6 Astra, GPT-5.6 Sol/Terra/Luna, Claude Opus 5, Claude Opus 4.8 Thinking, Claude Sonnet 5, Gemini 3.1 Pro. |
 
 ---
 
@@ -76,3 +76,46 @@ Before assigning a task to any slot/sandbox, check intersection against known sa
 ### Multi-Provider Context (`handoff`)
 - Maps the classes above into concrete provider slots, multi-window quotas (5h vs 7d), and lane kinds (`own` vs `frontier`).
 - See [`skills/handoff/references/routing.md`](skills/handoff/references/routing.md) for provider-specific slot tables and CLI bindings.
+
+---
+
+## 6. Multi-Harness Model Catalog
+
+A concrete mapping of supported harnesses to their respective model classes and live CLI selectors.
+
+### OpenAI / Codex Harness (`codex`)
+- **Frontier Reasoning (`frontier_reasoning`)**:
+  - `gpt-6-astra` — Flagship reasoning model for top-level system architecture, delicate invariants, and ambiguous specifications.
+  - `gpt-5.6-sol`, `gpt-5.6-terra`, `gpt-5.6-luna` — High-depth reasoning variants with 1M context.
+  - `o3`, `o4` series — Deep chain-of-thought verification.
+- **Fast / Worker / Cheap (`fast_cheap_own`)**:
+  - `gpt-5.4-mini`, `gpt-5.4-nano`, `gpt-5-mini` — Lightweight subagent workers for boilerplate, doc updates, and mechanical unit tests.
+
+### Anthropic / Claude Code Harness (`claude`)
+- **Frontier Reasoning (`frontier_reasoning`)**:
+  - `claude-opus-5` (CLI alias: `opus`) — Flagship architectural model, invariant audits, complex refactorings.
+  - `claude-opus-4-8-thinking` — High-effort extended thinking model.
+  - `claude-sonnet-5` (CLI alias: `sonnet`) — Primary workhorse balancing top reasoning capabilities and rapid feedback.
+  - `claude-fable-5-1-thinking` — Specialized reasoning tier.
+- **Fast / Cheap / Own (`fast_cheap_own`)**:
+  - `claude-haiku-4-5` / `claude-3-5-haiku` (CLI alias: `haiku`) — High-throughput mechanical transforms and summaries.
+  - `claude-fable-5-1-low` — Low-overhead file generator.
+
+### Google / Antigravity Harness (`agy`)
+- **Fast / High-Throughput (`own` Gemini lane)**:
+  - `gemini-3.8-flash-high`, `gemini-3.8-flash-medium`, `gemini-3.8-flash-low` — High-speed, large-context (1M+) worker for ingestion and mechanical code writes.
+  - `gemini-3.7-flash`, `gemini-3.6-flash` — High-volume fallback tiers.
+- **Frontier Deep Reasoning (`own` Gemini lane)**:
+  - `gemini-3.1-pro-high`, `gemini-3.1-pro-low` — Flagship frontier reasoning for complex architectural decisions.
+- **Frontier Third-Party (`3p` lane)**:
+  - `claude-opus-4-6-thinking`, `claude-sonnet-4-6`, `gpt-oss-120b-medium`.
+- **Effort Flag Mapping**: `--effort low` (`mechanical`), `--effort medium` (`review`), `--effort high` (`design`).
+
+### Cursor Harness (`cursor-agent`)
+- **Included / Own Models (`cursor-models` lane)**:
+  - `cursor-grok-4.5-medium`, `cursor-grok-4.5-low` — Fast reasoning with zero API markup.
+  - `composer`, `auto` — Native cursor IDE agent tiers.
+- **Other Models (`other-models` metered API lane)**:
+  - `claude-opus-5`, `claude-opus-4-8-thinking-*`, `claude-sonnet-5-*`.
+  - `gpt-6-astra`, `gpt-5.6-sol-*`, `gpt-5.6-terra-*`, `gpt-5.6-luna-*`.
+  - `gemini-3.1-pro`, `gemini-3.8-flash-*`, `gpt-5.4-mini-*`.

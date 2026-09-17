@@ -36,11 +36,12 @@ The core decision matrix and model taxonomy live in [`prompts/model-routing.md`]
 | `m` | one module, a handful of files, the shape is already decided |
 | `l` | a subsystem, or any job where the design is still being made |
 
-| `tier` | Model class to pick | Multi-provider role |
-|---|---|---|
-| `mechanical` | `fast_cheap_own` | cheaper/faster id (Gemini 3.8 Flash, Claude Haiku 4.5, Cursor Grok 4.5, Composer, GPT-5.4 Mini) — implementation, tests, lint, renames |
-| `design` | `frontier_reasoning` | stronger id (GPT-6 Astra, GPT-5.6 Sol, Claude Opus 5, Claude Sonnet 5, Gemini 3.1 Pro) — architecture, ambiguous spec, judgment calls |
-| `review` | `frontier_reasoning` | stronger id (Claude Opus 5, GPT-6 Astra, Gemini 3.1 Pro) — read-only audit, finding subtle edge cases |
+| `tier` | `size` | Model class to pick | Multi-provider role |
+|---|---|---|---|
+| `mechanical` | Any | `fast_cheap_own` | cheaper/faster id (Gemini 3.8 Flash [universal in Agy], Claude Haiku 4.5, Cursor Grok 4.6, Composer, GPT-5.6 Luna [minor] / GPT-5.4 Mini) — implementation, tests, lint, renames |
+| `design` | `s` / `m` | `frontier_reasoning` | solid reasoning id (GPT-5.6 Sol/Terra, Claude Sonnet 5, Claude Opus 5; or Gemini 3.8 Flash `--effort high` in Agy). Do not burn Astra on small/medium scope. |
+| `design` | `l` | `frontier_reasoning` | **GPT-6 Astra** (reserved strictly for the BIGGEST tasks — foundational architecture, cross-cutting contracts, massive blast radius; fallback Claude Opus 5) |
+| `review` | Any | `frontier_reasoning` | stronger id (Claude Opus 5, GPT-5.6 Sol; or Gemini 3.8 Flash `--effort medium` in Agy) — read-only audit, finding subtle edge cases |
 
 ### Session capabilities (`needs`)
 Sessions can declare environment requirements:
@@ -67,7 +68,7 @@ The preference is steep but not a wall: the other lane still wins when the prefe
 
 `route` **pins** the lane by taking a model id from the CLI's own list — `cursor-agent --list-models`, `agy models` — never one from memory, and prefers a named own-model over bare `auto` (a vendor's Auto router can land in the other pool). When a CLI publishes no list the lane stays a preference its default model may ignore, and the cell is marked `*`. A model you set yourself always wins, and pins the lane that model belongs to.
 
-On Antigravity the tier also sets `--effort` (`mechanical` → `low`, `review` → `medium`, `design` → `high`): reasoning intensity is the same spend decision as model choice, in that CLI's own vocabulary.
+On Antigravity, **Gemini 3.8 Flash should be used for all tasks** (`mechanical`, `review`, and `design`), with `--effort` controlling cognitive depth (`mechanical` → `low`, `review` → `medium`, `design` → `high`). Reasoning intensity is the spend decision in that CLI's vocabulary rather than swapping models.
 
 At dispatch, a lane that dies of quota blacklists **that lane**, not the slot: a session that exhausts Other Models is relaunched on Cursor Models with a model from that pool, without a parent turn.
 

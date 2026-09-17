@@ -10,8 +10,8 @@ Agents and orchestrators categorize candidate models into two fundamental classe
 
 | Class | Profile | Archetypal Roles | Typical Models |
 |---|---|---|---|
-| `fast_cheap_own` | High throughput, minimal token/quota cost, lower reasoning depth, fast execution. | Outlines, summaries, mechanical file generation, lint fixes, repetitive tests, boilerplate, syntactic renames. | Gemini 3.8 Flash, Claude Haiku 4.5 / 3.5 Haiku, Cursor Grok 4.5, Composer, GPT-5.4 Mini / Nano. |
-| `frontier_reasoning` | High reasoning capacity, complex constraint satisfaction, expensive token/quota budget. | Architecture design, ambiguous specification analysis, cross-module integration, root-cause debugging, security and logic review. | GPT-6 Astra, GPT-5.6 Sol/Terra/Luna, Claude Opus 5, Claude Opus 4.8 Thinking, Claude Sonnet 5, Gemini 3.1 Pro. |
+| `fast_cheap_own` | High throughput, minimal token/quota cost, lower reasoning depth, fast execution. Universal worker in Antigravity. | Outlines, summaries, mechanical file generation, lint fixes, repetitive tests, boilerplate, syntactic renames. Universal worker for Antigravity. | Gemini 3.8 Flash (universal in Agy), Claude Haiku 4.5 / 3.5 Haiku, Cursor Grok 4.6, Composer, GPT-5.6 Luna (minor) / GPT-5.4 Mini. |
+| `frontier_reasoning` | High reasoning capacity, complex constraint satisfaction, expensive token/quota budget. | Architecture design, ambiguous specification analysis, cross-module integration, root-cause debugging, security and logic review. | GPT-6 Astra (BIGGEST tasks only), GPT-5.6 Sol/Terra, Claude Opus 5, Claude Opus 4.8 Thinking, Claude Sonnet 5, Gemini 3.8 Flash (with `--effort high` in Agy). |
 
 ---
 
@@ -44,13 +44,13 @@ Declared environment requirements that execution slots must guarantee:
 
 | Tier | Size | Primary Model Class | Fallback Rule | Quota / Token Principle |
 |---|---|---|---|---|
-| `mechanical` | `s` | `fast_cheap_own` | — | Never burn metered frontier quota on localized mechanical tasks. |
-| `mechanical` | `m` | `fast_cheap_own` | `frontier_reasoning` (only if own pool is 0%) | Prefer own/cheap model even if multiple turns are needed. |
+| `mechanical` | `s` | `fast_cheap_own` | — | Never burn metered frontier quota on localized mechanical tasks. In Agy, use Gemini 3.8 Flash (`--effort low`). |
+| `mechanical` | `m` | `fast_cheap_own` | `frontier_reasoning` (only if own pool is 0%) | Prefer own/cheap model even if multiple turns are needed. In Agy, use Gemini 3.8 Flash. |
 | `mechanical` | `l` | `fast_cheap_own` | `frontier_reasoning` (downgrade alert) | Keep reasoning effort low; if split is possible, decompose into smaller `mechanical` tasks. |
-| `design` | `s` | `frontier_reasoning` | `fast_cheap_own` (with human warning) | High reasoning saves rework. |
-| `design` | `m` | `frontier_reasoning` | — | Do not trade down to small model; wait or use secondary frontier slot. |
-| `design` | `l` | `frontier_reasoning` | — | Pin highest capability slot available. |
-| `review` | Any | `frontier_reasoning` | — | Review requires invariant catching; cheap models produce false confidence. |
+| `design` | `s` | `frontier_reasoning` (Sonnet 5, GPT-5.6 Sol/Terra) | `fast_cheap_own` (with human warning) | High reasoning saves rework. Never assign Astra to small scope. In Agy: Gemini 3.8 Flash (`--effort high`). |
+| `design` | `m` | `frontier_reasoning` (Opus 5, GPT-5.6 Sol/Terra) | — | Solid frontier reasoning. Do not spend Astra on module-level scope. In Agy: Gemini 3.8 Flash (`--effort high`). |
+| `design` | `l` | `frontier_reasoning` (**GPT-6 Astra** only for the BIGGEST tasks) | `Claude Opus 5` / `GPT-5.6 Sol` | **Astra is reserved ONLY for the BIGGEST tasks** (system-wide contracts, foundational architecture, massive blast radius). |
+| `review` | Any | `frontier_reasoning` (Opus 5, GPT-5.6 Sol) | — | Review requires invariant catching; cheap models produce false confidence. In Agy: Gemini 3.8 Flash (`--effort medium`). |
 
 ---
 
@@ -85,8 +85,9 @@ A concrete mapping of supported harnesses to their respective model classes and 
 
 ### OpenAI / Codex Harness (`codex`)
 - **Frontier Reasoning (`frontier_reasoning`)**:
-  - `gpt-6-astra` — Flagship reasoning model for top-level system architecture, delicate invariants, and ambiguous specifications.
-  - `gpt-5.6-sol`, `gpt-5.6-terra`, `gpt-5.6-luna` — High-depth reasoning variants with 1M context.
+  - `gpt-6-astra` — **Reserved strictly for the BIGGEST tasks** (system-wide foundational architecture, cross-cutting contracts, massive blast radius). Never assign to small/medium scoped sessions.
+  - `gpt-5.6-sol`, `gpt-5.6-terra` — Primary frontier reasoning models for standard design sessions, complex algorithms, and deep refactors.
+  - `gpt-5.6-luna` — **The minor model** within the 5.6 family, tailored for lighter reasoning, fast iterations, and minor subtasks.
   - `o3`, `o4` series — Deep chain-of-thought verification.
 - **Fast / Worker / Cheap (`fast_cheap_own`)**:
   - `gpt-5.4-mini`, `gpt-5.4-nano`, `gpt-5-mini` — Lightweight subagent workers for boilerplate, doc updates, and mechanical unit tests.
@@ -102,20 +103,23 @@ A concrete mapping of supported harnesses to their respective model classes and 
   - `claude-fable-5-1-low` — Low-overhead file generator.
 
 ### Google / Antigravity Harness (`agy`)
-- **Fast / High-Throughput (`own` Gemini lane)**:
-  - `gemini-3.8-flash-high`, `gemini-3.8-flash-medium`, `gemini-3.8-flash-low` — High-speed, large-context (1M+) worker for ingestion and mechanical code writes.
-  - `gemini-3.7-flash`, `gemini-3.6-flash` — High-volume fallback tiers.
-- **Frontier Deep Reasoning (`own` Gemini lane)**:
-  - `gemini-3.1-pro-high`, `gemini-3.1-pro-low` — Flagship frontier reasoning for complex architectural decisions.
-- **Frontier Third-Party (`3p` lane)**:
+- **Universal Engine (`own` Gemini lane)**:
+  - **`gemini-3.8-flash` should be used for ALL tasks in Antigravity** (`gemini-3.8-flash-high`, `gemini-3.8-flash-medium`, `gemini-3.8-flash-low`). It acts as the single universal workhorse across mechanical, review, and design workloads.
+  - **Effort Flag Scaling**: Reasoning depth is adjusted purely via the CLI effort flag rather than changing model tiers:
+    - `--effort low` → `mechanical` tasks (file transforms, lint fixes, boilerplate).
+    - `--effort medium` → `review` tasks (audit, invariant checks, regression scan).
+    - `--effort high` → `design` tasks (subsystem contracts, interfaces, architectural decisions).
+- **Auxiliary / Fallback Tiers**:
+  - `gemini-3.7-flash`, `gemini-3.6-flash`, `gemini-3.1-pro-high/low` (when explicitly mandated).
+- **Third-Party Lane (`3p`)**:
   - `claude-opus-4-6-thinking`, `claude-sonnet-4-6`, `gpt-oss-120b-medium`.
-- **Effort Flag Mapping**: `--effort low` (`mechanical`), `--effort medium` (`review`), `--effort high` (`design`).
 
 ### Cursor Harness (`cursor-agent`)
 - **Included / Own Models (`cursor-models` lane)**:
-  - `cursor-grok-4.5-medium`, `cursor-grok-4.5-low` — Fast reasoning with zero API markup.
+  - `cursor-grok-4.6` (`cursor-grok-4.6-medium`, `cursor-grok-4.6-low`) — High-speed reasoning with zero API markup.
   - `composer`, `auto` — Native cursor IDE agent tiers.
 - **Other Models (`other-models` metered API lane)**:
+  - `gpt-6-astra` — Reserved strictly for the BIGGEST tasks.
   - `claude-opus-5`, `claude-opus-4-8-thinking-*`, `claude-sonnet-5-*`.
-  - `gpt-6-astra`, `gpt-5.6-sol-*`, `gpt-5.6-terra-*`, `gpt-5.6-luna-*`.
-  - `gemini-3.1-pro`, `gemini-3.8-flash-*`, `gpt-5.4-mini-*`.
+  - `gpt-5.6-sol-*`, `gpt-5.6-terra-*`, `gpt-5.6-luna-*` (minor model).
+  - `gemini-3.8-flash-*`, `gpt-5.4-mini-*`.

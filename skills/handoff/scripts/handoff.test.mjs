@@ -186,6 +186,133 @@ function persistedStatus(dir, id = "01") {
   );
 }
 
+// P1, P4, P8: Route tests for capability needs, dead slot preservation, and auth awareness
+function makeRouteRun({ plan, quota, state } = {}) {
+  const dir = mkdtempSync(join(tmpdir(), "handoff-route-test-"));
+  mkdirSync(join(dir, "sessions"), { recursive: true });
+  const q = quota ?? {
+    ts: new Date().toISOString(),
+    slots: [
+      {
+        key: "codex",
+        provider: "codex",
+        account: "default",
+        installed: true,
+        bin: "codex",
+        remaining_pct: 80,
+        bucket: "ok",
+        windows: [{ name: "5h", remaining_pct: 80, resets_at: null, window_secs: 18000 }],
+        source: "codex-test",
+      },
+      {
+        key: "claude",
+        provider: "claude",
+        account: "default",
+        installed: true,
+        bin: "claude",
+        remaining_pct: 90,
+        bucket: "ok",
+        windows: [{ name: "5h", remaining_pct: 90, resets_at: null, window_secs: 18000 }],
+        source: "claude-test",
+      },
+    ],
+  };
+  writeFileSync(join(dir, "quota.json"), JSON.stringify(q, null, 2));
+  const p = plan ?? {
+    mode: "fan-out",
+    horizon_s: 7200,
+    sessions: [
+      { id: "01", goal: "task 1", tier: "mechanical", size: "s", writes: ["a.txt"], deps: [] },
+    ],
+  };
+  writeFileSync(join(dir, "plan.json"), JSON.stringify(p, null, 2));
+  if (state) {
+    writeFileSync(join(dir, "state.json"), JSON.stringify(state, null, 2));
+  }
+  return dir;
+}
+
+{
+  // P4: Needs filtering excludes Codex when unix-socket is needed
+  const dir = makeRouteRun({
+    plan: {
+      mode: "fan-out",
+      horizon_s: 7200,
+      sessions: [
+        { id: "01", goal: "daemon test", tier: "mechanical", size: "s", writes: ["d.txt"], deps: [], needs: ["unix-socket"] },
+      ],
+    },
+  });
+  const r = run("route", dir);
+  assert("route exits 0 when capable provider exists for needs", r.status === 0);
+  const routing = JSON.parse(readFileSync(join(dir, "routing.json"), "utf8"));
+  assert("route assigns session with unix-socket to claude, not codex", routing.sessions[0].provider === "claude");
+}
+
+{
+  // P4: Explicit pinned provider violating needs fails fast
+  const dir = makeRouteRun({
+    plan: {
+      mode: "fan-out",
+      horizon_s: 7200,
+      sessions: [
+        { id: "01", goal: "daemon test", provider: "codex", tier: "mechanical", size: "s", writes: ["d.txt"], deps: [], needs: ["unix-socket"] },
+      ],
+    },
+  });
+  const r = run("route", dir);
+  assert("route refuses plan pinning codex with unix-socket needs", r.status !== 0);
+  assert("route error message explains sandbox capability violation", /does not satisfy required needs/.test(r.stderr));
+}
+
+{
+  // P8: Dead slots in state.json are avoided by route
+  const dir = makeRouteRun({
+    state: { empty_slots: ["claude"], sessions: {}, parent_turns: 1 },
+  });
+  const r = run("route", dir);
+  assert("route exits 0 avoiding empty_slots", r.status === 0);
+  const routing = JSON.parse(readFileSync(join(dir, "routing.json"), "utf8"));
+  assert("route skips dead claude slot and routes to codex", routing.sessions[0].provider === "codex");
+}
+
+{
+  // P1: auth_expired slots are excluded by route
+  const quota = {
+    ts: new Date().toISOString(),
+    slots: [
+      {
+        key: "claude",
+        provider: "claude",
+        account: "default",
+        installed: true,
+        bin: "claude",
+        remaining_pct: null,
+        bucket: "unknown",
+        auth_expired: true,
+        windows: [],
+        source: "expired-credential",
+      },
+      {
+        key: "codex",
+        provider: "codex",
+        account: "default",
+        installed: true,
+        bin: "codex",
+        remaining_pct: 80,
+        bucket: "ok",
+        windows: [{ name: "5h", remaining_pct: 80, resets_at: null, window_secs: 18000 }],
+        source: "codex-test",
+      },
+    ],
+  };
+  const dir = makeRouteRun({ quota });
+  const r = run("route", dir);
+  assert("route exits 0 skipping auth_expired slot", r.status === 0);
+  const routing = JSON.parse(readFileSync(join(dir, "routing.json"), "utf8"));
+  assert("route skips auth_expired claude and routes to codex", routing.sessions[0].provider === "codex");
+}
+
 if (failed) {
   console.error(`\n${failed} failed`);
   process.exit(1);

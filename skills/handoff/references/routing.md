@@ -24,9 +24,11 @@ Detect from this session's environment. That is the provider whose tokens you ar
 
 **False independence.** `route` refuses the plan when two concurrent sessions write overlapping paths, so this cannot reach a launch. It compares literal path prefixes and always treats lockfiles as shared, which catches the ordinary cases; it cannot reason about two globs that overlap only in the middle. Still yours to notice: two sessions editing the same barrel file, the same generated snapshot, or the same migration sequence through different paths.
 
-## Sizing and tiering
+## Sizing, tiering, and capabilities
 
-`size` drives the cost estimate and therefore admission control. `tier` drives the model.
+The core decision matrix and model taxonomy live in [`prompts/model-routing.md`](../../../prompts/model-routing.md).
+
+`size` drives the cost estimate and admission control. `tier` and `needs` drive model choice and sandbox eligibility.
 
 | `size` | A session that… |
 |---|---|
@@ -34,11 +36,19 @@ Detect from this session's environment. That is the provider whose tokens you ar
 | `m` | one module, a handful of files, the shape is already decided |
 | `l` | a subsystem, or any job where the design is still being made |
 
-| `tier` | Model to pick |
-|---|---|
-| `mechanical` | the cheaper/faster id the CLI lists — implementation, tests, lint, renames |
-| `design` | a stronger id — architecture, ambiguous spec, anything with a judgment call inside |
-| `review` | a stronger id, read-only, no worktree |
+| `tier` | Model class to pick | Multi-provider role |
+|---|---|---|
+| `mechanical` | `fast_cheap_own` | cheaper/faster id (Flash, Haiku, Composer, GPT-4o-mini) — implementation, tests, lint, renames |
+| `design` | `frontier_reasoning` | stronger id (Pro, Sonnet, GPT-4o/o3) — architecture, ambiguous spec, judgment calls |
+| `review` | `frontier_reasoning` | stronger id, read-only audit, finding subtle edge cases |
+
+### Session capabilities (`needs`)
+Sessions can declare environment requirements:
+`"needs": ["network", "unix-socket", "git-write", "pty", "disk-write"]`
+
+`route` matches these against provider sandbox limitations:
+- **Codex (`workspace-write`)**: Forbids `network`, `unix-socket` (cannot bind loopback/IPC in tests), and `git-write` (common `.git` lies outside the writable root). Any session needing these **must not** be routed to Codex.
+- **Claude, Cursor, Antigravity**: Support network, sockets, and git operations under standard permissions flags.
 
 Leave `model` unset unless the user named one or the tier clearly demands a specific id. An unset model means the CLI default, which never goes stale. Never invent a model id from memory; probe the CLI's own list.
 
@@ -70,6 +80,14 @@ In order:
 3. **Admission control.** Estimated demand (per-session cost by provider and size, from this machine's own history once it has three samples, a built-in prior before that) against total supply. Over budget → the table carries a warning naming the shortfall. Act on it: cut fewer and bigger sessions, or dispatch after the soonest reset. Launching into a wall costs a whole session and produces nothing.
 4. **Assignment**, minimising projected utilisation per **lane** rather than counting sessions — a five-minute lint job and a subsystem refactor are not one each, and two lanes of the same slot compete for work independently. A user-named provider wins and is marked as an override.
 5. **Rerouting**, at dispatch time: a session that dies with quota language is relaunched on the next eligible lane — which may be the other lane of the same provider — up to three attempts, without a parent turn.
+
+## Execution transparency and human approval gate
+
+Before running `dispatch`, the supervisor agent must synthesize the plan for the user:
+1. **Implementation Graph**: Present the DAG and dependency order so the human can inspect sequencing.
+2. **Parallel Concurrency**: State how many sessions will execute in parallel and the total session count.
+3. **Provider and Model Assignment**: Detail which slot, lane, and model were chosen for each session, with `tier` and `needs` justification.
+4. **Approval Gate**: Pause and wait for explicit user confirmation before executing `dispatch`.
 
 ## Isolation
 

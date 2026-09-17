@@ -1031,7 +1031,7 @@ function fromUsagebar(report, ids) {
 // `window` are only the headline — the binding one right now. Supply is
 // computed per window and then taken at the minimum, because a plan gates on
 // all of its windows at once and each refills on its own schedule.
-function makeSlot({ key, provider, account, bin, windows, lanes, source, estimated, note, tried }) {
+function makeSlot({ key, provider, account, bin, windows, lanes, source, estimated, note, tried, auth_expired }) {
   const usableOf = (ws) => (ws ?? []).filter((w) => typeof w.remaining_pct === "number");
   // A lane with its own windows is worth its tightest one — the same rule that
   // makes a slot worth the least of its windows, applied one level down.
@@ -1039,7 +1039,7 @@ function makeSlot({ key, provider, account, bin, windows, lanes, source, estimat
     ? lanes.map((l) => {
         const own = usableOf(l.windows);
         const remaining_pct = own.length ? pickTightest(own).remaining_pct : l.remaining_pct;
-        return { ...l, remaining_pct, bucket: bucketOf(remaining_pct) };
+        return { ...l, remaining_pct, bucket: auth_expired ? "unknown" : bucketOf(remaining_pct) };
       })
     : undefined;
   const usable = usableOf(windows);
@@ -1063,12 +1063,13 @@ function makeSlot({ key, provider, account, bin, windows, lanes, source, estimat
     windows: windows?.length ? windows : undefined,
     // Alternatives, not gates — see the lanes block above.
     lanes: lanesOut,
-    remaining_pct: head?.remaining_pct ?? null,
+    remaining_pct: auth_expired ? null : (head?.remaining_pct ?? null),
     window: head?.name ?? windows?.[0]?.name ?? null,
     resets_at: head?.resets_at ?? windows?.[0]?.resets_at ?? null,
     window_secs: head?.window_secs ?? windows?.[0]?.window_secs ?? null,
-    bucket: bucketOf(head?.remaining_pct),
+    bucket: auth_expired ? "unknown" : bucketOf(head?.remaining_pct),
     estimated: estimated || undefined,
+    auth_expired: auth_expired || undefined,
     source,
     note: note || undefined,
     tried,
@@ -1121,6 +1122,7 @@ async function probe() {
       const tokenless = tried.filter((t) => t.state === "no token").map((t) => t.label);
       if (expiredSeen) {
         note = `every credential found is expired — run \`${bin}\` once to refresh`;
+        source = "expired-credential";
       } else if (tokenless.length) {
         // Logged in, but the session token is not in the file this probe can
         // read. Telling someone to log in again when they already are is the
@@ -1158,8 +1160,10 @@ async function probe() {
 
     // Source 3: the transcripts this machine already wrote. No credential, no
     // network — so it still answers when every OAuth path above has failed.
+    // P1: A slot that fell back to transcripts *because* credentials expired is
+    // unusable, so do not estimate quota from transcripts if auth expired.
     let estimated = false;
-    if (!result && p.local) {
+    if (!result && p.local && !expiredSeen) {
       const local = localSnapshot(p.local);
       const asWindow = (l) => ({
         windows: [
@@ -1194,6 +1198,7 @@ async function probe() {
         lanes: result?.lanes,
         source: source ?? "probe failed",
         estimated, note,
+        auth_expired: Boolean(expiredSeen),
         tried: arg("explain") ? tried : undefined,
       }),
     );
@@ -1421,6 +1426,22 @@ const LANE_PENALTY = 3;
 // and a frontier one, whatever it calls them.
 const preferredLane = (tier) => (tier === "mechanical" ? "own" : "frontier");
 
+// P4: Provider sandbox capabilities. A session that declares `needs` cannot be
+// routed to a sandbox that blocks any of those requirements.
+const PROVIDER_CAPABILITIES = {
+  claude: new Set(["network", "unix-socket", "git-write", "pty", "disk-write", "high-memory"]),
+  cursor: new Set(["network", "unix-socket", "git-write", "pty", "disk-write", "high-memory"]),
+  antigravity: new Set(["network", "unix-socket", "git-write", "pty", "disk-write", "high-memory"]),
+  codex: new Set(["pty", "disk-write", "high-memory"]), // workspace-write sandbox blocks network, unix-socket, git-write
+};
+
+function slotSatisfiesNeeds(provider, needs) {
+  if (!needs || !needs.length) return true;
+  const caps = PROVIDER_CAPABILITIES[provider];
+  if (!caps) return false;
+  return needs.every((need) => caps.has(need));
+}
+
 function route(dir) {
   const plan = readJSON(join(dir, "plan.json"));
   if (!plan?.sessions?.length) die("plan.json missing or has no sessions");
@@ -1440,15 +1461,32 @@ function route(dir) {
     process.exit(2);
   }
 
+  // P8: Respect plan-level avoid list and slots found dead in state.json
+  const deadSlots = new Set([...(plan.avoid ?? [])]);
+  const statePath = join(dir, "state.json");
+  if (existsSync(statePath)) {
+    const priorState = readJSON(statePath);
+    if (priorState?.empty_slots) {
+      for (const k of priorState.empty_slots) deadSlots.add(k);
+    }
+  }
+
   const horizonS = Number(plan.horizon_s ?? 7200);
   const history = costHistory();
   const eligible = quota.slots
-    .filter((s) => s.installed && s.bucket !== "empty")
+    .filter(
+      (s) =>
+        s.installed &&
+        s.bucket !== "empty" &&
+        !s.auth_expired &&
+        !deadSlots.has(s.key) &&
+        !deadSlots.has(s.provider),
+    )
     .map((s) => ({ ...s, supply: effectiveSupply(s, horizonS) }))
     .filter((s) => s.supply > 0);
 
   if (!eligible.length) {
-    console.error("handoff: every provider is empty or absent. Nothing launched.");
+    console.error("handoff: every provider is empty, dead, or absent. Nothing launched.");
     console.error(renderQuota(quota));
     const soonest = quota.slots
       .map((s) => ({ s, r: resetsInS(s) }))
@@ -1473,9 +1511,11 @@ function route(dir) {
   const candidates = [];
   for (const p of pool) {
     for (const lane of laneOptions(p)) {
+      const laneKey = lane ? `${p.key}/${lane.name}` : p.key;
+      if (deadSlots.has(laneKey)) continue;
       const supply = supplyFor(p, lane, horizonS);
       if (supply > 0) {
-        candidates.push({ slot: p, lane, key: lane ? `${p.key}/${lane.name}` : p.key, supply });
+        candidates.push({ slot: p, lane, key: laneKey, supply });
       }
     }
   }
@@ -1511,9 +1551,16 @@ function route(dir) {
   for (const s of [...plan.sessions].sort((a, b) => a.id.localeCompare(b.id))) {
     const size = s.size ?? "m";
     const wanted = preferredLane(s.tier);
+    // P4: Filter candidate slots by declared session capabilities
+    const validCandidates = candidates.filter((c) => slotSatisfiesNeeds(c.slot.provider, s.needs));
     let cand;
     if (s.provider) {
-      const named = candidates.filter(
+      if (!slotSatisfiesNeeds(s.provider, s.needs)) {
+        die(
+          `session ${s.id} names provider ${s.provider}, which does not satisfy required needs: [${(s.needs ?? []).join(", ")}]`,
+        );
+      }
+      const named = validCandidates.filter(
         (c) => c.slot.key === s.provider || c.slot.provider === s.provider,
       );
       if (named.length) {
@@ -1522,13 +1569,28 @@ function route(dir) {
         // The user named a provider whose every lane is spent. Their call wins;
         // the zero supply is what the admission warning is for.
         const slot =
-          eligible.find((p) => p.key === s.provider || p.provider === s.provider) ??
-          quota.slots.find((p) => p.key === s.provider || p.provider === s.provider);
-        if (!slot?.installed) die(`session ${s.id} names provider ${s.provider}, which is absent`);
+          eligible.find(
+            (p) =>
+              (p.key === s.provider || p.provider === s.provider) &&
+              slotSatisfiesNeeds(p.provider, s.needs),
+          ) ??
+          quota.slots.find(
+            (p) =>
+              (p.key === s.provider || p.provider === s.provider) &&
+              slotSatisfiesNeeds(p.provider, s.needs),
+          );
+        if (!slot?.installed) {
+          die(`session ${s.id} names provider ${s.provider}, which is absent or does not satisfy needs`);
+        }
         cand = { slot, lane: null, key: slot.key, supply: 0 };
       }
     } else {
-      cand = pickBest(candidates, size, wanted, null);
+      if (!validCandidates.length) {
+        die(
+          `session ${s.id} requires [${(s.needs ?? []).join(", ")}], but no eligible provider supports all required capabilities`,
+        );
+      }
+      cand = pickBest(validCandidates, size, wanted, null);
     }
     const slot = cand.slot;
     const laneName = cand.lane?.name ?? null;
@@ -1676,11 +1738,14 @@ function renderRouting(r) {
       "* lane not pinned — this CLI did not list its models, so its default model picks the pool",
     );
   }
+  const rootSessions = r.sessions.filter((s) => !s.deps || s.deps.length === 0);
+  const parallelNote = `> **Execution Graph:** ${r.sessions.length} sessions total · **${rootSessions.length} session(s) runnable immediately in parallel**.`;
   return [
     "",
     "| Session | Goal | Provider | Model [lane] | Remaining | Est. cost | Isolation | Deps | Starts |",
     "|---|---|---|---|---|---|---|---|---|",
     ...rows,
+    parallelNote,
     ...legend,
   ].join("\n");
 }
@@ -1740,6 +1805,9 @@ function ensureWorktree(dir, s) {
   return wt;
 }
 
+const AUTH_DEATH =
+  /failed to authenticate|oauth session expired|not logged in|login required|unauthorized|authentication failed|credentials? expired/i;
+
 const QUOTA_DEATH =
   /rate.?limit|usage limit|quota|out of extra usage|session limit|too many requests|429|insufficient credits|resource.?exhausted/i;
 
@@ -1767,13 +1835,20 @@ function parseResultStatus(body) {
   return value ? token(value[1]) : null;
 }
 
-function classifyExit(dir, s, code) {
+function classifyExit(dir, s, code, elapsedSec = 0) {
   const resultPath = join(dir, "sessions", `${s.id}.result.md`);
   if (existsSync(resultPath)) {
     const parsed = parseResultStatus(readFileSync(resultPath, "utf8"));
     if (parsed) return { status: parsed, reason: null };
   }
   const tail = tailOf(join(dir, "logs", `${s.id}.log`));
+  // P2: Auth failure or immediate launch crash (< 15s)
+  if (AUTH_DEATH.test(tail)) {
+    return { status: "auth_death", reason: "provider authentication failed or expired" };
+  }
+  if (elapsedSec <= 15 && code !== 0) {
+    return { status: "launch_fail", reason: `exited immediately (${elapsedSec}s) with code ${code}` };
+  }
   if (QUOTA_DEATH.test(tail)) return { status: "quota", reason: "provider quota exhausted" };
   if (code === 0) return { status: "failed", reason: "exited 0 without writing a result file" };
   return { status: "failed", reason: `exit ${code}` };
@@ -1845,7 +1920,16 @@ async function dispatch(dir) {
     const horizon = routing.horizon_s ?? 7200;
     const options = [];
     for (const q of quota.slots) {
-      if (!q.installed || q.bucket === "empty" || dead.has(q.key)) continue;
+      if (
+        !q.installed ||
+        q.bucket === "empty" ||
+        q.auth_expired ||
+        dead.has(q.key) ||
+        dead.has(q.provider)
+      ) {
+        continue;
+      }
+      if (!slotSatisfiesNeeds(q.provider, s.needs)) continue;
       for (const lane of laneOptions(q)) {
         const key = lane ? `${q.key}/${lane.name}` : q.key;
         if (dead.has(key)) continue;
@@ -1910,14 +1994,24 @@ async function dispatch(dir) {
             writeJSON(join(dir, "state.json"), state);
             return;
           }
-          const verdict = classifyExit(dir, s, code ?? -1);
+          const elapsedSec = st.started_at
+            ? Math.max(0, Math.round((Date.now() - Date.parse(st.started_at)) / 1000))
+            : 0;
+          const verdict = classifyExit(dir, s, code ?? -1, elapsedSec);
           st.ended_at = nowISO();
-          if (verdict.status === "quota") {
+          if (
+            verdict.status === "quota" ||
+            verdict.status === "auth_death" ||
+            verdict.status === "launch_fail"
+          ) {
             // Mark the lane that died, not the whole slot: blacklisting `cursor`
             // because Other Models ran out throws away a pool that is still full.
             const deadKey = st.lane ? `${st.slot}/${st.lane}` : st.slot;
             if (!state.empty_slots.includes(deadKey)) state.empty_slots.push(deadKey);
-            state.events.push(`${nowISO()} ${s.id} died: ${deadKey} quota exhausted`);
+            const isLaunchFail = verdict.status === "auth_death" || verdict.status === "launch_fail";
+            state.events.push(
+              `${nowISO()} ${s.id} died: ${deadKey} ${verdict.reason}${isLaunchFail ? " (launch_fail)" : ""}`,
+            );
             if (st.attempts < 3 && reassign(s)) {
               st.status = "pending"; // relaunch on another slot next tick
               state.events.push(
@@ -1925,7 +2019,10 @@ async function dispatch(dir) {
               );
             } else {
               st.status = "blocked";
-              st.reason = "no slot with quota left";
+              st.reason =
+                verdict.status === "quota"
+                  ? "no slot with quota left"
+                  : `launch failure on all candidates: ${verdict.reason}`;
             }
           } else {
             st.status = verdict.status;

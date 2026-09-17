@@ -31,7 +31,7 @@ node <skill>/scripts/shunt.mjs inspect --file PATH
 - **Under** the threshold (see inspect) → `Read` PATH.
 - **Over** → `Read` only the outline inspect wrote. Never `Read` PATH.
 - Outline is enough to pick a span → `excerpt --file PATH --start N --end M`, then `Read` the excerpt.
-- Outline is not enough → spawn a **small/fast** subagent (class `fast_cheap_own` in [`prompts/model-routing.md`](../../prompts/model-routing.md), e.g. Flash, Haiku, Composer) to write a summary into the run dir (cap in [`references/read-path.md`](references/read-path.md)). `Read` only that summary. Do not read the subagent transcript.
+- Outline is not enough → spawn a **small/fast** subagent (class `fast_cheap_own` in [`prompts/model-routing.md`](../../prompts/model-routing.md), e.g. Gemini 3.8 Flash, Claude Haiku, GPT-5.4 Mini, Composer) to write a summary into the run dir (cap in [`references/read-path.md`](references/read-path.md)). `Read` only that summary. Do not read the subagent transcript.
 
 Deny-reason from the hook is this same flow. Follow it; do not retry the full `Read`.
 

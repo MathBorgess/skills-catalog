@@ -38,9 +38,9 @@ The core decision matrix and model taxonomy live in [`prompts/model-routing.md`]
 
 | `tier` | Model class to pick | Multi-provider role |
 |---|---|---|
-| `mechanical` | `fast_cheap_own` | cheaper/faster id (Flash, Haiku, Composer, GPT-4o-mini) — implementation, tests, lint, renames |
-| `design` | `frontier_reasoning` | stronger id (Pro, Sonnet, GPT-4o/o3) — architecture, ambiguous spec, judgment calls |
-| `review` | `frontier_reasoning` | stronger id, read-only audit, finding subtle edge cases |
+| `mechanical` | `fast_cheap_own` | cheaper/faster id (Gemini 3.8 Flash, Claude Haiku 4.5, Cursor Grok 4.5, Composer, GPT-5.4 Mini) — implementation, tests, lint, renames |
+| `design` | `frontier_reasoning` | stronger id (GPT-6 Astra, GPT-5.6 Sol, Claude Opus 5, Claude Sonnet 5, Gemini 3.1 Pro) — architecture, ambiguous spec, judgment calls |
+| `review` | `frontier_reasoning` | stronger id (Claude Opus 5, GPT-6 Astra, Gemini 3.1 Pro) — read-only audit, finding subtle edge cases |
 
 ### Session capabilities (`needs`)
 Sessions can declare environment requirements:

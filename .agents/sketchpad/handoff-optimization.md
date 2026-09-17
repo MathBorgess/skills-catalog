@@ -393,3 +393,33 @@ What makes this run worth recording is that **four checks of the same commit dis
 4. **The static review:** NO-GO, on scenarios no gate exercises — a descendant that outlives a normal leader exit, a lock held across a blocking wait, a unit mismatch on a wire field.
 
 None of the four substitutes for another. A run that only collects green gates ships all three of the other categories.
+
+## Run 20260917T120000Z — the design round
+
+### Shape
+
+Five sessions, four parallel designs and one synthesis, cutting a single question: how to split a daemon from its terminal client so the daemon runs on a remote host and the client attaches and detaches at will. Deliverables were documents, not code — each session wrote exactly one file, so write-sets could not collide by construction.
+
+Two failures worth recording, both structural rather than provider-related.
+
+### New proposals
+
+#### P22. A build process orphaned by a dead attempt blocks every later attempt in that worktree
+
+A relaunched session inherits its predecessor's worktree. If the dead attempt left a build or test process alive, that process still holds the build directory's lock, and every command the new attempt runs there waits on it — not slowly, indefinitely.
+
+Observed this run: a workspace test process started **32 hours earlier**, belonging to an attempt that had already died, still held the lock. The relaunched session ran 40 minutes without writing a single file. It was not idle and not dead; it was queued behind a corpse.
+
+The cost compounded twice. The parent's liveness heuristic — newest file mtime in the worktree — read "dead", and the session was nearly abandoned while it was working. Then the parent launched its own verification run into that same worktree and became a *third* contender for the same lock: the measurement joined the jam it was trying to measure, and its hang was misread as a hanging test suite.
+
+Two changes follow. On relaunch into an existing worktree, kill processes whose working directory is that worktree before starting the new attempt. And **liveness must be process-based, not mtime-based** — a session running a long build writes nothing for many minutes and is perfectly alive. Mtime answers "is anything being produced", which is a different question from "is anyone home", and this run is the second in a row where the parent conflated them.
+
+#### P23. `deps` orders sessions; it does not move their outputs
+
+A dependency edge declares *when* a session starts, never *what it can see*. Every session works in its own worktree, so a synthesis session whose brief names its inputs by relative path wakes with none of them present.
+
+Observed this run: the review session depended on four design sessions, started correctly after all four reported `done`, and failed on launch. The four documents it existed to read were all real and all finished — each in a different worktree. The dependency was satisfied while the input was absent, which is the worst shape a failure can take, because the graph looks right and the scorecard shows a clean dependency order.
+
+The fix applied by hand was to copy the four documents into the dependent's worktree, patch the brief with the corrected locations, and relaunch — one failed session and one relaunch, for an error that belonged to the plan, not to the child.
+
+P3 ("Dependents must see their dependencies") already named this from the brief side. What this run adds is that the brief-side discipline is not enough on its own: when the parent forgets the assembly step, nothing catches it, and the dependent burns a launch discovering an empty directory. The dispatcher should materialize a dependency's declared `writes` into the dependent's worktree before launching it — the same way the previous round's integration session had to do by hand with an explicit sync step written into its brief.

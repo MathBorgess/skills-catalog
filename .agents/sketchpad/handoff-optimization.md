@@ -435,3 +435,27 @@ The cost was not a wasted round: the designs remain valid for the phase they act
 Two rules follow. The obvious one: **fetch before orienting, not only before writing.** A repository convention that says "fetch before you write to a file you did not create" protects the commit and leaves the reading unprotected, which is where a fan-out's real damage starts. The less obvious one: **the parent's orientation is an input to every brief**, so an orientation error is not one session's problem — it propagates to all of them simultaneously, and no amount of per-session verification catches it. The children in this run verified their own claims scrupulously and every citation held; none of that could surface a premise the parent never questioned.
 
 Worth pairing with the inverse discipline that did work here: requiring every claim about current behaviour to carry `file:line`. That catches a child inventing a fact. It does not catch a parent importing a stale one.
+
+#### P25. A new worktree inherits its repository from the parent's working directory
+
+Adding a session to a plan is an edit to a JSON file, so it feels like it has no environment. It does: when the dispatcher later creates that session's worktree, it resolves *which repository to fork* from the parent's current working directory, not from anything in the plan.
+
+Observed this run: a parent working across two repositories added a late integration session to the plan while its shell happened to sit in the second repository. Sessions added earlier, from the first repository, got correct worktrees. The late one was handed a worktree of the **wrong repo** — a documentation vault with no build manifest anywhere in it — and the mismatch surfaced only when the child woke up, two minutes after launch, and could not find the tree it was supposed to integrate.
+
+The child handled it exactly right, which is the part worth copying: it identified the wrong repository from the worktree's `.git` pointer, confirmed the sibling worktrees it was asked to assemble did exist as proper checkouts, ruled out disk as a cause, wrote a `blocked` result naming the precise remedy — and **refused to create a worktree inside another repository on its own**, calling that a cross-repo action outside its sandbox. A less careful child would have "fixed" it and left a stray worktree and branch in a repo nobody was tracking.
+
+Two rules. For the dispatcher: resolve a session's repository once, when the plan is accepted, and record it in the plan — not at launch time from ambient state. For the parent: a plan edit is an environment-sensitive operation; check where you are before adding a session, the same way you would before a commit.
+
+#### P26. The parent's verification tooling is itself unverified, and fails silently green
+
+A run whose entire discipline is "a child's pasted gates are a claim; the parent re-runs them" rests on the parent's own commands being correct. In this run they were not, five separate times, and each failure produced a confident answer rather than an error:
+
+1. A pipeline reported the *last* stage's exit status, so a failing compiler check read as `rc=0`.
+2. An unquoted shell variable holding a package list expanded as a single argument, so three "green" runs never executed.
+3. A process check grepped for a command string that also appeared inside the script's own heredoc, so the guard matched itself and aborted a correct operation.
+4. A pattern written to detect a fixed temporary path matched the already-fixed lines too, because the fix kept the same function call and added to it — nearly reported as an unfixed defect.
+5. A timeout wrapper that does not exist on this platform turned two gates into `command not found`, so two of nine proof commands never ran at all.
+
+Only the fifth announced itself, and only because the exit code was `127`. The other four returned plausible output.
+
+The lesson is not "write better scripts" — it is that **the verification layer needs the same evidence standard it imposes**. Three habits cover most of it: set `pipefail` and capture status from the command, not the pipe; make every guard print the evidence it acted on, not just its conclusion; and treat a gate that produced *no* output where output was expected as a failure, never as a pass. A parent that trusts its own harness less catches the two or three false greens per run that would otherwise be reported to the user as verified fact.

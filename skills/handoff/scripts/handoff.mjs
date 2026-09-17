@@ -1743,17 +1743,62 @@ function ensureWorktree(dir, s) {
 const QUOTA_DEATH =
   /rate.?limit|usage limit|quota|out of extra usage|session limit|too many requests|429|insufficient credits|resource.?exhausted/i;
 
+const TERMINAL_STATUS = new Set(["done", "blocked", "failed", "abandoned"]);
+const isTerminal = (st) => TERMINAL_STATUS.has(st);
+
+// Result files are written last. A parseable terminal status is authoritative
+// for reconciliation; an ambiguous file is not. "completed" is the prose form
+// children actually write (`## Status\n**Completed**`).
+function parseResultStatus(body) {
+  const token = (raw) => {
+    const k = raw.toLowerCase();
+    if (k === "done" || k === "completed") return "done";
+    if (k === "blocked" || k === "failed") return k;
+    return null;
+  };
+  const inline = body.match(
+    /^\s*(?:#+\s*)?-?\s*status\s*:\s*\**\s*(done|completed|blocked|failed)\b/im,
+  );
+  if (inline) return token(inline[1]);
+  const heading = body.match(/^\s*#+\s*status\s*$/im);
+  if (!heading) return null;
+  const after = body.slice(heading.index + heading[0].length);
+  const value = after.match(/^\s*\**\s*(done|completed|blocked|failed)\b/im);
+  return value ? token(value[1]) : null;
+}
+
 function classifyExit(dir, s, code) {
   const resultPath = join(dir, "sessions", `${s.id}.result.md`);
   if (existsSync(resultPath)) {
-    const body = readFileSync(resultPath, "utf8");
-    const m = body.match(/^\s*-?\s*status:\s*(done|blocked|failed)/mi);
-    if (m) return { status: m[1].toLowerCase(), reason: null };
+    const parsed = parseResultStatus(readFileSync(resultPath, "utf8"));
+    if (parsed) return { status: parsed, reason: null };
   }
   const tail = tailOf(join(dir, "logs", `${s.id}.log`));
   if (QUOTA_DEATH.test(tail)) return { status: "quota", reason: "provider quota exhausted" };
   if (code === 0) return { status: "failed", reason: "exited 0 without writing a result file" };
   return { status: "failed", reason: `exit ${code}` };
+}
+
+// A later `status`/`dispatch` has no child `exit` listener — the previous
+// dispatch process is gone, and the provider may still be alive. If a running
+// session already wrote a terminal result, that file wins. Already-terminal
+// failed/blocked/done/abandoned is left alone, including when the file is
+// ambiguous or even clearly done.
+function reconcileFromResults(dir, routing, state) {
+  let changed = false;
+  for (const s of routing?.sessions ?? []) {
+    const st = state.sessions[s.id];
+    if (!st || st.status !== "running") continue;
+    const resultPath = join(dir, "sessions", `${s.id}.result.md`);
+    if (!existsSync(resultPath)) continue;
+    const parsed = parseResultStatus(readFileSync(resultPath, "utf8"));
+    if (!parsed) continue;
+    st.status = parsed;
+    st.ended_at ??= nowISO();
+    state.events.push(`${nowISO()} ${s.id} ${parsed} (result file)`);
+    changed = true;
+  }
+  return changed;
 }
 
 function loadState(dir) {
@@ -1789,7 +1834,6 @@ async function dispatch(dir) {
 
   const live = new Map(); // id -> child process
 
-  const terminal = (st) => ["done", "blocked", "failed", "abandoned"].includes(st);
   const depsDone = (s) =>
     (s.deps ?? []).every((d) => state.sessions[d]?.status === "done");
 
@@ -1823,6 +1867,8 @@ async function dispatch(dir) {
   };
 
   while (Date.now() < deadline) {
+    reconcileFromResults(dir, routing, state);
+
     // 1. launch everything whose dependencies are satisfied
     for (const s of routing.sessions) {
       const st = state.sessions[s.id];
@@ -1859,8 +1905,12 @@ async function dispatch(dir) {
           `${nowISO()} ${s.id} launched on ${s.lane ? `${s.slot}/${s.lane}` : s.slot} pid ${child.pid}`,
         );
         child.on("exit", (code) => {
-          const verdict = classifyExit(dir, s, code ?? -1);
           live.delete(s.id);
+          if (isTerminal(st.status)) {
+            writeJSON(join(dir, "state.json"), state);
+            return;
+          }
+          const verdict = classifyExit(dir, s, code ?? -1);
           st.ended_at = nowISO();
           if (verdict.status === "quota") {
             // Mark the lane that died, not the whole slot: blacklisting `cursor`
@@ -1894,7 +1944,7 @@ async function dispatch(dir) {
     writeJSON(join(dir, "state.json"), state);
 
     const all = routing.sessions.map((s) => state.sessions[s.id]);
-    if (all.every((st) => terminal(st.status))) break;
+    if (all.every((st) => isTerminal(st.status))) break;
     // Nothing running and nothing launchable: the DAG is stuck on a blocked dep.
     if (!live.size && !routing.sessions.some((s) => state.sessions[s.id].status === "pending" && depsDone(s))) {
       const stuck = routing.sessions.filter((s) => state.sessions[s.id].status === "pending");
@@ -1912,7 +1962,7 @@ async function dispatch(dir) {
 
   writeJSON(join(dir, "state.json"), state);
   console.log(renderStatus(dir, routing, state));
-  const pending = routing.sessions.filter((s) => !terminal(state.sessions[s.id].status));
+  const pending = routing.sessions.filter((s) => !isTerminal(state.sessions[s.id].status));
   if (pending.length) {
     console.log(
       `\nstill running: ${pending.map((s) => s.id).join(", ")} — call \`handoff dispatch --run ${dir}\` again.`,
@@ -2056,7 +2106,10 @@ if (cmd === "probe") {
   await dispatch(runDir());
 } else if (cmd === "status") {
   const dir = runDir();
-  console.log(renderStatus(dir, readJSON(join(dir, "routing.json")), loadState(dir)));
+  const routing = readJSON(join(dir, "routing.json"));
+  const state = loadState(dir);
+  if (reconcileFromResults(dir, routing, state)) writeJSON(join(dir, "state.json"), state);
+  console.log(renderStatus(dir, routing, state));
 } else if (cmd === "score") {
   await score(runDir());
 } else {

@@ -28,7 +28,7 @@ node <skill>/scripts/shunt.mjs excerpt --file PATH --start N --end M
 
 Spawn only when the outline is not enough to choose a span or to answer the question.
 
-- **Model selection**: Select the environment's `fast_cheap_own` model per [`prompts/model-routing.md`](../../../prompts/model-routing.md) (e.g. Gemini 3.8 Flash, Claude Haiku, Cursor Grok 4.5, Composer, GPT-5.4 Mini). Never spawn a frontier model for ingestion or summaries.
+- **Model selection**: Select the environment's `fast_cheap_own` model per [`prompts/model-routing.md`](../../../prompts/model-routing.md) (e.g. Gemini 3.8 Flash [universal in Agy], Claude Haiku, Cursor Grok 4.6, Composer, GPT-5.6 Luna [minor] / GPT-5.4 Mini). Never spawn a frontier model for ingestion or summaries.
 - Working directory: the project, not the shunt run dir.
 - Write the summary to the path `inspect` / `status` names under `summaries/`.
 - Cap: the same outline cap. Pointers, not pasted bodies. No transcript back to the parent.

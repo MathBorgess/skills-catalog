@@ -1,6 +1,6 @@
 {
   "name": "@mathborgess/skills-catalog",
-  "version": "1.2.2",
+  "version": "1.4.0",
   "description": "Matheus Borges's catalog of agent skills for Claude, Cursor, and Codex.",
   "author": {
     "name": "Matheus Borges",
@@ -25,6 +25,7 @@
   ],
   "files": [
     "skills",
+    "prompts",
     "hooks",
     ".claude-plugin",
     "scripts",
@@ -37,12 +38,12 @@
     "registry": "https://npm.pkg.github.com"
   },
   "scripts": {
-    "check": "node scripts/check-catalog.mjs",
+    "check": "node scripts/check-catalog.mjs && node skills/shunt/scripts/shunt.test.mjs && node skills/handoff/scripts/handoff.test.mjs",
     "link": "bash scripts/link-skills.sh",
     "list": "bash scripts/list-skills.sh",
     "sync-plugin-version": "node scripts/sync-plugin-version.mjs",
     "version": "node scripts/sync-plugin-version.mjs && git add .claude-plugin/plugin.json",
-    "prepublishOnly": "node scripts/check-catalog.mjs",
+    "prepublishOnly": "npm run check",
     "check:version-bump": "node scripts/check-version-bump.mjs main"
   }
 }

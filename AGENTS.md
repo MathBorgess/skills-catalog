@@ -38,7 +38,7 @@ npx skills add npm:@mathborgess/skills-catalog
 npm run link
 ```
 
-That symlinks `skills/*` into `~/.claude/skills`, `~/.cursor/skills`, `~/.codex/skills`, and `~/.agents/skills`.
+That symlinks `skills/*` into `~/.claude/skills`, `~/.cursor/skills`, `~/.codex/skills`, `~/.agents/skills`, and `~/.gemini/config/skills`.
 
 Canonical wording: [`.agents/install-block.md`](.agents/install-block.md). Changes reach `main` only through pull requests. Do not push to `main`.
 

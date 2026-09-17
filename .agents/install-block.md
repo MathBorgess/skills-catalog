@@ -74,7 +74,7 @@ Pick the skills and which agents to install them on. Global install: add `-g`.
 
 ## This machine (maintainer)
 
-Symlink every skill into Claude, Cursor, and Codex user directories. A `git pull` refreshes them. Not the end-user story.
+Symlink every skill into Claude, Cursor, Codex, and Antigravity / Gemini user directories. A `git pull` refreshes them. Not the end-user story.
 
 <canonical-block name="maintainer-link">
 

@@ -1,7 +1,7 @@
 {
   "name": "skills-catalog",
-  "version": "1.2.2",
-  "description": "Matheus Borges's agent skills: study wikis, teaching sessions, and cross-provider handoff, with a guard hook that protects live handoff runs. Inspired by Matt Pocock's skills packaging.",
+  "version": "1.4.0",
+  "description": "Matheus Borges's agent skills: study wikis, teaching sessions, cross-provider handoff, and shunt (keep a large model off heavy I/O). Guard hooks protect live handoff runs and an active shunt. Inspired by Matt Pocock's skills packaging.",
   "author": {
     "name": "Matheus Borges",
     "url": "https://github.com/MathBorgess"
@@ -14,6 +14,7 @@
     "study-wiki",
     "teach-me",
     "handoff",
+    "shunt",
     "claude",
     "cursor",
     "codex"
@@ -21,7 +22,8 @@
   "skills": [
     "./skills/handoff",
     "./skills/study-wiki",
-    "./skills/teach-me"
+    "./skills/teach-me",
+    "./skills/shunt"
   ],
   "hooks": "./hooks/hooks.json"
 }

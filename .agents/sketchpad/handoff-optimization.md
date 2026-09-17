@@ -423,3 +423,15 @@ Observed this run: the review session depended on four design sessions, started 
 The fix applied by hand was to copy the four documents into the dependent's worktree, patch the brief with the corrected locations, and relaunch — one failed session and one relaunch, for an error that belonged to the plan, not to the child.
 
 P3 ("Dependents must see their dependencies") already named this from the brief side. What this run adds is that the brief-side discipline is not enough on its own: when the parent forgets the assembly step, nothing catches it, and the dependent burns a launch discovering an empty directory. The dispatcher should materialize a dependency's declared `writes` into the dependent's worktree before launching it — the same way the previous round's integration session had to do by hand with an explicit sync step written into its brief.
+
+#### P24. Orientation runs against a fetched tree, or the parent re-derives what is already decided
+
+A fan-out's cut is only as good as the parent's orientation, and orientation is a read of a working tree that other people and other agents are writing to.
+
+Observed this run: the parent searched a shared knowledge repository for prior art on the exact question being cut, found four related documents, read the most relevant one, and cut a five-session plan. The document that actually decided the question — written two days earlier, with a full environment inventory and five reconciled decisions — was never seen, because the parent's checkout was **37 commits behind** and the file did not exist in it yet. The `fetch` came much later, after the plan was cut, the briefs were written and the whole round had been dispatched.
+
+The cost was not a wasted round: the designs remain valid for the phase they actually describe. The cost is that they describe the **wrong phase**, and nobody involved could tell — the children had no way to know, because the parent's briefs are their whole world, and the parent's briefs carried the stale premise.
+
+Two rules follow. The obvious one: **fetch before orienting, not only before writing.** A repository convention that says "fetch before you write to a file you did not create" protects the commit and leaves the reading unprotected, which is where a fan-out's real damage starts. The less obvious one: **the parent's orientation is an input to every brief**, so an orientation error is not one session's problem — it propagates to all of them simultaneously, and no amount of per-session verification catches it. The children in this run verified their own claims scrupulously and every citation held; none of that could surface a premise the parent never questioned.
+
+Worth pairing with the inverse discipline that did work here: requiring every claim about current behaviour to carry `file:line`. That catches a child inventing a fact. It does not catch a parent importing a stale one.

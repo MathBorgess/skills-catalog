@@ -3,7 +3,7 @@
 // Run: node skills/handoff/scripts/handoff.test.mjs
 
 import { spawnSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, writeFileSync, readFileSync, existsSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, realpathSync, writeFileSync, readFileSync, existsSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -757,6 +757,22 @@ function makeRouteRun({ plan, quota, state } = {}) {
   assert("clean --branches ignores other runs' branches", has(other));
 
   spawnSync("git", ["branch", "-D", unmerged, other], { encoding: "utf8" });
+}
+
+// Remove every worktree (and its branch) the tests created under the isolated TMPDIR.
+{
+  const root = realpathSync(process.env.TMPDIR);
+  const list = spawnSync("git", ["worktree", "list", "--porcelain"], { encoding: "utf8" }).stdout ?? "";
+  for (const block of list.split("\n\n")) {
+    const path = block.match(/^worktree (.+)$/m)?.[1];
+    const branch = block.match(/^branch refs\/heads\/(.+)$/m)?.[1];
+    let real = path;
+    try { real = realpathSync(path); } catch {}
+    if (!path || !real.startsWith(root)) continue;
+    spawnSync("git", ["worktree", "remove", "--force", path], { encoding: "utf8" });
+    if (branch) spawnSync("git", ["branch", "-D", branch], { encoding: "utf8" });
+  }
+  spawnSync("git", ["worktree", "prune"], { encoding: "utf8" });
 }
 
 if (failed) {

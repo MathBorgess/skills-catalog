@@ -8,9 +8,14 @@ The line keeps run identity, mode, session totals/statuses, elapsed time, parent
 {
   "skill": "handoff",
   "settle_s": 30,
-  "sessions": [{"id": "01", "effort": "high", "override": true}]
+  "rtk_version": "0.49.0",
+  "sessions": [{"id": "01", "effort": "high", "override": true,
+    "rtk": {"mode": "guarded", "via": "hook", "rewrites": 12, "recalls": 1,
+            "history": {"commands": 12, "input_tokens": 9000, "output_tokens": 1400, "saved_tokens": 7600}}}]
 }
 ```
+
+`rtk.history` is RTK's own count (bytes/4) for commands run under the session's worktree during its lifetime; `null` when RTK recorded nothing. `recalls` is `null` for `prompt` children, which have no hook. A read-only session shares the parent's cwd, so its history is marked `shared_cwd` and is not attributable.
 
 `override` is true when the owner explicitly set model or effort. Report `quota_delta_pct`, `wall_clock_s`, `parent_turns`, and every non-zero defect count with the scorecard.
 

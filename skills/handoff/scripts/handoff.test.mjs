@@ -3,7 +3,7 @@
 // Run: node skills/handoff/scripts/handoff.test.mjs
 
 import { spawnSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, realpathSync, writeFileSync, readFileSync, existsSync, rmSync } from "node:fs";
+import { chmodSync, mkdirSync, mkdtempSync, realpathSync, writeFileSync, readFileSync, existsSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -17,6 +17,10 @@ import {
   EFFORT_BY_TIER,
   renderModel,
   hashSessions,
+  hashPlan,
+  rtkFor,
+  rtkClaudeSettings,
+  sessionRtk,
   nonCausalDeps,
   clean,
   score,
@@ -113,9 +117,10 @@ function makeRun({ status = "running", resultBody, extraSessions } = {}) {
   return dir;
 }
 
-function run(cmd, dir, extra = []) {
+function run(cmd, dir, extra = [], env = process.env) {
   return spawnSync(process.execPath, [cli, cmd, "--run", dir, ...extra], {
     encoding: "utf8",
+    env,
   });
 }
 
@@ -757,6 +762,91 @@ function makeRouteRun({ plan, quota, state } = {}) {
   assert("clean --branches ignores other runs' branches", has(other));
 
   spawnSync("git", ["branch", "-D", unmerged, other], { encoding: "utf8" });
+}
+
+
+// ------------------------------------------------------------------ rtk
+{
+  // The shared bridge must not drift between the two skills.
+  const shuntCopy = join(here, "..", "..", "shunt", "scripts", "rtk.mjs");
+  if (existsSync(shuntCopy)) {
+    assert("rtk.mjs is identical in shunt and handoff", readFileSync(shuntCopy, "utf8") === readFileSync(join(here, "rtk.mjs"), "utf8"));
+  }
+
+  const bin = mkdtempSync(join(tmpdir(), "fake-rtk-"));
+  writeFileSync(
+    join(bin, "rtk"),
+    `#!/bin/sh
+case "$1" in
+  --version) echo "rtk 9.9.9" ;;
+  rewrite) [ "$2" = "cargo test" ] && { echo "rtk cargo test"; exit 3; }; exit 1 ;;
+esac
+`,
+  );
+  chmodSync(join(bin, "rtk"), 0o755);
+  const env = { ...process.env, PATH: `${bin}:${process.env.PATH}` };
+
+  assert("rtk: session value wins over the plan", rtkFor({ rtk: "full" }, { rtk: "off" }, "claude").mode === "off");
+  assert("rtk: claude child gets the hook", rtkFor({ rtk: "guarded" }, {}, "claude").via === "hook");
+  assert("rtk: hookless child gets the prompt", rtkFor({ rtk: "guarded" }, {}, "codex").via === "prompt");
+  assert("rtk: absent means off", rtkFor({}, {}, "claude").mode === "off");
+
+  const sessions = [{ id: "01", goal: "g" }];
+  assert("hashPlan: a plan without rtk hashes like before", hashPlan({ sessions }) === hashSessions(sessions));
+  assert("hashPlan: plan-level rtk changes the hash", hashPlan({ sessions, rtk: "guarded" }) !== hashPlan({ sessions }));
+
+  const prompt = join(bin, "p.md");
+  writeFileSync(prompt, "execute brief");
+  const events = join(bin, "01.rtk.jsonl");
+  const [, cArgs] = launchArgs(
+    { provider: "claude", bin: "claude", tier: "design", rtk: { mode: "guarded", via: "hook" }, rtk_events: events },
+    prompt,
+    "/tmp",
+  );
+  const settings = JSON.parse(cArgs[cArgs.indexOf("--settings") + 1]);
+  const hookCmd = settings.hooks.PreToolUse[0].hooks[0].command;
+  assert("rtk launch: claude child gets a Bash-only scoped hook", settings.hooks.PreToolUse[0].matcher === "Bash" && /rtk-hook\.mjs" guarded /.test(hookCmd));
+  assert("rtk launch: claude prompt is untouched", cArgs[cArgs.length - 1] === "execute brief");
+  const [, xArgs] = launchArgs({ provider: "codex", bin: "codex", tier: "mechanical", rtk: { mode: "guarded", via: "prompt" } }, prompt, "/tmp");
+  const xPrompt = xArgs[xArgs.length - 1];
+  assert("rtk launch: hookless child gets the guarded instruction", xPrompt.startsWith("execute brief") && /Never prefix `git diff`/.test(xPrompt));
+  const [, oArgs] = launchArgs({ provider: "codex", bin: "codex", tier: "mechanical" }, prompt, "/tmp");
+  assert("rtk launch: off leaves the prompt alone", oArgs[oArgs.length - 1] === "execute brief" && !oArgs.includes("--settings"));
+
+  // The scoped hook itself, driven like Claude drives it.
+  const hook = join(here, "rtk-hook.mjs");
+  const call = (command) =>
+    spawnSync(process.execPath, [hook, "guarded", events], {
+      input: JSON.stringify({ tool_name: "Bash", tool_input: { command, description: "d" } }),
+      encoding: "utf8",
+      env,
+    }).stdout;
+  const hk = JSON.parse(call("cargo test") || "{}").hookSpecificOutput;
+  assert("rtk hook: rewrites and keeps other input fields", hk?.updatedInput?.command === "rtk cargo test" && hk.updatedInput.description === "d");
+  assert("rtk hook: leaves permission to the child", hk && !("permissionDecision" in hk));
+  assert("rtk hook: git diff runs raw", call("git diff") === "");
+  assert("rtk hook: recall runs raw", call("rtk recall ab") === "");
+  const counted = sessionRtk({ rtk: { mode: "guarded", via: "hook" }, rtk_events: events, isolation: "wt/01" }, {});
+  assert("rtk score: counts rewrites and recalls from the hook log", counted.rewrites === 1 && counted.recalls === 1);
+  const promptOnly = sessionRtk({ rtk: { mode: "guarded", via: "prompt" }, isolation: "wt/02" }, {});
+  assert("rtk score: prompt-mode recalls are unknown, not zero", promptOnly.recalls === null);
+
+  // route: plan-level rtk resolves per provider; a bad mode is refused.
+  const d = makeRouteRun({
+    plan: { mode: "fan-out", horizon_s: 7200, rtk: "guarded", sessions: [
+      { id: "01", goal: "a", tier: "mechanical", size: "s", writes: ["a.txt"], deps: [], provider: "claude" },
+      { id: "02", goal: "b", tier: "mechanical", size: "s", writes: ["b.txt"], deps: [], provider: "codex", rtk: "full" },
+    ] },
+  });
+  const r = run("route", d, [], env);
+  const routing = existsSync(join(d, "routing.json")) ? JSON.parse(readFileSync(join(d, "routing.json"), "utf8")) : null;
+  const by = Object.fromEntries((routing?.sessions ?? []).map((s) => [s.id, s.rtk]));
+  assert("rtk route: accepted with rtk on PATH", r.status === 0 && /\| RTK \|/.test(r.stdout));
+  assert("rtk route: claude session is guarded/hook", by["01"]?.mode === "guarded" && by["01"]?.via === "hook");
+  assert("rtk route: codex session override is full/prompt", by["02"]?.mode === "full" && by["02"]?.via === "prompt");
+  const bad = makeRouteRun({ plan: { mode: "fan-out", rtk: "loud", sessions: [{ id: "01", goal: "a", tier: "mechanical", size: "s", writes: ["a"], deps: [] }] } });
+  const rb = run("route", bad, [], env);
+  assert("rtk route: unknown mode is refused", rb.status !== 0 && /rtk mode must be one of/.test(rb.stderr));
 }
 
 // Remove every worktree (and its branch) the tests created under the isolated TMPDIR.

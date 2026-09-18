@@ -6,6 +6,8 @@
 // Write-delegate: refuse race/read-back on tracked paths.
 // Write of a large parent-composed blob: NOT refused — see
 // references/write-path.md (future test parent_composed_write).
+// Bash, only when the run was activated with --rtk: route the command through
+// RTK (guarded mode keeps diffs, code and search raw) and count recalls.
 
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
@@ -17,6 +19,7 @@ import {
   lineAndByteCount,
   runDir,
 } from "./shunt.mjs";
+import { hookOutput, isRecall, rewrite } from "./rtk.mjs";
 
 const ALLOW = 0;
 
@@ -51,6 +54,21 @@ function main() {
 
   const tool = input.tool_name ?? "";
   const ti = input.tool_input ?? {};
+
+  const rtkMode = state.rtk?.mode;
+  if (tool === "Bash" && rtkMode && rtkMode !== "off") {
+    const cmd = String(ti.command ?? "");
+    if (isRecall(cmd)) {
+      appendEvent({ event: "recover", reason: "rtk_recall", cmd }, cwd);
+      process.exit(ALLOW);
+    }
+    const rewritten = rewrite(cmd, rtkMode);
+    if (rewritten) {
+      appendEvent({ event: "rtk_rewrite", cmd, rewritten }, cwd);
+      process.stdout.write(JSON.stringify(hookOutput(ti, rewritten)));
+    }
+    process.exit(ALLOW);
+  }
 
   if (["Read", "Edit", "Write", "NotebookEdit", "MultiEdit"].includes(tool)) {
     const p = toolPath(ti);

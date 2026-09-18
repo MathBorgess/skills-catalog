@@ -26,6 +26,10 @@ The direct route back to the uncompressed data (an excerpt span, a raw log) with
 The model had to take the recovery path because compression dropped what it needed. The signal that compression failed.
 _Avoid_: counting excerpts as recover events
 
+**RTK mode**:
+`off`, `guarded` or `full` — whether a run's shell output goes through RTK. **Guarded** never sends diffs, code or search to RTK; **full** sends everything and is an experiment arm.
+_Avoid_: "rtk on" (say which mode)
+
 ### Handoff
 
 **Session**:
@@ -43,6 +47,9 @@ A model or effort the owner set on a session instead of the derived default.
 
 **Digest**:
 The batched per-session outcome `dispatch` returns, carrying each finished session's result block.
+
+**RTK via**:
+How a child gets RTK: `hook` (a Claude child's scoped PreToolUse) or `prompt` (the instruction appended for a hookless CLI).
 
 **Settle window**:
 Seconds `dispatch` keeps waiting after the first actionable event to coalesce others before returning. A tunable.

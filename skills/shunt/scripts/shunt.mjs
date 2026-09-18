@@ -22,6 +22,7 @@ import { tmpdir } from "node:os";
 import { basename, join, resolve } from "node:path";
 import { createHash } from "node:crypto";
 import { fileURLToPath } from "node:url";
+import { RTK_ENV, historyStats, modeFromArgv, rewrite, rtkVersion } from "./rtk.mjs";
 
 export const LINE_MAX = 350;
 export const BYTE_MAX = 32 * 1024;
@@ -402,6 +403,7 @@ export function runCommand(cmd, cwd = process.cwd()) {
     const child = spawn(cmd, {
       shell: true,
       cwd,
+      env: RTK_ENV,
       stdio: ["inherit", "pipe", "pipe"],
     });
     const chunks = [];
@@ -423,6 +425,19 @@ export async function cmdRun(cmdString, cwd = process.cwd()) {
   }
   const state = loadState(cwd);
   if (!isLive(state)) die("shunt is not active — run activate");
+
+  const rewritten = rewrite(cmdString, state.rtk?.mode);
+  if (rewritten) {
+    // RTK filters and keeps its own recall store; its output is the view.
+    const { code, raw } = await runCommand(rewritten, cwd);
+    const view = raw.toString("utf8") + `exit ${code} · via ${rewritten.split(/\s+/).slice(0, 3).join(" ")}\n`;
+    process.stdout.write(view);
+    appendEvent(
+      { event: "run", via: "rtk", cmd: cmdString, rewritten, code, printed_bytes: Buffer.byteLength(view, "utf8") },
+      cwd,
+    );
+    process.exit(code);
+  }
 
   const { code, raw } = await runCommand(cmdString, cwd);
   const logsDir = join(runDir(cwd), "logs");
@@ -459,6 +474,8 @@ export function computeMetrics(cwd = process.cwd()) {
   let run_cmds = 0;
   let raw_bytes = 0;
   let printed_bytes = 0;
+  let rtk_rewrites = 0;
+  const rtk_recalls = events.filter((e) => e.event === "recover" && e.reason === "rtk_recall").length;
 
   const overCapMap = new Map();
   const editReads = [];
@@ -483,6 +500,11 @@ export function computeMetrics(cwd = process.cwd()) {
       editReads.push(e);
     } else if (e.event === "edit_done") {
       editDones.push(e);
+    } else if (e.event === "rtk_rewrite") {
+      rtk_rewrites++;
+    } else if (e.event === "run" && e.via === "rtk") {
+      run_cmds++;
+      rtk_rewrites++;
     } else if (e.event === "run") {
       run_cmds++;
       raw_bytes += e.raw_bytes || 0;
@@ -508,6 +530,19 @@ export function computeMetrics(cwd = process.cwd()) {
     Math.round((raw_bytes - printed_bytes + overCapBytes) / 4),
   );
 
+  const state = loadState(cwd);
+  const rtkMode = state?.rtk?.mode ?? "off";
+  const rtk =
+    rtkMode === "off"
+      ? { mode: "off" }
+      : {
+          mode: rtkMode,
+          version: state.rtk.version ?? null,
+          rewrites: rtk_rewrites,
+          recalls: rtk_recalls,
+          history: historyStats({ project: cwd, since: state.activatedAt, until: state.deactivatedAt ?? nowISO() }),
+        };
+
   return {
     skill: "shunt",
     ts: nowISO(),
@@ -525,6 +560,7 @@ export function computeMetrics(cwd = process.cwd()) {
     raw_bytes,
     printed_bytes,
     est_tokens_saved,
+    rtk,
   };
 }
 
@@ -547,6 +583,14 @@ export function formatReport(m) {
     `- edit bypass: ${m.edit_bypass.reads} reads, ${m.edit_bypass.edited} edited`,
     `- commands: ${m.run_cmds} runs (${m.raw_bytes} raw bytes, ${m.printed_bytes} printed bytes)`,
     `- est. tokens saved: ${m.est_tokens_saved} (estimate)`,
+    ...(m.rtk?.mode && m.rtk.mode !== "off"
+      ? [
+          `- rtk ${m.rtk.mode} ${m.rtk.version ?? ""}: ${m.rtk.rewrites} rewrites, ${m.rtk.recalls} recalls` +
+            (m.rtk.history
+              ? `; ${m.rtk.history.commands} filtered commands, ${m.rtk.history.input_tokens} → ${m.rtk.history.output_tokens} tokens (RTK estimate)`
+              : "; no RTK history for this run"),
+        ]
+      : []),
   ].join("\n");
 }
 
@@ -589,8 +633,22 @@ function die(msg, code = 1) {
 function cmdActivate() {
   const cwd = process.cwd();
   const state = emptyState(cwd);
+  let mode;
+  try {
+    mode = modeFromArgv();
+  } catch (e) {
+    die(e.message);
+  }
+  if (mode !== "off") {
+    const version = rtkVersion();
+    if (!version) die("--rtk needs the rtk binary on PATH (brew install rtk). Do not run `rtk init -g`: the run scopes it.");
+    state.rtk = { mode, version };
+  }
+  // A new activation is a new run: events from the last one must not leak into this report.
+  rmSync(eventsPath(cwd), { force: true });
   saveState(state, cwd);
   console.log(`active  ${runDir(cwd)}`);
+  if (state.rtk) console.log(`rtk     ${state.rtk.mode} (${state.rtk.version}) — Bash commands route through rtk while active`);
   console.log(`caps    ${LINE_MAX} lines · ${BYTE_MAX} bytes · outline ≤ ${OUTLINE_MAX} lines`);
 }
 

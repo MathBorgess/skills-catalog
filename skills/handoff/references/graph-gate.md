@@ -1,6 +1,6 @@
 # Graph gate
 
-Run grilling rounds after `route` and before `route --approve`. The owner approves one exact `plan.json`: graph, slot/lane, model, and effort.
+Run grilling rounds after `route` and before `route --approve`. The owner approves one exact `plan.json`: graph, slot/lane, model, effort, and `rtk` mode.
 
 ## Each round
 
@@ -10,7 +10,7 @@ Run grilling rounds after `route` and before `route --approve`. The owner approv
    |---|---|---|---|---|---|---|
 
    Mark owner-set model or effort with `✎`.
-2. Ask numbered frontier questions. Include every uncertain dependency, write-set boundary, tier, model, and effort. Give each question a recommended answer. Treat a `route` dependency warning as evidence that the dependency may be non-causal.
+2. Ask numbered frontier questions. Include every uncertain dependency, write-set boundary, tier, model, effort, and `rtk` mode (read the `RTK` column: `mode/via`; `full` is an experiment, not a default). Give each question a recommended answer. Treat a `route` dependency warning as evidence that the dependency may be non-causal.
 3. Apply the owner's edits to `plan.json`, run `route` again, and show the new graph/table. Repeat until the owner approves.
 
 Questions should test whether a dependency is causal, concurrent writes are really separate, a tier matches the judgment left open, and a model/effort override is deliberate. Do not silently change an owner override.

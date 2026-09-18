@@ -48,7 +48,7 @@ Append to `$RUN/sessions/<NN>.progress.md` as you finish each item, and write
 Do not read other session briefs. Do not wait for the parent.
 ```
 
-Substitute absolute paths. This is a pointer, not a copy of the brief.
+Substitute absolute paths. This is a pointer, not a copy of the brief. Do not write RTK instructions here: when the session runs with `rtk` in `prompt` mode, dispatch appends them itself.
 
 ## `NN.result.md`
 

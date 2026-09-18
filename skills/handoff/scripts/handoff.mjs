@@ -46,6 +46,7 @@ import {
 import { homedir, tmpdir } from "node:os";
 import { basename, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { RTK_ENV, RTK_PROMPT, historyStats, normalizeMode, rtkVersion } from "./rtk.mjs";
 import {
   claudeConfigDirs,
   localSearchPaths,
@@ -1426,6 +1427,21 @@ export function hashSessions(sessions) {
   return createHash("sha256").update(JSON.stringify(sessions ?? [])).digest("hex");
 }
 
+// What the owner approves: the sessions plus plan-level choices that change
+// how they run. A plan without those hashes exactly as before.
+export function hashPlan(plan) {
+  if (plan?.rtk === undefined) return hashSessions(plan?.sessions);
+  return createHash("sha256").update(JSON.stringify({ rtk: plan.rtk, sessions: plan.sessions ?? [] })).digest("hex");
+}
+
+// Per-session rtk: the session's own value wins over the plan's. Claude
+// children get a scoped hook; hookless CLIs get the instruction in the prompt.
+export function rtkFor(plan, s, provider) {
+  const mode = normalizeMode(s.rtk ?? plan?.rtk);
+  if (mode === "off") return { mode, via: "off" };
+  return { mode, via: provider === "claude" ? "hook" : "prompt" };
+}
+
 // ------------------------------------------------------------------- route
 
 function costHistory() {
@@ -1507,6 +1523,15 @@ export function route(dir) {
       `⚠ warning: non-causal dependency edge ${nc.edge} (${nc.from} writes do not overlap ${nc.to} reads ∪ ${nc.to} writes)`,
     );
   }
+
+  let wantsRtk = false;
+  try {
+    for (const s of plan.sessions) wantsRtk ||= normalizeMode(s.rtk ?? plan.rtk) !== "off";
+  } catch (e) {
+    die(`plan.json: ${e.message}`);
+  }
+  const rtkVer = wantsRtk ? rtkVersion() : null;
+  if (wantsRtk && !rtkVer) die("plan.json asks for rtk but the rtk binary is not on PATH (brew install rtk)");
 
   // P8: Respect plan-level avoid list and slots found dead in state.json
   const deadSlots = new Set([...(plan.avoid ?? [])]);
@@ -1700,10 +1725,19 @@ export function route(dir) {
       // buys nothing.
       not_before: holdUntil(slot, horizonS, cand.lane),
       user_override: Boolean(s.provider || isOverride),
+      rtk: rtkFor(plan, s, slot.provider),
+      rtk_events: join(dir, "sessions", `${s.id}.rtk.jsonl`),
     });
   }
 
-  const routing = { ts: nowISO(), mode: plan.mode ?? "fan-out", horizon_s: horizonS, admission, sessions: assigned };
+  const routing = {
+    ts: nowISO(),
+    mode: plan.mode ?? "fan-out",
+    horizon_s: horizonS,
+    admission,
+    rtk_version: rtkVer ?? undefined,
+    sessions: assigned,
+  };
   writeJSON(join(dir, "routing.json"), routing);
   console.log(renderQuota(quota));
   console.log(renderRouting(routing));
@@ -1714,7 +1748,7 @@ export function route(dir) {
     );
   }
   if (arg("approve")) {
-    const hash = hashSessions(plan.sessions);
+    const hash = hashPlan(plan);
     writeJSON(join(dir, "approved.json"), { hash, ts: nowISO() });
     console.log(`\nlocked: approved.json written (hash: ${hash.slice(0, 12)}...)`);
   }
@@ -1806,7 +1840,7 @@ export function renderModel(s) {
 function renderRouting(r) {
   const rows = r.sessions.map(
     (s) =>
-      `| ${s.id} | ${s.goal?.slice(0, 40) ?? ""} | ${s.provider} | ${renderModel(s)} | ${pct(s.lane_remaining_pct ?? s.remaining_pct)} | ~${s.est_cost_pct}% | ${s.isolation} | ${(s.deps ?? []).join(",") || "—"} | ${s.not_before ? `holds ${fmtDur(Math.round((Date.parse(s.not_before) - Date.now()) / 1000))}` : "now"} |`,
+      `| ${s.id} | ${s.goal?.slice(0, 40) ?? ""} | ${s.provider} | ${renderModel(s)} | ${pct(s.lane_remaining_pct ?? s.remaining_pct)} | ~${s.est_cost_pct}% | ${s.isolation} | ${(s.deps ?? []).join(",") || "—"} | ${s.not_before ? `holds ${fmtDur(Math.round((Date.parse(s.not_before) - Date.now()) / 1000))}` : "now"} | ${s.rtk && s.rtk.mode !== "off" ? `${s.rtk.mode}/${s.rtk.via}` : "—"} |`,
   );
   const legend = [];
   if (r.sessions.some((s) => s.override)) {
@@ -1826,8 +1860,8 @@ function renderRouting(r) {
   const parallelNote = `> **Execution Graph:** ${r.sessions.length} sessions total · **${rootSessions.length} session(s) runnable immediately in parallel**.`;
   return [
     "",
-    "| Session | Goal | Provider | Model [lane] | Remaining | Est. cost | Isolation | Deps | Starts |",
-    "|---|---|---|---|---|---|---|---|---|",
+    "| Session | Goal | Provider | Model [lane] | Remaining | Est. cost | Isolation | Deps | Starts | RTK |",
+    "|---|---|---|---|---|---|---|---|---|---|",
     ...rows,
     parallelNote,
     ...legend,
@@ -1857,12 +1891,22 @@ export function cursorModelWithEffort(model, effort) {
   return `${model}[effort=${effort}]`;
 }
 
+// The --settings JSON that gives one Claude child the rtk hook, and only it.
+export function rtkClaudeSettings(mode, eventsPath) {
+  const hook = fileURLToPath(new URL("./rtk-hook.mjs", import.meta.url));
+  const command = `node ${JSON.stringify(hook)} ${mode} ${JSON.stringify(eventsPath ?? "")}`;
+  return JSON.stringify({ hooks: { PreToolUse: [{ matcher: "Bash", hooks: [{ type: "command", command }] }] } });
+}
+
 export function launchArgs(s, promptPath, cwd) {
-  const prompt = readFileSync(promptPath, "utf8").trim();
+  let prompt = readFileSync(promptPath, "utf8").trim();
   const effort = s.effort ?? EFFORT_BY_TIER[s.tier] ?? DEFAULT_EFFORT;
+  const rtk = s.rtk ?? { mode: "off", via: "off" };
+  if (rtk.via === "prompt") prompt = `${prompt}\n\n${RTK_PROMPT[rtk.mode]}`;
   switch (s.provider) {
     case "claude": {
       const a = ["-p", "--dangerously-skip-permissions", "--output-format", "text"];
+      if (rtk.via === "hook") a.push("--settings", rtkClaudeSettings(rtk.mode, s.rtk_events));
       if (effort) a.push("--effort", effort);
       if (s.model) a.push("--model", s.model);
       return [s.bin, [...a, prompt]];
@@ -2145,7 +2189,7 @@ async function dispatch(dir) {
     }
     const approved = readJSON(approvedPath);
     const plan = readJSON(join(dir, "plan.json"));
-    const currentHash = hashSessions(plan?.sessions);
+    const currentHash = hashPlan(plan);
     if (!approved?.hash || approved.hash !== currentHash) {
       die(
         "dispatch refused: plan.json sessions content has changed since approval (hash mismatch). Re-run `handoff route --run DIR --approve`.",
@@ -2233,6 +2277,7 @@ async function dispatch(dir) {
         const logFd = openSync(join(dir, "logs", `${s.id}.log`), "a");
         const child = spawn(bin, args, {
           cwd,
+          env: RTK_ENV,
           detached: true,
           stdio: ["ignore", logFd, logFd],
         });
@@ -2243,6 +2288,8 @@ async function dispatch(dir) {
         st.slot = s.slot;
         st.lane = s.lane;
         st.started_at = nowISO();
+        st.cwd = cwd;
+        st.rtk = s.rtk;
         st.attempts += 1;
         live.set(s.id, child);
         state.events.push(
@@ -2373,6 +2420,28 @@ export function renderStatus(dir, routing, state) {
 
 // ------------------------------------------------------------------- score
 
+// Per-session rtk evidence: rewrites and recalls come from the hook log (a
+// Claude child), filtered bytes from RTK's history under the session's cwd.
+// A prompt-mode child has no hook, so its recalls are unknown (null).
+export function sessionRtk(s, st, historyOpts = {}) {
+  const r = st?.rtk ?? s.rtk ?? { mode: "off", via: "off" };
+  if (r.mode === "off") return { mode: "off", via: "off" };
+  let rewrites = null;
+  let recalls = null;
+  if (r.via === "hook") {
+    const lines = existsSync(s.rtk_events ?? "")
+      ? readFileSync(s.rtk_events, "utf8").split("\n").filter(Boolean)
+      : [];
+    const events = lines.map((l) => { try { return JSON.parse(l); } catch { return {}; } });
+    rewrites = events.filter((e) => e.event === "rewrite").length;
+    recalls = events.filter((e) => e.event === "recall").length;
+  }
+  const history = st?.cwd && st?.started_at
+    ? historyStats({ project: st.cwd, since: st.started_at, until: st.ended_at ?? nowISO(), ...historyOpts })
+    : null;
+  return { mode: r.mode, via: r.via, rewrites, recalls, history, shared_cwd: s.isolation === "cwd" || undefined };
+}
+
 export async function score(dir) {
   const routing = readJSON(join(dir, "routing.json"));
   const before = readJSON(join(dir, "quota.json"));
@@ -2422,10 +2491,12 @@ export async function score(dir) {
     providers_used: providersUsed,
     quota_delta_pct: cost,
     session_cost_pct: sessionCost,
+    rtk_version: routing.rtk_version ?? null,
     sessions: routing.sessions.map((s) => ({
       id: s.id,
       effort: s.effort ?? EFFORT_BY_TIER[s.tier] ?? DEFAULT_EFFORT,
       override: Boolean(s.override),
+      rtk: sessionRtk(s, st(s.id)),
     })),
     // Counts, not booleans: six relaunches must not score the same as one.
     relaunches: routing.sessions.reduce((n, s) => n + Math.max(0, (st(s.id).attempts ?? 0) - 1), 0),
@@ -2462,6 +2533,14 @@ export async function score(dir) {
         .join(", ") || "not measurable (every probe was unknown)"
     }`,
     `Wall clock ${fmtDur(wall)} across ${state.parent_turns} parent turn(s).`,
+    ...metrics.sessions
+      .filter((x) => x.rtk.mode !== "off")
+      .map((x) => {
+        const h = x.rtk.history;
+        return `rtk ${x.id} ${x.rtk.mode}/${x.rtk.via}: ${x.rtk.rewrites ?? "?"} rewrites, ${x.rtk.recalls ?? "?"} recalls` +
+          (h ? `, ${h.commands} filtered, ${h.input_tokens} → ${h.output_tokens} tokens (RTK estimate)` : ", no RTK history") +
+          (x.rtk.shared_cwd ? " — shares the parent cwd, history not attributable" : "");
+      }),
   ];
   appendFileSync(join(dir, "manifest.md"), lines.join("\n") + "\n");
   console.log(lines.join("\n"));

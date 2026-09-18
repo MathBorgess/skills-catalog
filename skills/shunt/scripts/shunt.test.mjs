@@ -22,6 +22,17 @@ import {
   runDir,
   computeMetrics,
 } from "./shunt.mjs";
+import { chmodSync } from "node:fs";
+import { createRequire } from "node:module";
+import {
+  guardedSkip,
+  historyStats,
+  hookOutput,
+  isRecall,
+  modeFromArgv,
+  normalizeMode,
+  rewrite,
+} from "./rtk.mjs";
 
 // Keep test runs out of the real metrics history in the OS temp dir.
 process.env.TMPDIR = mkdtempSync(join(tmpdir(), "skills-test-"));
@@ -270,6 +281,102 @@ assert("metrics line has required fields", "recover" in lastMetric && "edit_bypa
 const cleanRes = spawnSync(process.execPath, [cli, "clean"], { cwd: dir, encoding: "utf8" });
 assert("clean command succeeds", cleanRes.status === 0);
 assert("runDir removed by clean", !existsSync(runDir(dir)));
+
+
+// ------------------------------------------------------------------ rtk
+{
+  // A fake rtk: rewrite answers by exit code, filtered commands echo a marker.
+  const bin = mkdtempSync(join(tmpdir(), "fake-rtk-"));
+  const fake = join(bin, "rtk");
+  writeFileSync(
+    fake,
+    `#!/bin/sh
+case "$1" in
+  --version) echo "rtk 9.9.9" ;;
+  rewrite)
+    case "$2" in
+      "git status") echo "rtk git status"; exit 3 ;;
+      "cargo test") echo "rtk cargo test"; exit 0 ;;
+      "rm -rf x") exit 2 ;;
+      *) exit 1 ;;
+    esac ;;
+  *) echo "FILTERED $*" ;;
+esac
+`,
+  );
+  chmodSync(fake, 0o755);
+  const env = { ...process.env, PATH: `${bin}:${process.env.PATH}` };
+
+  assert("rtk: --rtk alone is guarded", modeFromArgv(["node", "x", "activate", "--rtk"]) === "guarded");
+  assert("rtk: --rtk=full is full", modeFromArgv(["node", "x", "--rtk=full"]) === "full");
+  assert("rtk: no flag is off", modeFromArgv(["node", "x"]) === "off");
+  let threw = false;
+  try { normalizeMode("loud"); } catch { threw = true; }
+  assert("rtk: unknown mode is refused", threw);
+
+  assert("rtk guarded: git diff stays raw", guardedSkip("git diff HEAD~1"));
+  assert("rtk guarded: git -C x show stays raw", guardedSkip("git -C repo show abc"));
+  assert("rtk guarded: cat inside a chain keeps the chain raw", guardedSkip("cargo build && cat out.txt"));
+  assert("rtk guarded: env-prefixed grep stays raw", guardedSkip("LC_ALL=C grep -rn foo ."));
+  assert("rtk guarded: build noise is eligible", !guardedSkip("cargo test && git status"));
+
+  assert("rtk rewrite: exit 3 rewrites (host still prompts)", rewrite("git status", "guarded", fake) === "rtk git status");
+  assert("rtk rewrite: exit 0 rewrites", rewrite("cargo test", "guarded", fake) === "rtk cargo test");
+  assert("rtk rewrite: exit 1 runs as typed", rewrite("echo hi", "guarded", fake) === null);
+  assert("rtk rewrite: exit 2 (deny rule) runs as typed", rewrite("rm -rf x", "guarded", fake) === null);
+  assert("rtk rewrite: off never rewrites", rewrite("git status", "off", fake) === null);
+  assert("rtk rewrite: guarded never sends git diff", rewrite("git diff", "guarded", fake) === null);
+  assert("rtk rewrite: already-prefixed is left alone", rewrite("rtk git status", "full", fake) === null);
+  assert("rtk: recall and proxy count as recall", isRecall("rtk recall ab12") && isRecall(" rtk proxy git log") && !isRecall("rtk git log"));
+
+  const out = hookOutput({ command: "git status", description: "d", timeout: 5 }, "rtk git status");
+  const u = out.hookSpecificOutput.updatedInput;
+  assert("rtk hook: swaps only the command", u.command === "rtk git status" && u.description === "d" && u.timeout === 5);
+  assert("rtk hook: never asserts a permission decision", !("permissionDecision" in out.hookSpecificOutput));
+
+  // history.db: only rows under the project and inside the window count.
+  const { DatabaseSync } = createRequire(import.meta.url)("node:sqlite");
+  const dbPath = join(bin, "history.db");
+  const db = new DatabaseSync(dbPath);
+  db.exec(`CREATE TABLE commands (timestamp TEXT, original_cmd TEXT, rtk_cmd TEXT, project_path TEXT,
+    input_tokens INTEGER, output_tokens INTEGER, saved_tokens INTEGER, savings_pct REAL, exec_time_ms INTEGER)`);
+  const ins = db.prepare("INSERT INTO commands VALUES (?, 'c', 'rtk c', ?, ?, ?, ?, 0, 1)");
+  ins.run("2026-09-18T10:00:00.500000+00:00", "/p/wt/01", 100, 10, 90);
+  ins.run("2026-09-18T10:00:05.000000+00:00", "/p/wt/01/sub", 50, 5, 45);
+  ins.run("2026-09-18T10:00:06.000000+00:00", "/p/wt/02", 999, 1, 998);
+  ins.run("2026-09-18T09:59:59.000000+00:00", "/p/wt/01", 999, 1, 998);
+  db.close();
+  const h = historyStats({ project: "/p/wt/01", since: "2026-09-18T10:00:00.000Z", until: "2026-09-18T10:00:05.000Z", db: dbPath });
+  assert("rtk history: window and project subtree are counted", h?.commands === 2 && h.input_tokens === 150 && h.output_tokens === 15);
+  assert("rtk history: missing db is null", historyStats({ project: "/p", since: "2026-01-01T00:00:00Z", db: join(bin, "none.db") }) === null);
+
+  // End to end: activate --rtk, the guard rewrites Bash, run delegates, report shows rtk.
+  const d = mkdtempSync(join(tmpdir(), "shunt-rtk-"));
+  const a = spawnSync(process.execPath, [cli, "activate", "--rtk"], { cwd: d, encoding: "utf8", env });
+  assert("rtk e2e: activate --rtk reports the mode", a.status === 0 && /rtk\s+guarded \(9\.9\.9\)/.test(a.stdout));
+  const g = (command) =>
+    spawnSync(process.execPath, [guard], {
+      input: JSON.stringify({ tool_name: "Bash", tool_input: { command }, cwd: d }),
+      encoding: "utf8",
+      env,
+    }).stdout;
+  assert("rtk e2e: guard rewrites git status", JSON.parse(g("git status") || "{}").hookSpecificOutput?.updatedInput?.command === "rtk git status");
+  assert("rtk e2e: guard leaves git diff alone", g("git diff") === "");
+  assert("rtk e2e: guard leaves a recall alone", g("rtk recall ab12") === "");
+  const r = spawnSync(process.execPath, [cli, "run", "--", "git", "status"], { cwd: d, encoding: "utf8", env });
+  assert("rtk e2e: run delegates to rtk", r.status === 0 && /FILTERED git status/.test(r.stdout) && /via rtk git status/.test(r.stdout));
+  const m = computeMetrics(d);
+  assert("rtk e2e: metrics count rewrites and recalls", m.rtk.mode === "guarded" && m.rtk.rewrites === 2 && m.rtk.recalls === 1);
+  const again = spawnSync(process.execPath, [cli, "activate"], { cwd: d, encoding: "utf8", env });
+  assert("activate starts a fresh run: no events leak", again.status === 0 && readEvents(d).length === 0);
+  const plain = spawnSync(process.execPath, [guard], {
+    input: JSON.stringify({ tool_name: "Bash", tool_input: { command: "git status" }, cwd: d }),
+    encoding: "utf8",
+    env,
+  });
+  assert("rtk e2e: without --rtk the guard ignores Bash", plain.stdout === "");
+  spawnSync(process.execPath, [cli, "clean"], { cwd: d, encoding: "utf8", env });
+}
 
 if (failed) {
   console.error(`\n${failed} failed`);

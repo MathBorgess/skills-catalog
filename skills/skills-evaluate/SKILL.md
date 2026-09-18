@@ -3,7 +3,7 @@ name: skills-evaluate
 description: Use when evaluating skills, analyzing skill metrics, improving skills, skills evaluate, reviewing skill runs, or proposing skill changes. Not for running shunt or handoff themselves.
 metadata:
   author: Matheus Borges
-  version: 0.1.0
+  version: 0.2.0
 ---
 
 # Skills Evaluate
@@ -46,6 +46,10 @@ Compare latest run numbers against historical medians. Use the diagnosis table b
 | `handoff.spread_miss` = 1 with 2+ providers available | Work concentrated on one provider despite options | Task cut too coarse to spread, or habit bias in selection | **Skill**: decompose task into smaller decoupled sessions. **Obs**: print available slot capacity during plan gate. |
 | `handoff.relaunches` climbing while `n_done` holds | Sessions failing initially and succeeding on retry | Briefs short of context; environment setup missing | **Skill**: fix brief template; do not patch router. **Obs**: diff initial brief against relaunch prompt. |
 | `handoff.parent_turns` climbing (> 2) | Parent consuming excessive tokens during run | Parent polling interactively instead of waiting for dispatch | **Skill**: enforce blocking dispatch; instruct parent not to poll. |
+| `rtk.recalls` / `rtk.rewrites` high (shunt or handoff `hook` sessions) | RTK elided what the agent needed | A filter too aggressive for this task class, or `full` mode on diffs/code | **Skill**: stay on `guarded` for this task class; add the command to the guarded list. **Obs**: `rtk gain --recalls` names the filter. |
+| `rtk.history.saved_tokens` high but task tokens / turns not lower than runs without `rtk` | Local metric trap: bash bytes fell, the task did not get cheaper | Savings landed on output the agent ignored, or recalls and re-runs ate them | **Skill**: keep `rtk` off for this task class. **Obs**: compare paired runs by task tokens, never by RTK's saved bytes. |
+| `rtk.via = prompt` sessions with `rtk.history.commands` near 0 | Hookless child ignored the RTK instruction | Instruction lost in a long brief, or the CLI rewrites commands itself | **Skill**: move the instruction earlier or drop `rtk` for that CLI. **Obs**: record prompt vs hook adoption per provider. |
+| `rtk.shared_cwd` sessions | RTK history not attributable to one session | Read-only session runs in the parent checkout | **Obs**: give measured sessions their own worktree, or read their numbers as a group. |
 
 ## 3. Audit Scope Drift
 

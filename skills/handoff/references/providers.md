@@ -9,6 +9,8 @@
 | Cursor | `--model <id>` | model-id suffix (for example, `-low`, `-medium`, `-high`) |
 | Antigravity | `--model <id>` | `--effort <low|medium|high>` |
 
+RTK (`rtk` in plan.json): Claude gets `--settings` with a Bash-only PreToolUse (`scripts/rtk-hook.mjs`) for that session; the other CLIs get RTK's instruction appended to the prompt. Every child runs with `RTK_TELEMETRY_DISABLED=1`.
+
 An explicit plan model pins its lane; an explicit effort is an owner override. Route may warn, but does not reroute either. See [`routing.md`](routing.md).
 
 Dispatcher behavior: create an isolated worktree for a writing session, pass the short prompt, redirect output to its private log, and read result files for status. A read-only session stays in the current checkout. Never use provider-specific worktree flags.

@@ -10,10 +10,12 @@
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import {
+  appendEvent,
   classifyRead,
   findLiveState,
   isHandoffChildPath,
   lineAndByteCount,
+  runDir,
 } from "./shunt.mjs";
 
 const ALLOW = 0;
@@ -50,19 +52,28 @@ function main() {
   const tool = input.tool_name ?? "";
   const ti = input.tool_input ?? {};
 
-  if (["Read", "Edit", "Write", "NotebookEdit"].includes(tool)) {
+  if (["Read", "Edit", "Write", "NotebookEdit", "MultiEdit"].includes(tool)) {
     const p = toolPath(ti);
     if (!p) process.exit(ALLOW);
     const abs = resolve(String(p));
     if (isHandoffChildPath(abs)) process.exit(ALLOW);
 
-    if (tool === "Write" || tool === "Edit" || tool === "NotebookEdit") {
-      if (state.write.running.includes(abs)) {
+    if (["Write", "Edit", "NotebookEdit", "MultiEdit"].includes(tool)) {
+      if (state.write?.running?.includes(abs)) {
         deny(
           `${abs} is write-delegate running. The small subagent owns it. Do not Write/Edit. After it finishes, \`write-done --file\` and excerpt only if you must change it.`,
         );
       }
+      if (state.edit?.targets?.includes(abs)) {
+        appendEvent({ event: "edit_done", path: abs, tool }, cwd);
+      }
       // FUTURE parent_composed_write: do not deny over-cap Write.contents.
+      process.exit(ALLOW);
+    }
+
+    const logsDir = resolve(runDir(cwd), "logs");
+    if (abs.startsWith(logsDir + "/") && existsSync(abs)) {
+      appendEvent({ event: "recover", path: abs, reason: "run_log" }, cwd);
       process.exit(ALLOW);
     }
 
@@ -74,7 +85,15 @@ function main() {
       process.exit(ALLOW);
     }
     const decision = classifyRead(abs, ti.offset, ti.limit, state, counts);
-    if (!decision.allow) deny(decision.reason);
+    if (!decision.allow) {
+      if (state.read?.outlines?.[abs]) {
+        appendEvent({ event: "recover", path: abs, reason: "outline_exists" }, cwd);
+      }
+      deny(decision.reason);
+    }
+    if (decision.reason === "edit_bypass") {
+      appendEvent({ event: "edit_read", path: abs }, cwd);
+    }
   }
 
   process.exit(ALLOW);

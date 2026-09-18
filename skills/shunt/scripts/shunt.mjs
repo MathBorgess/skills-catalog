@@ -5,6 +5,7 @@
 // or excerpt. Judgment (what to spawn, what the child may write) stays in
 // SKILL.md. Zero dependencies, Node 18+.
 
+import { spawn } from "node:child_process";
 import {
   closeSync,
   existsSync,
@@ -24,6 +25,8 @@ import { fileURLToPath } from "node:url";
 
 export const LINE_MAX = 350;
 export const BYTE_MAX = 32 * 1024;
+export const EDIT_LINE_MAX = LINE_MAX * 2;
+export const EDIT_BYTE_MAX = BYTE_MAX * 2;
 export const OUTLINE_MAX = 80;
 export const LIVE_MAX_AGE_S = 7200;
 
@@ -55,12 +58,37 @@ export function readJSON(p, fallback = null) {
   }
 }
 
+export function eventsPath(cwd = process.cwd()) {
+  return join(runDir(cwd), "events.jsonl");
+}
+
+export function appendEvent(data, cwd = process.cwd()) {
+  const dir = runDir(cwd);
+  mkdirSync(dir, { recursive: true });
+  const entry = { ts: nowISO(), ...data };
+  writeFileSync(eventsPath(cwd), JSON.stringify(entry) + "\n", { flag: "a" });
+}
+
+export function readEvents(cwd = process.cwd()) {
+  const p = eventsPath(cwd);
+  if (!existsSync(p)) return [];
+  try {
+    return readFileSync(p, "utf8")
+      .split(/\r?\n/)
+      .filter(Boolean)
+      .map((line) => JSON.parse(line));
+  } catch {
+    return [];
+  }
+}
+
 export function emptyState(cwd = process.cwd()) {
   return {
     cwd: resolve(cwd),
     activatedAt: nowISO(),
     read: { blocked: [], outlines: {}, summaries: {} },
     write: { running: [], done: [] },
+    edit: { targets: [] },
   };
 }
 
@@ -78,6 +106,7 @@ export function saveState(state, cwd = process.cwd()) {
 
 export function isLive(state) {
   if (!state?.activatedAt) return false;
+  if (state.deactivatedAt) return false;
   const age = (Date.now() - Date.parse(state.activatedAt)) / 1000;
   return Number.isFinite(age) && age <= LIVE_MAX_AGE_S;
 }
@@ -85,6 +114,16 @@ export function isLive(state) {
 export function findLiveState(cwd = process.cwd()) {
   const state = loadState(cwd);
   return isLive(state) ? state : null;
+}
+
+export function markEdit(path, cwd = process.cwd()) {
+  const abs = resolve(path);
+  const state = loadState(cwd);
+  if (!isLive(state)) throw new Error("shunt is not active — run activate");
+  if (!state.edit) state.edit = { targets: [] };
+  if (!state.edit.targets.includes(abs)) state.edit.targets.push(abs);
+  saveState(state, cwd);
+  return abs;
 }
 
 export function lineAndByteCount(path) {
@@ -168,11 +207,13 @@ export function writeOutline(path, cwd = process.cwd()) {
   const dir = join(runDir(cwd), "outlines");
   mkdirSync(dir, { recursive: true });
   const out = join(dir, `${slug(abs)}.md`);
+  const { lines, bytes } = lineAndByteCount(abs);
   writeFileSync(out, buildOutline(abs));
   const state = loadState(cwd) || emptyState(cwd);
   if (!state.read.blocked.includes(abs)) state.read.blocked.push(abs);
   state.read.outlines[abs] = out;
   saveState(state, cwd);
+  appendEvent({ event: "outline", path: abs, lines, bytes }, cwd);
   return out;
 }
 
@@ -192,6 +233,7 @@ export function writeExcerpt(path, start, end, cwd = process.cwd()) {
   mkdirSync(dir, { recursive: true });
   const out = join(dir, `${slug(abs)}-${from}-${to}.txt`);
   writeFileSync(out, slice.join("\n") + "\n");
+  appendEvent({ event: "excerpt", path: abs, start: from, end: to }, cwd);
   return out;
 }
 
@@ -253,6 +295,11 @@ export function classifyRead(abs, offset, limit, state, counts) {
     };
   }
 
+  const isEditTarget = state.edit?.targets?.includes(abs);
+  if (isEditTarget && counts.lines <= EDIT_LINE_MAX && counts.bytes <= EDIT_BYTE_MAX) {
+    if (isOver(counts)) return { allow: true, reason: "edit_bypass" };
+  }
+
   if (!isOver(counts)) return { allow: true, reason: "under" };
   if (windowAllowed(offset, limit, counts.lines)) return { allow: true, reason: "window" };
 
@@ -267,6 +314,264 @@ export function classifyRead(abs, offset, limit, state, counts) {
       `. If the outline is not enough, spawn a small/fast subagent to write a summary to ${summary} (≤ ${OUTLINE_MAX} lines) and Read only that. ` +
       `For an edit, \`excerpt --file ${abs} --start N --end M\` and Read the excerpt.`,
   };
+}
+
+export const ANSI_REGEX =
+  /[\u001b\u009b][[()#;?]*(?:[0-9]{1,4}(?:;[0-9]{0,4})*)?[0-9A-ORZcf-nqry=><]/g;
+
+export function stripAnsiAndControls(text) {
+  let s = text.replace(ANSI_REGEX, "");
+  s = s.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+  s = s.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, "");
+  return s;
+}
+
+export function progressKey(line) {
+  return line
+    .replace(/\[\s+/g, "[")
+    .replace(/\s+\]/g, "]")
+    .replace(/[\d%]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+export function isProgressDiff(a, b) {
+  if (!a || !b) return false;
+  if (!/[\d%]/.test(a) && !/[\d%]/.test(b)) return false;
+  return progressKey(a) === progressKey(b);
+}
+
+export function collapseProgress(lines) {
+  const collapsed = [];
+  let i = 0;
+  while (i < lines.length) {
+    const current = lines[i];
+    let count = 1;
+    while (
+      i + count < lines.length &&
+      isProgressDiff(current, lines[i + count])
+    ) {
+      count++;
+    }
+    if (count > 1) {
+      const lastLine = lines[i + count - 1].trimEnd();
+      collapsed.push(`${lastLine} (×${count})`);
+      i += count;
+    } else {
+      collapsed.push(current);
+      i++;
+    }
+  }
+  return collapsed;
+}
+
+export const ERROR_REGEX = /error|warn|fail|exception/i;
+
+export function filterOutput(raw, logPath = "", code = 0) {
+  const rawText = typeof raw === "string" ? raw : raw.toString("utf8");
+  const rawBytes = typeof raw === "string" ? Buffer.byteLength(raw, "utf8") : raw.length;
+
+  const cleaned = stripAnsiAndControls(rawText);
+  let lines = cleaned.split("\n");
+  if (lines.length > 0 && lines[lines.length - 1] === "") {
+    lines.pop();
+  }
+
+  const collapsed = collapseProgress(lines);
+
+  let kept;
+  if (collapsed.length <= 40) {
+    kept = collapsed;
+  } else {
+    const earlier = collapsed.slice(0, -40);
+    const tail = collapsed.slice(-40);
+    const keptErrors = earlier.filter((l) => ERROR_REGEX.test(l));
+    kept = [...keptErrors, ...tail];
+  }
+
+  const resultLines = [...kept];
+  resultLines.push(`exit ${code}`);
+  if (logPath) {
+    resultLines.push(`raw ${logPath} (${rawBytes} bytes)`);
+  }
+  return resultLines.join("\n") + "\n";
+}
+
+export function runCommand(cmd, cwd = process.cwd()) {
+  return new Promise((resolve) => {
+    const child = spawn(cmd, {
+      shell: true,
+      cwd,
+      stdio: ["inherit", "pipe", "pipe"],
+    });
+    const chunks = [];
+    child.stdout?.on("data", (chunk) => chunks.push(chunk));
+    child.stderr?.on("data", (chunk) => chunks.push(chunk));
+    child.on("close", (code) => {
+      resolve({ code: code ?? 0, raw: Buffer.concat(chunks) });
+    });
+    child.on("error", (err) => {
+      resolve({ code: 1, raw: Buffer.from(err.message, "utf8") });
+    });
+  });
+}
+
+export async function cmdRun(cmdString, cwd = process.cwd()) {
+  const forbidden = /^\s*(git\s+(diff|show)|cat\b|grep\b|rg\b)/;
+  if (forbidden.test(cmdString)) {
+    die(`do not wrap ${cmdString} — code, diffs, and search results are never compressed; run directly`);
+  }
+  const state = loadState(cwd);
+  if (!isLive(state)) die("shunt is not active — run activate");
+
+  const { code, raw } = await runCommand(cmdString, cwd);
+  const logsDir = join(runDir(cwd), "logs");
+  mkdirSync(logsDir, { recursive: true });
+  const logSlug = slug(cmdString) || "run";
+  const logFile = join(logsDir, `${logSlug}.log`);
+  writeFileSync(logFile, raw);
+
+  const filtered = filterOutput(raw, logFile, code);
+  process.stdout.write(filtered);
+
+  const rawBytes = raw.length;
+  const printedBytes = Buffer.byteLength(filtered, "utf8");
+  appendEvent(
+    {
+      event: "run",
+      cmd: cmdString,
+      code,
+      raw_bytes: rawBytes,
+      printed_bytes: printedBytes,
+      log: logFile,
+    },
+    cwd,
+  );
+  process.exit(code);
+}
+
+export function computeMetrics(cwd = process.cwd()) {
+  const events = readEvents(cwd);
+  let inspected = 0;
+  let outlines = 0;
+  let excerpts = 0;
+  let recover = 0;
+  let run_cmds = 0;
+  let raw_bytes = 0;
+  let printed_bytes = 0;
+
+  const overCapMap = new Map();
+  const editReads = [];
+  const editDones = [];
+
+  for (const e of events) {
+    if (e.event === "inspect") {
+      inspected++;
+      if (e.over && e.path) {
+        overCapMap.set(e.path, e.bytes || 0);
+      }
+    } else if (e.event === "outline") {
+      outlines++;
+      if (e.bytes && e.path) {
+        overCapMap.set(e.path, e.bytes);
+      }
+    } else if (e.event === "excerpt") {
+      excerpts++;
+    } else if (e.event === "recover") {
+      recover++;
+    } else if (e.event === "edit_read") {
+      editReads.push(e);
+    } else if (e.event === "edit_done") {
+      editDones.push(e);
+    } else if (e.event === "run") {
+      run_cmds++;
+      raw_bytes += e.raw_bytes || 0;
+      printed_bytes += e.printed_bytes || 0;
+    }
+  }
+
+  const readPaths = new Set(editReads.map((e) => e.path));
+  const editedPaths = new Set(
+    editDones.filter((e) => readPaths.has(e.path)).map((e) => e.path),
+  );
+
+  for (const p of readPaths) {
+    overCapMap.delete(p);
+  }
+  let overCapBytes = 0;
+  for (const b of overCapMap.values()) {
+    overCapBytes += b;
+  }
+
+  const est_tokens_saved = Math.max(
+    0,
+    Math.round((raw_bytes - printed_bytes + overCapBytes) / 4),
+  );
+
+  return {
+    skill: "shunt",
+    ts: nowISO(),
+    run: runDir(cwd),
+    cwd: resolve(cwd),
+    inspected,
+    outlines,
+    excerpts,
+    recover,
+    edit_bypass: {
+      reads: editReads.length,
+      edited: editedPaths.size,
+    },
+    run_cmds,
+    raw_bytes,
+    printed_bytes,
+    est_tokens_saved,
+  };
+}
+
+export function writeMetricsLine(metric, cwd = process.cwd()) {
+  const dir = join(tmpdir(), "shunt");
+  mkdirSync(dir, { recursive: true });
+  const metricsFile = join(dir, "metrics.jsonl");
+  writeFileSync(metricsFile, JSON.stringify(metric) + "\n", { flag: "a" });
+  return metricsFile;
+}
+
+export function formatReport(m) {
+  return [
+    `# shunt report`,
+    `- run: ${m.run}`,
+    `- inspected: ${m.inspected}`,
+    `- outlines: ${m.outlines}`,
+    `- excerpts: ${m.excerpts}`,
+    `- recover: ${m.recover}`,
+    `- edit bypass: ${m.edit_bypass.reads} reads, ${m.edit_bypass.edited} edited`,
+    `- commands: ${m.run_cmds} runs (${m.raw_bytes} raw bytes, ${m.printed_bytes} printed bytes)`,
+    `- est. tokens saved: ${m.est_tokens_saved} (estimate)`,
+  ].join("\n");
+}
+
+export function cmdDeactivate(cwd = process.cwd()) {
+  const m = computeMetrics(cwd);
+  writeMetricsLine(m, cwd);
+  console.log(formatReport(m));
+  const state = loadState(cwd);
+  if (state) {
+    state.deactivatedAt = nowISO();
+    saveState(state, cwd);
+  }
+  console.log("inert");
+}
+
+export function cleanRun(cwd = process.cwd(), runPath = null) {
+  const dir = runPath ? resolve(runPath) : runDir(cwd);
+  if (existsSync(dir)) rmSync(dir, { recursive: true, force: true });
+  return dir;
+}
+
+export function cmdClean(cwd = process.cwd()) {
+  const r = arg("run");
+  const cleaned = cleanRun(cwd, r);
+  console.log(`cleaned ${cleaned}`);
 }
 
 function arg(name, fallback = null) {
@@ -287,12 +592,6 @@ function cmdActivate() {
   saveState(state, cwd);
   console.log(`active  ${runDir(cwd)}`);
   console.log(`caps    ${LINE_MAX} lines · ${BYTE_MAX} bytes · outline ≤ ${OUTLINE_MAX} lines`);
-}
-
-function cmdDeactivate() {
-  const dir = runDir();
-  if (existsSync(dir)) rmSync(dir, { recursive: true, force: true });
-  console.log("inert");
 }
 
 function cmdStatus() {
@@ -317,6 +616,10 @@ function cmdInspect() {
   const tag = over ? "over " : "under";
   process.stdout.write(
     `${tag}  ${counts.lines} lines  ${counts.bytes} bytes  ${abs}\n`,
+  );
+  appendEvent(
+    { event: "inspect", path: abs, lines: counts.lines, bytes: counts.bytes, over },
+    process.cwd(),
   );
   if (!over) return;
   if (!isLive(loadState())) die("file is over threshold but shunt is not active — run activate");
@@ -343,6 +646,16 @@ function cmdExcerpt() {
   }
 }
 
+function cmdEdit() {
+  const file = arg("file");
+  if (!file) die("edit --file PATH");
+  try {
+    console.log(`edit-target ${markEdit(file)}`);
+  } catch (e) {
+    die(e.message);
+  }
+}
+
 function cmdTrackWrite() {
   const file = arg("file");
   if (!file) die("track-write --file PATH");
@@ -363,13 +676,15 @@ function cmdWriteDone() {
   }
 }
 
-function main() {
+async function main() {
   const cmd = process.argv[2];
   switch (cmd) {
     case "activate":
       return cmdActivate();
     case "deactivate":
       return cmdDeactivate();
+    case "clean":
+      return cmdClean();
     case "status":
       return cmdStatus();
     case "inspect":
@@ -378,17 +693,27 @@ function main() {
       return cmdOutline();
     case "excerpt":
       return cmdExcerpt();
+    case "edit":
+      return cmdEdit();
     case "track-write":
       return cmdTrackWrite();
     case "write-done":
       return cmdWriteDone();
+    case "run": {
+      const dashDash = process.argv.indexOf("--");
+      if (dashDash === -1 || dashDash === process.argv.length - 1) {
+        die("run -- <cmd...>");
+      }
+      const cmdString = process.argv.slice(dashDash + 1).join(" ");
+      return await cmdRun(cmdString);
+    }
     default:
       die(
-        "commands: activate | deactivate | status | inspect --file | outline --file | excerpt --file --start --end | track-write --file | write-done --file",
+        "commands: activate | deactivate | clean | status | inspect --file | outline --file | excerpt --file --start --end | edit --file | run -- <cmd> | track-write --file | write-done --file",
       );
   }
 }
 
 const thisFile = fileURLToPath(import.meta.url);
 const invoked = process.argv[1] && resolve(process.argv[1]) === thisFile;
-if (invoked) main();
+if (invoked) await main();

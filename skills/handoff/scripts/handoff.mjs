@@ -11,10 +11,12 @@
 //
 // Commands
 //   probe    [--run DIR] [--json]      supply snapshot per slot
-//   route    --run DIR                 admission control + slot assignment
-//   dispatch --run DIR [--budget S]    launch ready sessions, wait, reroute, repeat
-//   status   --run DIR                 one line per session
+//   route    --run DIR [--approve]     admission control + slot assignment
+//   dispatch --run DIR [--budget S] [--settle S]
+//                                      launch ready sessions, wait, reroute, repeat
+//   status   --run DIR                 status table + result digest blocks
 //   score    --run DIR                 cost + defect scorecard, appends metrics.jsonl
+//   clean    --run DIR                 remove clean worktrees and run dir (keeps branches)
 //
 // Run directory layout
 //   $TMPDIR/handoff/<run-id>/
@@ -27,6 +29,7 @@
 //     wt/NN/         git worktree for a file-writing session
 
 import { spawn, spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import {
   appendFileSync,
   existsSync,
@@ -37,9 +40,12 @@ import {
   closeSync,
   readSync,
   statSync,
+  readdirSync,
+  rmSync,
 } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import {
   claudeConfigDirs,
   localSearchPaths,
@@ -49,6 +55,7 @@ import {
 const LOW_PCT = Number(process.env.HANDOFF_LOW_PCT ?? 20);
 const PROBE_TTL_S = 300;
 const POLL_MS = 3000;
+export const DEFAULT_SETTLE_S = 30;
 
 // Cost prior, in percentage points of a provider's tightest window, per
 // session. Replaced by the median of this machine's own history as soon as
@@ -560,7 +567,7 @@ function cursorLanes(plan, payload) {
 // table marks that rather than pretending otherwise.
 const MODEL_LIST_ARGS = { cursor: ["--list-models"], antigravity: ["models"] };
 const modelListCache = new Map();
-function cliModels(bin, provider) {
+export function cliModels(bin, provider) {
   const listArgs = MODEL_LIST_ARGS[provider];
   if (!listArgs) return [];
   if (modelListCache.has(bin)) return modelListCache.get(bin);
@@ -570,8 +577,10 @@ function cliModels(bin, provider) {
     if (r.status === 0 && r.stdout) {
       out = r.stdout
         .split("\n")
-        .map((l) => l.replace(/^[\s*\-\u2022]+/, "").trim())
-        .filter((l) => /^[a-z0-9][a-z0-9._-]{1,48}$/i.test(l));
+        .map((l) => l.replace(/^[\s*\-\u2022\u2800-\u28ff]+/, "").trim())
+        .filter((l) => !l.startsWith("Available") && !l.includes("Fetching") && !l.startsWith("Tip:"))
+        .map((l) => l.split(/\s+-\s+|\s+/)[0].trim())
+        .filter((l) => /^[a-z0-9][a-z0-9._-]{1,64}$/i.test(l));
     }
   } catch {}
   modelListCache.set(bin, out);
@@ -1386,6 +1395,37 @@ function independenceConflicts(sessions) {
   return conflicts;
 }
 
+export function nonCausalDeps(sessions) {
+  const byId = new Map(sessions.map((s) => [s.id, s]));
+  const nonCausal = [];
+  for (const b of sessions) {
+    for (const aId of b.deps ?? []) {
+      const a = byId.get(aId);
+      if (!a) continue;
+      const aWrites = a.writes ?? [];
+      const bTargets = [...(b.reads ?? []), ...(b.writes ?? [])];
+      let overlaps = false;
+      for (const pa of aWrites) {
+        for (const pb of bTargets) {
+          if (pathsCollide(pa, pb)) {
+            overlaps = true;
+            break;
+          }
+        }
+        if (overlaps) break;
+      }
+      if (!overlaps) {
+        nonCausal.push({ from: a.id, to: b.id, edge: `${a.id}→${b.id}` });
+      }
+    }
+  }
+  return nonCausal;
+}
+
+export function hashSessions(sessions) {
+  return createHash("sha256").update(JSON.stringify(sessions ?? [])).digest("hex");
+}
+
 // ------------------------------------------------------------------- route
 
 function costHistory() {
@@ -1442,7 +1482,7 @@ function slotSatisfiesNeeds(provider, needs) {
   return needs.every((need) => caps.has(need));
 }
 
-function route(dir) {
+export function route(dir) {
   const plan = readJSON(join(dir, "plan.json"));
   if (!plan?.sessions?.length) die("plan.json missing or has no sessions");
   const quota = readJSON(join(dir, "quota.json"));
@@ -1459,6 +1499,13 @@ function route(dir) {
     }
     console.error("\nMerge them into one session, or make one depend on the other.");
     process.exit(2);
+  }
+
+  const nonCausal = nonCausalDeps(plan.sessions);
+  for (const nc of nonCausal) {
+    console.warn(
+      `⚠ warning: non-causal dependency edge ${nc.edge} (${nc.from} writes do not overlap ${nc.to} reads ∪ ${nc.to} writes)`,
+    );
   }
 
   // P8: Respect plan-level avoid list and slots found dead in state.json
@@ -1550,6 +1597,10 @@ function route(dir) {
   };
   for (const s of [...plan.sessions].sort((a, b) => a.id.localeCompare(b.id))) {
     const size = s.size ?? "m";
+    const effort = s.effort ?? EFFORT_BY_TIER[s.tier] ?? DEFAULT_EFFORT;
+    const hasModelOverride = Boolean(s.model);
+    const hasEffortOverride = Boolean(s.effort);
+    const isOverride = hasModelOverride || hasEffortOverride;
     const wanted = preferredLane(s.tier);
     // P4: Filter candidate slots by declared session capabilities
     const validCandidates = candidates.filter((c) => slotSatisfiesNeeds(c.slot.provider, s.needs));
@@ -1564,7 +1615,8 @@ function route(dir) {
         (c) => c.slot.key === s.provider || c.slot.provider === s.provider,
       );
       if (named.length) {
-        cand = pickBest(named, size, wanted, laneKindOfModel(named[0].slot.provider, s.model));
+        const pinnedLane = hasModelOverride ? laneKindOfModel(named[0].slot.provider, s.model) : null;
+        cand = pickBest(named, size, wanted, pinnedLane);
       } else {
         // The user named a provider whose every lane is spent. Their call wins;
         // the zero supply is what the admission warning is for.
@@ -1590,10 +1642,30 @@ function route(dir) {
           `session ${s.id} requires [${(s.needs ?? []).join(", ")}], but no eligible provider supports all required capabilities`,
         );
       }
-      cand = pickBest(validCandidates, size, wanted, null);
+      const pinnedLane = hasModelOverride ? laneKindOfModel(validCandidates[0].slot.provider, s.model) : null;
+      cand = pickBest(validCandidates, size, wanted, pinnedLane);
     }
     const slot = cand.slot;
     const laneName = cand.lane?.name ?? null;
+
+    if (hasModelOverride) {
+      const available = cliModels(slot.bin, slot.provider);
+      if (available.length > 0) {
+        const baseModel = s.model.includes("[") ? s.model.split("[")[0].trim() : s.model;
+        if (!available.includes(s.model) && !available.includes(baseModel)) {
+          die(
+            `session ${s.id} names model "${s.model}" for ${slot.provider}, which is not in the CLI's model list. Valid models: ${available.join(", ")}`,
+          );
+        }
+      }
+      // Warns, never reroutes, when an overridden model's lane has no quota
+      if (cand.lane && (cand.lane.remaining_pct === 0 || cand.supply <= 0)) {
+        console.warn(
+          `⚠ warning: session ${s.id} model override "${s.model}" lane "${cand.lane.name}" has no quota remaining`,
+        );
+      }
+    }
+
     load[cand.key] = (load[cand.key] ?? 0) + estimateCost(slot.provider, size, history);
     // Pin the lane to a model id the CLI actually lists. Without a pin the lane
     // is only a preference and the CLI's default model decides the pool, so the
@@ -1602,6 +1674,8 @@ function route(dir) {
     assigned.push({
       ...s,
       size,
+      effort,
+      override: isOverride,
       slot: slot.key,
       provider: slot.provider,
       account: slot.account,
@@ -1625,7 +1699,7 @@ function route(dir) {
       // reset — and only when it resets inside the horizon, otherwise waiting
       // buys nothing.
       not_before: holdUntil(slot, horizonS, cand.lane),
-      user_override: Boolean(s.provider),
+      user_override: Boolean(s.provider || isOverride),
     });
   }
 
@@ -1638,6 +1712,11 @@ function route(dir) {
       `\n⚠ admission: this cut needs ~${admission.demand_pct}% of plan quota and the pool holds ~${admission.supply_pct}%.` +
         `\n  Cut fewer and bigger sessions, or wait for a reset before dispatching.`,
     );
+  }
+  if (arg("approve")) {
+    const hash = hashSessions(plan.sessions);
+    writeJSON(join(dir, "approved.json"), { hash, ts: nowISO() });
+    console.log(`\nlocked: approved.json written (hash: ${hash.slice(0, 12)}...)`);
   }
   return routing;
 }
@@ -1713,13 +1792,15 @@ function renderQuota(quota) {
 
 // The model and the lane are one decision, so they share a cell: the model id is
 // what actually decides which pool the session spends.
-function renderModel(s) {
+export function renderModel(s) {
   const model = s.model ?? "default";
-  if (!s.lane) return model;
+  const effort = s.effort ? ` ${s.effort}` : "";
+  const mark = s.override ? " \u270e" : "";
+  if (!s.lane) return `${model}${effort}${mark}`;
   // Antigravity's own bucket ids call the frontier pool `3p`; the tag stays in
   // each provider's vocabulary so the cell matches what its dashboard says.
   const tag = s.lane.replace("-models", "").replace("third-party", "3p");
-  return `${model} [${tag}${s.lane_fallback ? "\u2193" : ""}${s.lane_pinned === false ? "*" : ""}]`;
+  return `${model}${effort}${mark} [${tag}${s.lane_fallback ? "\u2193" : ""}${s.lane_pinned === false ? "*" : ""}]`;
 }
 
 function renderRouting(r) {
@@ -1728,6 +1809,9 @@ function renderRouting(r) {
       `| ${s.id} | ${s.goal?.slice(0, 40) ?? ""} | ${s.provider} | ${renderModel(s)} | ${pct(s.lane_remaining_pct ?? s.remaining_pct)} | ~${s.est_cost_pct}% | ${s.isolation} | ${(s.deps ?? []).join(",") || "—"} | ${s.not_before ? `holds ${fmtDur(Math.round((Date.parse(s.not_before) - Date.now()) / 1000))}` : "now"} |`,
   );
   const legend = [];
+  if (r.sessions.some((s) => s.override)) {
+    legend.push("\u270e owner override (model or effort set in plan)");
+  }
   if (r.sessions.some((s) => s.lane_fallback)) {
     legend.push(
       "\u2193 the lane this tier prefers was spent or loaded — this session fell back to the other pool",
@@ -1752,15 +1836,34 @@ function renderRouting(r) {
 
 // ---------------------------------------------------------------- dispatch
 
-// Reasoning intensity is the same decision as model choice, in this CLI's own
-// vocabulary — so the tier that picks the lane picks this too.
-const AGY_EFFORT = { mechanical: "low", review: "medium", design: "high" };
+export const EFFORT_BY_TIER = { mechanical: "low", review: "medium", design: "high" };
+export const DEFAULT_EFFORT = "medium";
+export const AGY_EFFORT = EFFORT_BY_TIER;
 
-function launchArgs(s, promptPath, cwd) {
+export function cursorModelWithEffort(model, effort) {
+  if (!model || !effort) return model;
+  if (
+    /-(none|minimal|low|medium|high|xhigh|max)(?:-fast)?$/i.test(model) ||
+    /-(none|minimal|low|medium|high|xhigh|max)-thinking(?:-fast)?$/i.test(model) ||
+    /-thinking-(none|minimal|low|medium|high|xhigh|max)(?:-fast)?$/i.test(model)
+  ) {
+    return model;
+  }
+  if (model.includes("[") && model.endsWith("]")) {
+    const inside = model.slice(model.indexOf("[") + 1, -1);
+    if (/effort\s*=/i.test(inside)) return model;
+    return `${model.slice(0, -1)},effort=${effort}]`;
+  }
+  return `${model}[effort=${effort}]`;
+}
+
+export function launchArgs(s, promptPath, cwd) {
   const prompt = readFileSync(promptPath, "utf8").trim();
+  const effort = s.effort ?? EFFORT_BY_TIER[s.tier] ?? DEFAULT_EFFORT;
   switch (s.provider) {
     case "claude": {
       const a = ["-p", "--dangerously-skip-permissions", "--output-format", "text"];
+      if (effort) a.push("--effort", effort);
       if (s.model) a.push("--model", s.model);
       return [s.bin, [...a, prompt]];
     }
@@ -1768,12 +1871,14 @@ function launchArgs(s, promptPath, cwd) {
       // --sandbox and --approve-for-me are mutually exclusive on this CLI.
       // Running with cwd set to the worktree means workspace-write is enough.
       const a = ["exec", "--sandbox", "workspace-write"];
+      if (effort) a.push("-c", `model_reasoning_effort=${effort}`);
       if (s.model) a.push("-m", s.model);
       return [s.bin, [...a, prompt]];
     }
     case "cursor": {
       const a = ["-p", "--force"];
-      if (s.model) a.push("--model", s.model);
+      const model = cursorModelWithEffort(s.model, effort);
+      if (model) a.push("--model", model);
       return [s.bin, [...a, prompt]];
     }
     case "antigravity": {
@@ -1784,7 +1889,7 @@ function launchArgs(s, promptPath, cwd) {
       // --print-timeout defaults to 5m, which kills any real session.
       const a = ["--dangerously-skip-permissions", "--add-dir", cwd, "--print-timeout", "4h", "--output-format", "text"];
       if (s.model) a.push("--model", s.model);
-      if (AGY_EFFORT[s.tier]) a.push("--effort", AGY_EFFORT[s.tier]);
+      if (effort) a.push("--effort", effort);
       return [s.bin, [...a, "-p", prompt]];
     }
     default:
@@ -1833,6 +1938,143 @@ function parseResultStatus(body) {
   const after = body.slice(heading.index + heading[0].length);
   const value = after.match(/^\s*\**\s*(done|completed|blocked|failed)\b/im);
   return value ? token(value[1]) : null;
+}
+
+export function parseResultDigest(content, exists = true) {
+  if (!exists || content === null || content === undefined) {
+    return { ok: false, missing: true };
+  }
+
+  // 1. status
+  const status = parseResultStatus(content);
+  if (!status) {
+    return { ok: false, malformed: true };
+  }
+
+  // 2. remaining
+  const remainingInline = content.match(/^[^\S\r\n]*(?:#+[^\S\r\n]*)?-?[^\S\r\n]*(?:remaining|remaining\s+work)[^\S\r\n]*:[^\S\r\n]*(.+)$/im);
+  let remaining = remainingInline ? remainingInline[1].trim() : null;
+  if (!remaining) {
+    const remainingHeading = content.match(/^[^\S\r\n]*#+[^\S\r\n]*remaining(?:\s+work)?[^\S\r\n]*$/im);
+    if (remainingHeading) {
+      const after = content.slice(remainingHeading.index + remainingHeading[0].length);
+      const firstLine = after.match(/^[^\S\r\n]*([^\n#]+)/m);
+      if (firstLine) remaining = firstLine[1].trim();
+    }
+  }
+  if (!remaining) {
+    return { ok: false, malformed: true };
+  }
+
+  // 3. files changed
+  const filesHeading = content.match(/^[^\S\r\n]*(?:#+[^\S\r\n]*)?-?[^\S\r\n]*(?:files\s+changed|changed\s+files)[^\S\r\n]*:[^\S\r\n]*(.*)$/im);
+  let paths = [];
+  if (!filesHeading) {
+    const heading = content.match(/^[^\S\r\n]*#+[^\S\r\n]*(?:files\s+changed|changed\s+files)[^\S\r\n]*$/im);
+    if (!heading) {
+      return { ok: false, malformed: true };
+    }
+    const after = content.slice(heading.index + heading[0].length);
+    const lines = after.split("\n");
+    for (const line of lines) {
+      if (!line.trim()) continue;
+      if (/^[^\S\r\n]*#/.test(line) || /^[^\S\r\n]*-?[^\S\r\n]*(?:remaining|summary|status)[^\S\r\n]*:/i.test(line)) break;
+      const bullet = line.match(/^[^\S\r\n]*-[^\S\r\n]+([^\n]+)/);
+      if (bullet) {
+        const raw = bullet[1].trim();
+        const p = raw.split(/\s+[—–-]\s+|\s*:\s+/)[0].trim();
+        if (p && p.toLowerCase() !== "none") paths.push(p);
+      }
+    }
+  } else {
+    const inlineVal = filesHeading[1]?.trim();
+    if (inlineVal && inlineVal.toLowerCase() !== "none" && !inlineVal.startsWith("-")) {
+      const p = inlineVal.split(/\s+[—–-]\s+|\s*:\s+/)[0].trim();
+      if (p) paths.push(p);
+    }
+    const after = content.slice(filesHeading.index + filesHeading[0].length);
+    const lines = after.split("\n");
+    for (const line of lines) {
+      if (!line.trim()) continue;
+      if (/^[^\S\r\n]*#/.test(line) || /^[^\S\r\n]*-?[^\S\r\n]*(?:remaining|summary|status)[^\S\r\n]*:/i.test(line)) break;
+      const bullet = line.match(/^[^\S\r\n]*-[^\S\r\n]+([^\n]+)/);
+      if (bullet) {
+        const raw = bullet[1].trim();
+        const p = raw.split(/\s+[—–-]\s+|\s*:\s+/)[0].trim();
+        if (p && p.toLowerCase() !== "none") paths.push(p);
+      }
+    }
+  }
+
+  // 4. summary
+  const summaryInline = content.match(/^[^\S\r\n]*(?:#+[^\S\r\n]*)?-?[^\S\r\n]*summary[^\S\r\n]*:[^\S\r\n]*(.+)$/im);
+  let summary = summaryInline ? summaryInline[1].trim() : null;
+  if (!summary) {
+    const summaryHeading = content.match(/^[^\S\r\n]*#+[^\S\r\n]*summary[^\S\r\n]*$/im);
+    if (summaryHeading) {
+      const after = content.slice(summaryHeading.index + summaryHeading[0].length);
+      const firstLine = after.match(/^[^\S\r\n]*([^\n#]+)/m);
+      if (firstLine) summary = firstLine[1].trim();
+    }
+  }
+  if (!summary) {
+    return { ok: false, malformed: true };
+  }
+
+  summary = summary.replace(/\s+/g, " ").trim().slice(0, 300);
+  remaining = remaining.replace(/\s+/g, " ").trim();
+
+  return { ok: true, status, remaining, paths, summary };
+}
+
+export function formatResultDigestBlock(session, st, parsed) {
+  const wallSec = st?.started_at && st?.ended_at
+    ? Math.max(0, Math.round((Date.parse(st.ended_at) - Date.parse(st.started_at)) / 1000))
+    : (st?.started_at ? Math.max(0, Math.round((Date.now() - Date.parse(st.started_at)) / 1000)) : 0);
+  const wall = fmtDur(wallSec);
+  const lane = st?.lane ?? session?.lane;
+  const slot = st?.slot ?? session?.slot ?? "unknown";
+  const slotLane = lane ? `${slot}/${lane}` : slot;
+  const model = st?.model ?? session?.model ?? "default";
+  const effort = session?.effort ?? "medium";
+  const status = st?.status ?? "unknown";
+
+  const header = `${session.id} ${status} · ${slotLane} · ${model} ${effort} · ${wall}`;
+  if (!parsed || parsed.missing) {
+    return `${header}\n  result.md missing`;
+  }
+  if (parsed.malformed) {
+    return `${header}\n  result.md malformed`;
+  }
+
+  const paths = parsed.paths ?? [];
+  const changedStr = paths.length === 0
+    ? "0 files"
+    : `${paths.length} file${paths.length === 1 ? "" : "s"} (${paths.slice(0, 3).join(", ")}${paths.length > 3 ? `, +${paths.length - 3}` : ""})`;
+
+  return [
+    header,
+    `  remaining: ${parsed.remaining}`,
+    `  changed: ${changedStr}`,
+    `  summary: ${parsed.summary}`,
+  ].join("\n");
+}
+
+export function evaluateSettle({ state, settleDeadline, settleS = DEFAULT_SETTLE_S, now = Date.now() }) {
+  const hasFailure = Object.values(state?.sessions ?? {}).some(
+    (s) => s.status === "failed" || s.status === "blocked",
+  );
+  if (!hasFailure) {
+    return { shouldExit: false, settleDeadline: null, active: false };
+  }
+  const deadline = settleDeadline ?? now + settleS * 1000;
+  const shouldExit = now >= deadline;
+  return {
+    shouldExit,
+    settleDeadline: deadline,
+    active: true,
+    remainingMs: Math.max(0, deadline - now),
+  };
 }
 
 function classifyExit(dir, s, code, elapsedSec = 0) {
@@ -1895,10 +2137,28 @@ async function dispatch(dir) {
   if (!quota || secsSince(quota.ts) > PROBE_TTL_S) {
     die("quota.json missing or stale — run `handoff probe --run DIR` first");
   }
+  const isCompact = routing.mode === "compact" || routing.sessions.length === 1;
+  if (!isCompact) {
+    const approvedPath = join(dir, "approved.json");
+    if (!existsSync(approvedPath)) {
+      die("dispatch refused: approved.json is missing. Run `handoff route --run DIR --approve` first.");
+    }
+    const approved = readJSON(approvedPath);
+    const plan = readJSON(join(dir, "plan.json"));
+    const currentHash = hashSessions(plan?.sessions);
+    if (!approved?.hash || approved.hash !== currentHash) {
+      die(
+        "dispatch refused: plan.json sessions content has changed since approval (hash mismatch). Re-run `handoff route --run DIR --approve`.",
+      );
+    }
+  }
 
   const budgetS = Number(arg("budget", 540));
+  const settleS = Number(arg("settle", DEFAULT_SETTLE_S));
   const deadline = Date.now() + budgetS * 1000;
+  let settleDeadline = null;
   const state = loadState(dir);
+  state.settle_s = settleS;
   state.parent_turns += 1;
   mkdirSync(join(dir, "logs"), { recursive: true });
 
@@ -2054,6 +2314,15 @@ async function dispatch(dir) {
       break;
     }
 
+    const settle = evaluateSettle({ state, settleDeadline, settleS, now: Date.now() });
+    settleDeadline = settle.settleDeadline;
+    if (settle.shouldExit) {
+      state.events.push(
+        `${nowISO()} settle window (${settleS}s) elapsed after failure; returning early`,
+      );
+      break;
+    }
+
     await new Promise((r) => setTimeout(r, POLL_MS));
   }
 
@@ -2069,7 +2338,7 @@ async function dispatch(dir) {
   }
 }
 
-function renderStatus(dir, routing, state) {
+export function renderStatus(dir, routing, state) {
   const rows = routing.sessions.map((s) => {
     const st = state.sessions[s.id] ?? {};
     const res = join(dir, "sessions", `${s.id}.result.md`);
@@ -2082,12 +2351,29 @@ function renderStatus(dir, routing, state) {
     const lane = st.lane ?? s.lane;
     return `| ${s.id} | ${st.status ?? "pending"} | ${st.slot ?? s.slot}${lane ? `/${lane}` : ""} | ${st.attempts ?? 0} | ${summary} |`;
   });
-  return ["", "| Session | Status | Slot | Tries | Note |", "|---|---|---|---|---|", ...rows].join("\n");
+  const table = ["", "| Session | Status | Slot | Tries | Note |", "|---|---|---|---|---|", ...rows].join("\n");
+
+  const digestBlocks = [];
+  for (const s of routing.sessions) {
+    const st = state.sessions[s.id];
+    if (!st || !isTerminal(st.status)) continue;
+    const res = join(dir, "sessions", `${s.id}.result.md`);
+    const exists = existsSync(res);
+    const parsed = exists
+      ? parseResultDigest(readFileSync(res, "utf8"), true)
+      : parseResultDigest(null, false);
+    digestBlocks.push(formatResultDigestBlock(s, st, parsed));
+  }
+
+  if (digestBlocks.length) {
+    return `${table}\n\n${digestBlocks.join("\n\n")}`;
+  }
+  return table;
 }
 
 // ------------------------------------------------------------------- score
 
-async function score(dir) {
+export async function score(dir) {
   const routing = readJSON(join(dir, "routing.json"));
   const before = readJSON(join(dir, "quota.json"));
   const state = loadState(dir);
@@ -2123,9 +2409,11 @@ async function score(dir) {
   const wall = Math.round(secsSince(state.started_at));
 
   const metrics = {
+    skill: "handoff",
     ts: nowISO(),
     skill_version: skillVersion(),
     mode: routing.mode,
+    settle_s: state.settle_s ?? DEFAULT_SETTLE_S,
     n_sessions: routing.sessions.length,
     n_done: done.length,
     wall_clock_s: wall,
@@ -2134,6 +2422,11 @@ async function score(dir) {
     providers_used: providersUsed,
     quota_delta_pct: cost,
     session_cost_pct: sessionCost,
+    sessions: routing.sessions.map((s) => ({
+      id: s.id,
+      effort: s.effort ?? EFFORT_BY_TIER[s.tier] ?? DEFAULT_EFFORT,
+      override: Boolean(s.override),
+    })),
     // Counts, not booleans: six relaunches must not score the same as one.
     relaunches: routing.sessions.reduce((n, s) => n + Math.max(0, (st(s.id).attempts ?? 0) - 1), 0),
     quota_deaths: state.empty_slots.length,
@@ -2175,6 +2468,48 @@ async function score(dir) {
   console.log(`\nappended: ${jsonl}`);
 }
 
+// ------------------------------------------------------------------- clean
+
+export function clean(dir) {
+  if (!dir || !existsSync(dir)) die(`clean: directory not found: ${dir}`);
+  const wtDir = join(dir, "wt");
+  const worktrees = [];
+  if (existsSync(wtDir)) {
+    const entries = readdirSync(wtDir, { withFileTypes: true });
+    for (const entry of entries) {
+      if (entry.isDirectory()) {
+        const wtPath = join(wtDir, entry.name);
+        worktrees.push(wtPath);
+        const st = spawnSync("git", ["status", "--porcelain"], {
+          cwd: wtPath,
+          encoding: "utf8",
+        });
+        if (st.status !== 0) {
+          die(`clean refused: git status failed in worktree ${wtPath}: ${st.stderr?.trim()}`);
+        }
+        if (st.stdout && st.stdout.trim().length > 0) {
+          die(`clean refused: worktree ${wtPath} has uncommitted changes:\n${st.stdout.trim()}`);
+        }
+      }
+    }
+  }
+
+  for (const wtPath of worktrees) {
+    const rm = spawnSync("git", ["worktree", "remove", wtPath], { encoding: "utf8" });
+    if (rm.status !== 0) {
+      const rmForce = spawnSync("git", ["worktree", "remove", "--force", wtPath], {
+        encoding: "utf8",
+      });
+      if (rmForce.status !== 0) {
+        die(`clean failed: git worktree remove ${wtPath}: ${rm.stderr || rmForce.stderr}`);
+      }
+    }
+  }
+
+  rmSync(dir, { recursive: true, force: true });
+  console.log(`cleaned: ${dir}`);
+}
+
 function skillVersion() {
   try {
     const here = new URL("../SKILL.md", import.meta.url).pathname;
@@ -2186,40 +2521,48 @@ function skillVersion() {
 
 // -------------------------------------------------------------------- main
 
-const cmd = process.argv[2];
+const isCLI = process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url);
 
-if (cmd === "probe") {
-  const snapshot = await probe();
-  const dir = arg("run") || process.env.HANDOFF_RUN;
-  if (dir) {
-    mkdirSync(join(resolve(dir), "sessions"), { recursive: true });
-    writeJSON(join(resolve(dir), "quota.json"), snapshot);
-  }
-  console.log(arg("json") ? JSON.stringify(snapshot, null, 2) : renderQuota(snapshot));
-  if (arg("explain") && !arg("json")) console.log(renderExplain(snapshot));
-} else if (cmd === "route") {
-  route(runDir());
-} else if (cmd === "dispatch") {
-  await dispatch(runDir());
-} else if (cmd === "status") {
-  const dir = runDir();
-  const routing = readJSON(join(dir, "routing.json"));
-  const state = loadState(dir);
-  if (reconcileFromResults(dir, routing, state)) writeJSON(join(dir, "state.json"), state);
-  console.log(renderStatus(dir, routing, state));
-} else if (cmd === "score") {
-  await score(runDir());
-} else {
-  console.log(
-    `handoff — orchestration for the handoff skill
+if (isCLI) {
+  const cmd = process.argv[2];
+
+  if (cmd === "probe") {
+    const snapshot = await probe();
+    const dir = arg("run") || process.env.HANDOFF_RUN;
+    if (dir) {
+      mkdirSync(join(resolve(dir), "sessions"), { recursive: true });
+      writeJSON(join(resolve(dir), "quota.json"), snapshot);
+    }
+    console.log(arg("json") ? JSON.stringify(snapshot, null, 2) : renderQuota(snapshot));
+    if (arg("explain") && !arg("json")) console.log(renderExplain(snapshot));
+  } else if (cmd === "route") {
+    route(runDir());
+  } else if (cmd === "dispatch") {
+    await dispatch(runDir());
+  } else if (cmd === "status") {
+    const dir = runDir();
+    const routing = readJSON(join(dir, "routing.json"));
+    const state = loadState(dir);
+    if (reconcileFromResults(dir, routing, state)) writeJSON(join(dir, "state.json"), state);
+    console.log(renderStatus(dir, routing, state));
+  } else if (cmd === "score") {
+    await score(runDir());
+  } else if (cmd === "clean") {
+    clean(runDir());
+  } else {
+    console.log(
+      `handoff — orchestration for the handoff skill
 
   probe    [--run DIR] [--json] [--explain]
                                     supply snapshot per slot; --explain lists
                                     every credential and transcript path tried
-  route    --run DIR                admission control + assignment (refuses overlapping writers)
-  dispatch --run DIR [--budget S]   launch ready sessions, wait, reroute on quota death
-  status   --run DIR                one line per session
+  route    --run DIR [--approve]    admission control + assignment (refuses overlapping writers)
+  dispatch --run DIR [--budget S] [--settle S]
+                                    launch ready sessions, wait, reroute on quota death
+  status   --run DIR                one line per session + result digest blocks
   score    --run DIR                cost + defect scorecard, appends metrics.jsonl
+  clean    --run DIR                remove clean worktrees and run dir (keeps branches)
 `,
-  );
+    );
+  }
 }

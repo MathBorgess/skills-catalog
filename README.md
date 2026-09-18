@@ -82,15 +82,30 @@ Two things it deliberately does not cover: a pull on a branch other than `main`,
 
 | Skill | Version | What it does |
 |---|---|---|
-| [`handoff`](skills/handoff/) | 2.0.0 | Compacts a conversation into a session brief, or cuts remaining work into a dependency graph of parallel Cursor, Claude, Codex, and Antigravity sessions: it probes each provider\'s remaining plan quota (every window, and every lane a provider bills separately), refuses a cut whose sessions collide, assigns slots by refill rate rather than raw balance, closes the graph, model and effort per session with you in one hash-locked gate, dispatches and reroutes around a provider or lane that runs out, returns each finished session's result in the digest, can route every child's shell output through RTK (chosen in the plan, scoped to the run), and scores what the run cost in quota. Ships a guard hook that blocks reading a live run's child logs and worktrees. |
+| [`handoff`](skills/handoff/) | 2.1.0 | Compacts a conversation into a session brief, or cuts remaining work into a dependency graph of parallel Cursor, Claude, Codex, and Antigravity sessions: it probes each provider\'s remaining plan quota (every window, and every lane a provider bills separately), refuses a cut whose sessions collide, assigns slots by refill rate rather than raw balance, closes the graph, model and effort per session with you in one hash-locked gate, dispatches and reroutes around a provider or lane that runs out, returns each finished session's result in the digest, can route every child's shell output through RTK (chosen in the plan, scoped to the run), and scores what the run cost in quota. Ships a guard hook that blocks reading a live run's child logs and worktrees. |
 | [`study-wiki`](skills/study-wiki/) | 1.0.0 | Interviews you about the certifications you are chasing, then builds and operates a personal study repository: a knowledge graph of notes, a question bank, an error log, and a daily study loop that injects questions, grades your answers, and records where you are weak. |
 | [`teach-me`](skills/teach-me/) | 1.1.0 | Runs one study session against a wiki that already exists: a phone-sized HTML lesson plus a session note and error log. Not for bootstrapping an empty wiki — that is study-wiki. |
-| [`shunt`](skills/shunt/) | 1.0.0 | Keeps a large model off heavy I/O: activate a guard that refuses full-file reads over a line/byte threshold and points the parent at an outline script or a small/fast subagent; boilerplate, config, and mechanical tests are spawned the same way and not read back. Patch targets can be read whole up to a ceiling, noisy commands run through a wrapper that keeps the raw log, and every run ends with a report of what compression cost in recoveries. `activate --rtk` routes Bash through [RTK](https://github.com/rtk-ai/rtk) for that run only, keeping diffs, code and search raw. |
+| [`shunt`](skills/shunt/) | 1.1.0 | Keeps a large model off heavy I/O: activate a guard that refuses full-file reads over a line/byte threshold and points the parent at an outline script or a small/fast subagent; boilerplate, config, and mechanical tests are spawned the same way and not read back. Patch targets can be read whole up to a ceiling, noisy commands run through a wrapper that keeps the raw log, and every run ends with a report of what compression cost in recoveries. `activate --rtk` routes Bash through [RTK](https://github.com/rtk-ai/rtk) for that run only, keeping diffs, code and search raw. |
 | [`skills-evaluate`](skills/skills-evaluate/) | 0.2.0 | Reads the metrics the other skills leave in the OS temp dir, the maintainer sketchpad and open issues; compares the last run with the recent median, diagnoses root causes, checks each skill against its own scope, and proposes improvements to the skill or to its observability. |
 
 ## Using a skill
 
 After install, start a session and type `/handoff`, `/study-wiki`, `/teach-me`, `/shunt`, or `/skills-evaluate`, or just say what you want — the skill's `description` is what makes the model reach for it on its own.
+
+**Recommended: run shunt and handoff with RTK**
+
+[RTK](https://github.com/rtk-ai/rtk) filters shell output per command (tests, builds, linters, git) and keeps the raw output recallable. Both skills can route through it for one run only:
+
+```bash
+brew install rtk          # do NOT run `rtk init -g` — the skills scope it per run
+```
+
+- **shunt:** `node skills/shunt/scripts/shunt.mjs activate --rtk`
+- **handoff:** `"rtk": "guarded"` in `plan.json` (plan-wide or per session). Claude children get a scoped hook; Codex, Cursor and Antigravity get the instruction in their prompt.
+
+`guarded` (the default) never sends `git diff`, `git show`, `cat`, `head`, `tail`, `grep` or `rg` through RTK, so code, diffs and search reach the model whole. `full` sends everything and is only for experiments. Neither approves a command for you, and RTK telemetry is off. When RTK is installed and left off, `shunt activate` and `handoff route` print a `tip`.
+
+**Testing RTK on your own work.** RTK reports saved bash bytes, which is not the same as a cheaper task. Before making it a default for a kind of work, run paired tasks — same repo, commit, brief and model, with and without RTK — and compare task input tokens, turns and done vs blocked. Look at recalls and failed edits too. The protocol and decision rule are in [#27](https://github.com/MathBorgess/skills-catalog/issues/27). Post results there and run `/skills-evaluate` over the metrics.
 
 **Improving the skills**
 

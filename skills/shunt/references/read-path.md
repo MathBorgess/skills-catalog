@@ -24,6 +24,16 @@ node <skill>/scripts/shunt.mjs excerpt --file PATH --start N --end M
 
 `Read` of PATH with `offset`/`limit` whose window fits the line cap is also allowed (the hook permits it). Prefer `excerpt` so the span is on disk and the tool call stays small.
 
+## Edit bypass
+
+Mark a file as a patch target:
+
+```bash
+node <skill>/scripts/shunt.mjs edit --file PATH
+```
+
+The guard allows a full `Read` of PATH when lines and bytes are within 2× the standard cap (`EDIT_LINE_MAX` and `EDIT_BYTE_MAX` in `scripts/shunt.mjs`). Above that ceiling, the normal outline/excerpt flow applies. The guard records an `edit_read` event when the bypass read occurs, and `edit_done` when an `Edit`, `Write`, `NotebookEdit`, or `MultiEdit` tool call is invoked on PATH.
+
 ## Summary (small/fast subagent)
 
 Spawn only when the outline is not enough to choose a span or to answer the question.
@@ -36,10 +46,20 @@ Spawn only when the outline is not enough to choose a span or to answer the ques
 
 If the summary file is itself over the cap, the hook refuses it. Truncate; do not open PATH to "fix" the summary.
 
+## Recovery vs excerpt
+
+An `excerpt` event is expected usage: retrieving a bounded window of code.
+
+A `recover` event means compression failed and the model had to access raw data:
+1. Denied full `Read` on a path where an outline already existed.
+2. Reading a run wrapper's raw command log (`<run dir>/logs/<slug>.log`).
+
+`events.jsonl` tracks `recover` separately from `excerpt`.
+
 ## Hook
 
 Armed only after `activate`, for this workspace, until `deactivate` or the TTL. Inert otherwise — including in study-wiki / teach-me / handoff sessions that never activated shunt.
 
 Live handoff `wt/` and `logs/` are not this hook's job; the handoff guard owns those.
 
-Denied full `Read` → the deny-reason is step 2 of `SKILL.md`. Do not retry PATH.
+Denied full `Read` → the deny-reason is step 3 of `SKILL.md`. Do not retry PATH.

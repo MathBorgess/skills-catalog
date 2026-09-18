@@ -1,12 +1,6 @@
 # Session brief
 
-One `NN.md` per session, plus a three-line `NN.prompt.md` that is the only thing the CLI receives. The child does not inherit the parent's conversation, so everything it needs is either in the brief or reachable from a pointer in it.
-
-## Who writes which part
-
-**You write `## Goal` and `## Constraints` yourself.** They carry the knowledge that exists only in this conversation — the decision already made, the approach already rejected, the constraint the user stated three messages ago. A model that was not here cannot reconstruct them, and a brief missing them produces a child that blocks on a fact you had.
-
-Everything else — scope lists from the plan's `writes`/`reads`, pointer paths, the done-when checklist, boilerplate — is expansion. Delegate it to a cheap model with `brief.md` and the plan entry as its input, writing straight to `sessions/NN.md`. **Do not read the expansion back.** If you find yourself reviewing what you dictated, the delegation cost more than it saved.
+Write `NN.md` and the three-line `NN.prompt.md` for every approved session. The child has no parent context. Write Goal and Constraints yourself; expand scope lists and boilerplate only from the plan. Point to artifacts; never paste them. Redact secrets and PII.
 
 ## `NN.md`
 
@@ -54,11 +48,9 @@ Append to `$RUN/sessions/<NN>.progress.md` as you finish each item, and write
 Do not read other session briefs. Do not wait for the parent.
 ```
 
-Substitute absolute paths. Keep it this short — it is a pointer, not a copy of the brief.
+Substitute absolute paths. This is a pointer, not a copy of the brief.
 
 ## `NN.result.md`
-
-The child writes this. It is the only file of the child's the parent reads.
 
 ```markdown
 # Result <NN>
@@ -70,15 +62,4 @@ The child writes this. It is the only file of the child's the parent reads.
 - summary: one paragraph
 ```
 
-## Why progress is not optional
-
-A session killed by its provider's quota leaves a half-finished worktree. Without a progress file the replacement starts from item one and redoes work that is already on disk — and quota deaths cluster, so this is not the rare case. With one, the relaunch brief opens with *"items 1–3 are done and committed; start at 4"*, and the second attempt costs a fraction of the first.
-
-When you relaunch a session, read its `progress.md` (short, one line per item), patch `## Done when` to start where it stopped, and dispatch the same id.
-
-## Rules
-
-- Redact API keys, passwords, tokens, and personally identifiable information.
-- If the user described what the next session is for, that description is the Goal.
-- Suggested skills are names the child should invoke, not a reading list for the parent.
-- Pointers, never pasted artifacts. A brief that inlines a spec is a brief that goes stale the moment the spec changes.
+Dispatch reads completed result files and puts their result blocks in its digest. Read that digest first; open a result file only to act. On relaunch, read the short progress file, start at the unfinished item, and dispatch the same id.

@@ -38,7 +38,7 @@
     "registry": "https://npm.pkg.github.com"
   },
   "scripts": {
-    "check": "node scripts/check-catalog.mjs && node skills/shunt/scripts/shunt.test.mjs && node skills/handoff/scripts/handoff.test.mjs",
+    "check": "node scripts/check-catalog.mjs && node skills/shunt/scripts/shunt.test.mjs && node skills/handoff/scripts/handoff.test.mjs && node skills/skills-evaluate/scripts/evaluate.test.mjs",
     "link": "bash scripts/link-skills.sh",
     "list": "bash scripts/list-skills.sh",
     "sync-plugin-version": "node scripts/sync-plugin-version.mjs",

@@ -1,6 +1,6 @@
 ---
 name: handoff
-description: Use when the user wants a handoff document for another agent, to split remaining work into parallel sessions, to dispatch Cursor, Claude, Codex, or Antigravity (agy) via CLI, to spread work across providers to save tokens, to skip a provider or a model pool that is out of quota, or says /handoff, fan-out, compact this, routing table, or end of task.
+description: Use when the user wants to compact work for a later agent, split it into parallel sessions, dispatch Cursor, Claude, Codex, or Antigravity (agy), route around quota, or says /handoff, fan-out, routing table, or end of task.
 argument-hint: "compact | fan-out | provider or model constraints"
 metadata:
   author: Matheus Borges
@@ -9,104 +9,76 @@ metadata:
 
 # Handoff
 
-Package the current conversation into self-contained session briefs another agent can execute without this context. Two modes of that one job: **compact** (one successor) and **fan-out** (N independent sessions across every provider on the machine — Claude, Codex, Cursor, Antigravity).
+Turn current work into self-contained session briefs. In **compact**, make one successor brief. In **fan-out**, cut independent work and let `scripts/handoff.mjs` probe supply, route, launch, recover, and score. Do not repeat its arithmetic, launch a child by hand, read child logs/worktrees, or implement a child's scope.
 
-Your job is the part a script cannot do: **cut the work, scope each session, write the goals.** Quota probing, admission control, independence checking, slot assignment, launching, waiting, rerouting a dead session and scoring are `scripts/handoff.mjs` — call it, read its table, move on. Do not redo its arithmetic in prose, and do not launch a child by hand.
+## 1. Probe and cut
 
-## 1. Mode
+Choose **fan-out** for explicit parallel work, or when two cuts have no shared writes or causal sequence; otherwise choose **compact**. User provider/model constraints win.
 
-- Named provider, "parallel", "fan-out", "split sessions", "subagents", "other IDE/CLI" → **fan-out**.
-- "Handoff", "end of task", "compact", or a next-session focus with no parallel language → **compact**.
-- Ambiguous: **fan-out** if two or more remaining cuts share no files and no sequence; else **compact**.
-- User arguments are routing constraints (provider, model, focus). They win.
-
-## 2. Run directory and supply
-
-`run-id` is UTC `YYYYMMDDTHHMMSSZ`, under the OS temp dir — never the workspace. Probe before anything else:
+Create the run outside the repository, then probe before planning:
 
 ```bash
 HANDOFF_RUN="${TMPDIR:-/tmp}/handoff/$(date -u +%Y%m%dT%H%M%SZ)"
 node <skill>/scripts/handoff.mjs probe --run "$HANDOFF_RUN"
 ```
 
-That prints the slot table and writes `quota.json`. A slot is **provider × account**, not a binary — one machine can hold several, and each carries **every window the plan gates on** (`5h 8% (30m) · 7d 43% (3d)`). `Binding` is only the headline; the five-hour window is what decides whether a session starts now or in forty minutes, so never route off the headline alone. A slot may also carry **lanes** — pools the provider bills separately. Cursor has two inside one cycle (`cursor-models 45% · other-models 0%`); Antigravity has two that each carry their own five-hour and weekly windows (`gemini[5h 88% (2h) · 7d 62%] · third-party[5h 8% (24m) · 7d 71%]`). Lanes are alternatives, not gates, and the model id picks which one a session spends. A lane at 0% does not make the slot dead, and a healthy slot headline does not make a lane alive, so read both columns. The probe falls back through three sources (vendor tool, OAuth credential, local transcripts), so a reading marked `~` is estimated from this machine's own transcripts rather than read from the account — usable for routing, never quoted as the real limit.
+If supply is `unknown`, use `probe --explain`; report the paths it checked and the one-line fix. A `~` reading is local estimation, never an account limit. Read [`references/quota.md`](references/quota.md) only for quota diagnosis.
 
-If a slot still reads `unknown`, run the same command with `--explain`: it prints every credential path and transcript directory it consulted, found or missing. Give the user that list and the one-line fix. Details: [`references/quota.md`](references/quota.md).
-
-## 3. Cut the work into a graph
-
-This is the step that is yours. Write `$HANDOFF_RUN/plan.json`:
+Write `$HANDOFF_RUN/plan.json`:
 
 ```json
 {"mode":"fan-out","horizon_s":7200,"sessions":[
-  {"id":"01","goal":"…","tier":"design","size":"l","writes":["src/auth/**"],"reads":["**"],"deps":[]},
-  {"id":"02","goal":"…","tier":"mechanical","size":"s","writes":["docs/**"],"deps":[]},
-  {"id":"03","goal":"…","tier":"review","size":"m","writes":[],"deps":["01","02"]}
+  {"id":"01","goal":"…","tier":"design","size":"m","writes":["src/auth/**"],"reads":["**"],"deps":[],"needs":[]},
+  {"id":"02","goal":"…","tier":"mechanical","size":"s","writes":["docs/**"],"reads":["**"],"deps":[],"model":"…","effort":"low"}
 ]}
 ```
 
-- `deps` is a dependency graph, **not waves.** A session starts when its own dependencies finish, not when a whole batch does. Batching is what turns twenty sessions into ten serial rounds.
-- `writes` is the write-set. Two sessions with no dependency path between them **must not** share one — `route` refuses the plan if they do, naming the paths.
-- `tier` (`mechanical` | `design` | `review`) and `size` (`s` | `m` | `l`) drive model choice, guided by [`prompts/model-routing.md`](../../prompts/model-routing.md).
-- `needs` is an optional list of required capabilities (`network`, `unix-socket`, `git-write`, etc.). `route` filters out candidate slots whose sandbox blocks any requirement (e.g. Codex `workspace-write`).
-- `horizon_s` is how long you expect the whole run to take. It decides whether a provider whose window reopens mid-run counts as supply.
+`model` and `effort` are optional owner overrides. A dependency means B needs A's output; independent sessions run in parallel. Give independent sessions disjoint write-sets. Set `tier`, `size`, `needs`, and an honest `horizon_s`; see [`references/routing.md`](references/routing.md).
 
-Rules for cutting: [`references/routing.md`](references/routing.md).
-
-## 4. Write the briefs
-
-One `NN.md` + one `NN.prompt.md` per session, per [`references/brief.md`](references/brief.md). **You author Goal and Constraints yourself** — they carry the conversation knowledge nothing else has. Expansion (scope lists, pointers, boilerplate) may be delegated to a cheap model that writes straight to disk; you do not read it back. Pointers to existing artifacts by path or URL; never paste the artifact. Redact secrets and PII.
-
-## 5. Route, present plan, and await human approval before dispatch
+## 2. Route and graph gate
 
 ```bash
 node <skill>/scripts/handoff.mjs route --run "$HANDOFF_RUN"
 ```
 
-`route` prints the quota table and the routing table, refuses a plan whose sessions collide or violate capability `needs`, and warns when the cut costs more quota than the pool holds. Show both tables to the user.
+Fix route refusals. Then follow [`references/graph-gate.md`](references/graph-gate.md): grill the graph with the owner until it is approved. After the final route, lock that exact plan:
 
-### Supervisor Report to the User
-Before launching any children, you **must** report to the user:
-1. The **implementation graph** (dependencies between sessions, in a mermaid flowchart or structured outline).
-2. The **parallel concurrency** (how many sessions run immediately in parallel and total sessions).
-3. The selected **provider and model** for each session, along with the `tier` and `needs` rationale.
-
-### Human Approval Gate
-**STOP and ask the user for explicit approval to execute the plan.**
-Do **NOT** run `dispatch` in the same turn. Execution of `dispatch` requires explicit human approval of the graph and assignments.
-
-Once the user approves:
 ```bash
-node <skill>/scripts/handoff.mjs dispatch --run "$HANDOFF_RUN" --budget 540
+node <skill>/scripts/handoff.mjs route --run "$HANDOFF_RUN" --approve
 ```
 
-`dispatch` launches everything whose dependencies are met, waits, relaunches a session whose provider ran out or died on launch/auth on the next eligible slot, and returns a one-line-per-session digest. It is one call, not a poll loop. If it reports sessions still running, call it again — or run it with `run_in_background` and keep working. A session that fails to start at all is a stale CLI flag: [`references/providers.md`](references/providers.md) says how to fix it and where.
+This records the plan hash. Approval is required before any launch; never request a second approval for the same hash.
 
-**compact:** one session in the plan; write the brief and stop. Launch only if the user named a provider.
+## 3. Write briefs and dispatch
 
-## 6. Read only the digest
+Write every `NN.md` and `NN.prompt.md` after approval, using [`references/brief.md`](references/brief.md). Author each Goal and Constraints; use pointers instead of copied artifacts; redact secrets and PII.
 
-- Accept `dispatch`'s table. To re-check later: `handoff.mjs status --run "$HANDOFF_RUN"`.
-- Open `sessions/NN.result.md` only for a session you must act on.
-- **Never** read `logs/NN.log`, a child transcript, or anything under `wt/`. That is the child's raw output; ingesting it spends exactly what this skill exists to save. On a Claude parent the guard hook refuses it outright.
-- **Never** implement a child's in-scope work yourself. A blocked child gets a corrected brief and a relaunch, not your edits.
-- A session `blocked` on missing context means its brief was short a fact you had. Patch `NN.md` and relaunch that id.
+```bash
+node <skill>/scripts/handoff.mjs dispatch --run "$HANDOFF_RUN" --budget 540 --settle 30
+```
 
-## 7. Score
+`--settle` is the adjustable settle window; its default is 30 seconds. Dispatch refuses a plan changed since approval. It launches eligible work, waits for dependencies, and reroutes recoverable provider failures without another approval.
+
+Read the dispatch digest. It includes each finished session's result block. Open `sessions/NN.result.md` only when action is required. Never open `logs/`, a child transcript, or `wt/`; relaunch a blocked child with a corrected brief instead of doing its work.
+
+## 4. Score and close
 
 ```bash
 node <skill>/scripts/handoff.mjs score --run "$HANDOFF_RUN"
 ```
 
-Re-probes, writes the scorecard into `manifest.md`, appends one line to `$TMPDIR/handoff/metrics.jsonl`, and prints what the run actually cost in plan quota. Report those numbers. Details and how the history feeds the next run's estimates: [`references/metrics.md`](references/metrics.md).
+Show the report and ask the owner: (a) keep it locally; or (b) create an issue with it, then clean the run. Create an issue only after yes. Clean with:
+
+```bash
+node <skill>/scripts/handoff.mjs clean --run "$HANDOFF_RUN"
+```
+
+`clean` refuses while a run worktree has uncommitted changes and never deletes branches. See [`references/metrics.md`](references/metrics.md).
 
 ## Done-check
 
-- [ ] `probe` ran before any launch; the slot table was shown with every window and every lane, not just the binding one.
-- [ ] `plan.json` exists; `route` accepted it (no write-set collisions, capability `needs` satisfied) and its table was shown.
-- [ ] Implementation graph, parallel concurrency count, and provider/model choices presented to user.
-- [ ] Fan-out: plan explicitly approved by the human before running `dispatch`; no child launched by hand.
-- [ ] Every session has a brief written before dispatch; Goal and Constraints are yours.
-- [ ] Parent implemented nothing a session owned, and read no child log or worktree.
-- [ ] Secrets and PII redacted; existing artifacts referenced, not copied.
-- [ ] `score` ran; the report gives the run path, both tables, per-session status, and the quota cost.
+- [ ] Probe ran before planning; plan has causal deps and disjoint concurrent writes.
+- [ ] Route accepted, graph gate completed, and `route --approve` locked the current hash before dispatch.
+- [ ] Every brief exists; no child was launched manually, implemented by the parent, or inspected through logs/worktrees.
+- [ ] Dispatch digest was used; changed plans were routed and approved again before dispatch.
+- [ ] Score ran and the owner received the keep-or-issue-and-clean question.

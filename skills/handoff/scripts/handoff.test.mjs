@@ -732,6 +732,33 @@ function makeRouteRun({ plan, quota, state } = {}) {
   spawnSync("git", ["branch", "-D", branchClean], { encoding: "utf8" });
 }
 
+// clean --branches: deletes this run's session branches merged into HEAD, keeps unmerged ones
+{
+  const runId = `20990101T000000Z-${Date.now()}`;
+  const dir = join(mkdtempSync(join(tmpdir(), "handoff-clean-br-")), runId);
+  mkdirSync(join(dir, "wt"), { recursive: true });
+  const merged = `handoff/${runId}-01`;
+  const unmerged = `handoff/${runId}-02`;
+  const other = `handoff/other-${runId}-01`;
+  spawnSync("git", ["branch", merged, "HEAD"], { encoding: "utf8" });
+  spawnSync("git", ["branch", other, "HEAD"], { encoding: "utf8" });
+  const wt2 = join(dir, "wt", "02");
+  spawnSync("git", ["worktree", "add", "-b", unmerged, wt2, "HEAD"], { encoding: "utf8" });
+  writeFileSync(join(wt2, "only-here.txt"), "x");
+  spawnSync("git", ["add", "."], { cwd: wt2 });
+  spawnSync("git", ["-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "wip"], { cwd: wt2 });
+
+  const r = run("clean", dir, ["--branches"]);
+  const has = (b) => spawnSync("git", ["branch", "--list", b], { encoding: "utf8" }).stdout.includes(b);
+  assert("clean --branches exits 0", r.status === 0);
+  assert("clean --branches deletes a merged session branch", !has(merged));
+  assert("clean --branches keeps an unmerged session branch", has(unmerged));
+  assert("clean --branches names the kept branch", /kept \(not merged into HEAD\)/.test(r.stdout));
+  assert("clean --branches ignores other runs' branches", has(other));
+
+  spawnSync("git", ["branch", "-D", unmerged, other], { encoding: "utf8" });
+}
+
 if (failed) {
   console.error(`\n${failed} failed`);
   process.exit(1);

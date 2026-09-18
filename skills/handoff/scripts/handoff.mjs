@@ -16,7 +16,7 @@
 //                                      launch ready sessions, wait, reroute, repeat
 //   status   --run DIR                 status table + result digest blocks
 //   score    --run DIR                 cost + defect scorecard, appends metrics.jsonl
-//   clean    --run DIR                 remove clean worktrees and run dir (keeps branches)
+//   clean    --run DIR [--branches]    remove clean worktrees and run dir; --branches also deletes session branches merged into HEAD
 //
 // Run directory layout
 //   $TMPDIR/handoff/<run-id>/
@@ -44,7 +44,7 @@ import {
   rmSync,
 } from "node:fs";
 import { homedir, tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { basename, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   claudeConfigDirs,
@@ -2470,7 +2470,7 @@ export async function score(dir) {
 
 // ------------------------------------------------------------------- clean
 
-export function clean(dir) {
+export function clean(dir, { branches = false } = {}) {
   if (!dir || !existsSync(dir)) die(`clean: directory not found: ${dir}`);
   const wtDir = join(dir, "wt");
   const worktrees = [];
@@ -2508,6 +2508,27 @@ export function clean(dir) {
 
   rmSync(dir, { recursive: true, force: true });
   console.log(`cleaned: ${dir}`);
+  if (branches) cleanBranches(basename(resolve(dir)));
+}
+
+// Session branches are intermediate once the run is merged into one branch.
+// `git branch -d` only deletes a branch already merged into HEAD, so run this
+// from the integration branch; anything unmerged is kept and named.
+export function cleanBranches(runId) {
+  const ls = spawnSync(
+    "git",
+    ["for-each-ref", "--format=%(refname:short)", `refs/heads/handoff/${runId}-*`],
+    { encoding: "utf8" },
+  );
+  const found = ls.stdout.split("\n").filter(Boolean);
+  const kept = [];
+  for (const b of found) {
+    const r = spawnSync("git", ["branch", "-d", b], { encoding: "utf8" });
+    if (r.status === 0) console.log(`deleted branch: ${b}`);
+    else kept.push(b);
+  }
+  if (kept.length) console.log(`kept (not merged into HEAD): ${kept.join(", ")}`);
+  return { deleted: found.length - kept.length, kept };
 }
 
 function skillVersion() {
@@ -2548,7 +2569,7 @@ if (isCLI) {
   } else if (cmd === "score") {
     await score(runDir());
   } else if (cmd === "clean") {
-    clean(runDir());
+    clean(runDir(), { branches: process.argv.includes("--branches") });
   } else {
     console.log(
       `handoff — orchestration for the handoff skill
@@ -2561,7 +2582,8 @@ if (isCLI) {
                                     launch ready sessions, wait, reroute on quota death
   status   --run DIR                one line per session + result digest blocks
   score    --run DIR                cost + defect scorecard, appends metrics.jsonl
-  clean    --run DIR                remove clean worktrees and run dir (keeps branches)
+  clean    --run DIR [--branches]   remove clean worktrees and run dir; --branches also
+                                   deletes this run's session branches merged into HEAD
 `,
     );
   }

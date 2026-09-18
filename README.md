@@ -95,7 +95,7 @@ After install, start a session and type `/handoff`, `/study-wiki`, `/teach-me`, 
 **Improving the skills**
 
 1. Use a skill. `shunt` and `handoff` end each run with a report and append one metrics line to `$TMPDIR/<skill>/metrics.jsonl`.
-2. At the end of the run, keep the data locally, or open an issue here with the report (the run is then cleaned from `$TMPDIR`).
+2. At the end of the run, keep the data locally, clean the run from `$TMPDIR` (handoff `clean --branches` also drops session branches already merged into your integration branch), or open an issue here with the report and then clean.
 3. In a clone of this repo, run `/skills-evaluate`: it reads the metrics history, `.agents/sketchpad/` and open issues, and proposes what to fix — in the skill, in its metrics, or in the catalog's scope.
 4. Accepted findings become issues, then PRs with a version bump.
 

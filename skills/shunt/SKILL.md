@@ -78,7 +78,8 @@ Prints the report (inspected, outlines, excerpts, recover, edit bypass, commands
 
 Show the report to the owner and ask:
 (a) keep it locally, do nothing;
-(b) open an issue in MathBorgess/skills-catalog with the report (`gh issue create` only after owner confirms), then clean that run (`node <skill>/scripts/shunt.mjs clean`).
+(b) clean that run (`node <skill>/scripts/shunt.mjs clean`);
+(c) open an issue in MathBorgess/skills-catalog with the report (`gh issue create` only after owner confirms), then clean.
 
 ## Done-check
 

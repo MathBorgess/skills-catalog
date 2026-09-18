@@ -67,13 +67,13 @@ Read the dispatch digest. It includes each finished session's result block. Open
 node <skill>/scripts/handoff.mjs score --run "$HANDOFF_RUN"
 ```
 
-Show the report and ask the owner: (a) keep it locally; or (b) create an issue with it, then clean the run. Create an issue only after yes. Clean with:
+Show the report and ask the owner: (a) keep it locally; (b) clean the run; (c) create an issue with the report, then clean. Create an issue only after yes.
 
 ```bash
-node <skill>/scripts/handoff.mjs clean --run "$HANDOFF_RUN"
+node <skill>/scripts/handoff.mjs clean --run "$HANDOFF_RUN" [--branches]
 ```
 
-`clean` refuses while a run worktree has uncommitted changes and never deletes branches. See [`references/metrics.md`](references/metrics.md).
+`clean` refuses while a run worktree has uncommitted changes. Add `--branches` once every session is merged into one integration branch and you run it from there: it deletes this run's `handoff/<run-id>-NN` branches already merged into HEAD and names any it kept. See [`references/metrics.md`](references/metrics.md).
 
 ## Done-check
 
@@ -81,4 +81,4 @@ node <skill>/scripts/handoff.mjs clean --run "$HANDOFF_RUN"
 - [ ] Route accepted, graph gate completed, and `route --approve` locked the current hash before dispatch.
 - [ ] Every brief exists; no child was launched manually, implemented by the parent, or inspected through logs/worktrees.
 - [ ] Dispatch digest was used; changed plans were routed and approved again before dispatch.
-- [ ] Score ran and the owner received the keep-or-issue-and-clean question.
+- [ ] Score ran and the owner received the keep / clean / issue-and-clean question.

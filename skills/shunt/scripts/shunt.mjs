@@ -649,6 +649,10 @@ function cmdActivate() {
   saveState(state, cwd);
   console.log(`active  ${runDir(cwd)}`);
   if (state.rtk) console.log(`rtk     ${state.rtk.mode} (${state.rtk.version}) — Bash commands route through rtk while active`);
+  else {
+    const found = rtkVersion();
+    if (found) console.log(`tip     rtk ${found} is installed — re-run \`activate --rtk\` to filter build/test/git noise (recommended; A/B in skills-catalog#27)`);
+  }
   console.log(`caps    ${LINE_MAX} lines · ${BYTE_MAX} bytes · outline ≤ ${OUTLINE_MAX} lines`);
 }
 

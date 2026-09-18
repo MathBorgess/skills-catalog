@@ -1,10 +1,10 @@
 ---
 name: handoff
-description: Use when the user wants to compact work for a later agent, split it into parallel sessions, dispatch Cursor, Claude, Codex, or Antigravity (agy), route around quota, or says /handoff, fan-out, routing table, or end of task.
+description: Use when the user wants to compact work for a later agent, split it into parallel sessions, dispatch Cursor, Claude, Codex, or Antigravity (agy), route around quota, run children through rtk, or says /handoff, fan-out, routing table, or end of task.
 argument-hint: "compact | fan-out | provider or model constraints | rtk"
 metadata:
   author: Matheus Borges
-  version: 2.0.0
+  version: 2.1.0
 ---
 
 # Handoff
@@ -32,6 +32,8 @@ Write `$HANDOFF_RUN/plan.json`:
   {"id":"02","goal":"…","tier":"mechanical","size":"s","writes":["docs/**"],"reads":["**"],"deps":[],"model":"…","effort":"low"}
 ]}
 ```
+
+**Recommended: if `rtk --version` works, set `"rtk": "guarded"` in the plan** and raise it in the graph gate; `route` prints a `tip` when RTK is installed and the plan leaves it out. Whether RTK lowers task cost is still being measured ([skills-catalog#27](https://github.com/MathBorgess/skills-catalog/issues/27)).
 
 `model` and `effort` are optional owner overrides. `rtk` (`off` | `guarded` | `full`, plan-wide or per session; absent = `off`) routes the children's shell output through [RTK](https://github.com/rtk-ai/rtk) — see §4. A dependency means B needs A's output; independent sessions run in parallel. Give independent sessions disjoint write-sets. Set `tier`, `size`, `needs`, and an honest `horizon_s`; see [`references/routing.md`](references/routing.md).
 
@@ -91,5 +93,6 @@ node <skill>/scripts/handoff.mjs clean --run "$HANDOFF_RUN" [--branches]
 - [ ] Route accepted, graph gate completed, and `route --approve` locked the current hash before dispatch.
 - [ ] Every brief exists; no child was launched manually, implemented by the parent, or inspected through logs/worktrees.
 - [ ] Dispatch digest was used; changed plans were routed and approved again before dispatch.
+- [ ] RTK installed → `rtk` was proposed in the graph gate (on, or off with the owner's reason).
 - [ ] `rtk` chosen in `plan.json` (not on the command line) and shown in the graph gate when used.
 - [ ] Score ran and the owner received the keep / clean / issue-and-clean question.

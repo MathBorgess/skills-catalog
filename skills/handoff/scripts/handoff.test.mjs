@@ -844,6 +844,11 @@ esac
   assert("rtk route: accepted with rtk on PATH", r.status === 0 && /\| RTK \|/.test(r.stdout));
   assert("rtk route: claude session is guarded/hook", by["01"]?.mode === "guarded" && by["01"]?.via === "hook");
   assert("rtk route: codex session override is full/prompt", by["02"]?.mode === "full" && by["02"]?.via === "prompt");
+  const plain = makeRouteRun();
+  const rp = run("route", plain, [], env);
+  assert("rtk route: a plan without rtk gets the recommendation", rp.status === 0 && /tip: rtk 9\.9\.9 is installed/.test(rp.stdout));
+  const rq = run("route", plain, [], { ...process.env, PATH: `${dirname(process.execPath)}:/usr/bin:/bin` });
+  assert("rtk route: no tip without rtk on PATH", !/tip: rtk/.test(rq.stdout));
   const bad = makeRouteRun({ plan: { mode: "fan-out", rtk: "loud", sessions: [{ id: "01", goal: "a", tier: "mechanical", size: "s", writes: ["a"], deps: [] }] } });
   const rb = run("route", bad, [], env);
   assert("rtk route: unknown mode is refused", rb.status !== 0 && /rtk mode must be one of/.test(rb.stderr));

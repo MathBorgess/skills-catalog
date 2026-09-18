@@ -1,10 +1,10 @@
 ---
 name: shunt
-description: "Use when a large or frontier model is about to read a large file, dump a repo into context, write boilerplate, config, or mechanical tests, or the user says shunt, bulk-read, bulk reader, code writer, don't ingest, cheaper model, save tokens, or keep the large model for reasoning. Activates a guard that refuses full-file reads over the threshold and points this model at an outline script or a small/fast subagent. Not for study-wiki, teach-me, or sending work to other CLIs (that is handoff)."
+description: "Use when a large or frontier model is about to read a large file, dump a repo into context, write boilerplate, config, or mechanical tests, or the user says shunt, bulk-read, bulk reader, code writer, don't ingest, cheaper model, save tokens, or keep the large model for reasoning, or mentions rtk. Activates a guard that refuses full-file reads over the threshold and points this model at an outline script or a small/fast subagent. Not for study-wiki, teach-me, or sending work to other CLIs (that is handoff)."
 argument-hint: "activate [--rtk[=full]] | inspect <path> | edit <path> | run -- <cmd> | deactivate | clean"
 metadata:
   author: Matheus Borges
-  version: 1.0.0
+  version: 1.1.0
 ---
 
 # Shunt
@@ -24,6 +24,8 @@ The plugin hook (`scripts/guard.mjs`) enforces the Read rules only while this sk
 node <skill>/scripts/shunt.mjs activate [--rtk | --rtk=full]
 node <skill>/scripts/shunt.mjs status
 ```
+
+**Recommended: if `rtk --version` works, activate with `--rtk`.** It filters build, test, lint and git noise through RTK while keeping diffs, code and search raw (§6). `activate` prints a `tip` line when RTK is installed and you left it off — act on it or say why not. Whether RTK lowers task cost is still being measured ([skills-catalog#27](https://github.com/MathBorgess/skills-catalog/issues/27)).
 
 `<skill>` is this folder. `status` prints the run dir (`$TMPDIR/shunt/<id>/`). No marker → the hook is inert. A new `activate` starts a new run: the last run's events are dropped. `--rtk` is §6.
 
@@ -97,6 +99,7 @@ Show the report to the owner and ask:
 - [ ] Code, diffs, and search commands (`git diff`, `git show`, `cat`, `grep`/`rg`) ran unwrapped.
 - [ ] Every over-threshold file went through inspect/outline (or `edit --file` within 2× ceiling).
 - [ ] Verbose commands ran through `shunt.mjs run -- <cmd>`.
+- [ ] RTK installed → activated with `--rtk`, or the reason for leaving it off stated.
 - [ ] With `--rtk`: no global `rtk init`; diffs, code and search stayed raw unless the owner chose `full`.
 - [ ] Grunt writes were spawned before drafting; results were not read back.
 - [ ] No subagent transcript ingested.

@@ -369,6 +369,9 @@ esac
   assert("rtk e2e: metrics count rewrites and recalls", m.rtk.mode === "guarded" && m.rtk.rewrites === 2 && m.rtk.recalls === 1);
   const again = spawnSync(process.execPath, [cli, "activate"], { cwd: d, encoding: "utf8", env });
   assert("activate starts a fresh run: no events leak", again.status === 0 && readEvents(d).length === 0);
+  assert("activate without --rtk recommends it when rtk is installed", /tip\s+rtk 9\.9\.9 is installed.*--rtk/.test(again.stdout));
+  const noRtk = spawnSync(process.execPath, [cli, "activate"], { cwd: d, encoding: "utf8", env: { ...process.env, PATH: "/usr/bin:/bin" } });
+  assert("activate stays quiet when rtk is absent", noRtk.status === 0 && !/tip/.test(noRtk.stdout));
   const plain = spawnSync(process.execPath, [guard], {
     input: JSON.stringify({ tool_name: "Bash", tool_input: { command: "git status" }, cwd: d }),
     encoding: "utf8",

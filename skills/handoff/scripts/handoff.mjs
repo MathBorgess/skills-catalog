@@ -1747,6 +1747,14 @@ export function route(dir) {
         `\n  Cut fewer and bigger sessions, or wait for a reset before dispatching.`,
     );
   }
+  if (!wantsRtk) {
+    const found = rtkVersion();
+    if (found) {
+      console.log(
+        `\ntip: rtk ${found} is installed but this plan has no "rtk" — add "rtk": "guarded" to plan.json to filter the children's build/test/git noise (recommended; A/B in skills-catalog#27). Raise it in the graph gate.`,
+      );
+    }
+  }
   if (arg("approve")) {
     const hash = hashPlan(plan);
     writeJSON(join(dir, "approved.json"), { hash, ts: nowISO() });

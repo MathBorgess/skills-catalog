@@ -1,0 +1,5 @@
+interface:
+  display_name: "Skills Evaluate"
+  short_description: "Evaluate skill runs, analyze metrics, and propose improvements"
+policy:
+  allow_implicit_invocation: true

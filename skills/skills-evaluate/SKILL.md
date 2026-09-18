@@ -3,7 +3,7 @@ name: skills-evaluate
 description: Use when evaluating skills, analyzing skill metrics, improving skills, skills evaluate, reviewing skill runs, or proposing skill changes. Not for running shunt or handoff themselves.
 metadata:
   author: Matheus Borges
-  version: 0.0.0
+  version: 0.1.0
 ---
 
 # Skills Evaluate

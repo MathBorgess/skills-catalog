@@ -22,6 +22,9 @@ import {
   score,
 } from "./handoff.mjs";
 
+// Keep test runs out of the real metrics history in the OS temp dir.
+process.env.TMPDIR = mkdtempSync(join(tmpdir(), "skills-test-"));
+
 const here = dirname(fileURLToPath(import.meta.url));
 const cli = join(here, "handoff.mjs");
 let failed = 0;

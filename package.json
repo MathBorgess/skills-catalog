@@ -1,6 +1,6 @@
 {
   "name": "@mathborgess/skills-catalog",
-  "version": "1.4.2",
+  "version": "1.5.0",
   "description": "Matheus Borges's catalog of agent skills for Claude, Cursor, and Codex.",
   "author": {
     "name": "Matheus Borges",

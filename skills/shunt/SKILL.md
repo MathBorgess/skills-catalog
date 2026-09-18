@@ -4,7 +4,7 @@ description: "Use when a large or frontier model is about to read a large file, 
 argument-hint: "activate | inspect <path> | edit <path> | run -- <cmd> | deactivate | clean"
 metadata:
   author: Matheus Borges
-  version: 0.0.0
+  version: 0.1.0
 ---
 
 # Shunt

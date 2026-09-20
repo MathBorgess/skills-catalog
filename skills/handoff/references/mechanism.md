@@ -1,14 +1,14 @@
 # Handoff mechanism — sequence, gates and the session graph
 
-How a handoff run actually behaves, end to end. Vocabulary is defined in [`CONTEXT.md`](../CONTEXT.md); the roadmap these diagrams anticipate is [#31](https://github.com/MathBorgess/skills-catalog/issues/31).
+How a handoff run actually behaves, end to end. Vocabulary is defined in [`CONTEXT.md`](../../../CONTEXT.md); the roadmap these diagrams anticipate is [#31](https://github.com/MathBorgess/skills-catalog/issues/31).
 
-**Read the status column before trusting a box.** Phases 1–4 and the scorecard are what `handoff` 2.1.0 does today. The acceptance phase, the environment preflight, the escalation gate and every scorer are roadmap — they are drawn here because the diagram is the design, not a description of current behaviour.
+> **Read this first.** Phases 1–4, the digest and the scorecard are what the skill does **today**. The acceptance phase, the environment preflight, the escalation gate, the teacher and every scorer are **roadmap** — they are drawn because the diagram is the design. Do not follow a roadmap box while executing a run: if a command or a state below is not in `SKILL.md`, it does not exist yet.
 
 | Part | Status |
 | --- | --- |
-| Phases 1–4, digest, scorecard | shipped (2.1.0) |
-| HITL-1 graph gate with hash lock | shipped, and mandatory |
-| Capability (`needs`) gate | shipped — the declaration is prose, the gate is code |
+| Phases 1–4, digest, scorecard | **shipped** |
+| HITL-1 graph gate with hash lock | **shipped**, and mandatory |
+| Capability gate | **shipped** — the gate is code; the declaration is prose |
 | Phase 5 acceptance: gate run, verdict, risk, matrix | roadmap (#34, #38, #39, #40) |
 | HITL-0 environment preflight | roadmap (#44) |
 | Scorers at any site | roadmap (#32, #35, #36, #37, #42, #43) |
@@ -18,7 +18,7 @@ How a handoff run actually behaves, end to end. Vocabulary is defined in [`CONTE
 
 | Gate | Fires when | Today |
 | --- | --- | --- |
-| **HITL-0 — admission** | `route` refuses: write-set collision, no provider satisfies `needs`, environment precondition unmet | partial; the environment half is #44 |
+| **HITL-0 — admission** | `route` refuses: write-set collision, no provider satisfies the declared capabilities, environment precondition unmet | partial; the environment half is #44 |
 | **HITL-1 — graph gate** | after cutting and routing, **before any launch**. The owner grills the graph; `route --approve` locks the plan hash | **shipped and mandatory** |
 | **HITL-2 — escalation** | `critical` risk, `rejected` brief, `escalate` verdict, or a spent revise round | roadmap (#40) |
 
@@ -48,7 +48,7 @@ sequenceDiagram
     S->>HF: probe --run
     HF-->>S: supply per lane and per window
     S->>S1: goal -> tier, size
-    S->>S1: goal -> needs, one question per capability
+    S->>S1: goal -> capabilities, one per question
     S1-->>S: typed decisions with p
     Note over S1: below threshold it abstains;<br/>it never invents a value
     S->>HF: write plan.json
@@ -64,7 +64,7 @@ sequenceDiagram
     HF-->>S: lanes, estimates, override warnings
 
     Note over S,H: PHASE 3 — graph gate, HITL-1, mandatory
-    S->>H: graph, concurrency, lanes,<br/>predicted vs declared needs
+    S->>H: graph, concurrency, lanes,<br/>predicted vs declared capabilities
     H-->>S: grilling
     H->>S: approved
     S->>HF: route --approve, locks the plan hash

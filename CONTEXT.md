@@ -61,9 +61,9 @@ _Avoid_: orchestrator, parent agent (one name per role)
 **Child**:
 The agent running one **session** in its own worktree. It has no supervisor context and never reads another child's brief.
 
-**Needs**:
-The sandbox capabilities a session declares it requires — `network`, `unix-socket`, `git-write`, `pty`, `disk-write`, `high-memory`. `route` excludes any provider whose sandbox blocks one of them, and refuses the plan when no provider satisfies all of them. It is a requirement of the work, never a permission granted to it.
-_Avoid_: permissions, capabilities (alone — `needs` is the declared subset)
+**Capabilities**:
+The sandbox facilities a session declares it requires — `network`, `unix-socket`, `git-write`, `pty`, `disk-write`, `high-memory`. `route` excludes any provider whose sandbox blocks one of them, and refuses the plan when no provider satisfies all of them. A **requirement of the work**, never a permission granted to it: you grant a permission, you discover a requirement.
+_Avoid_: permissions; `needs` (the field is still spelled `needs` in `plan.json` — the rename rides the capability-prediction change, and until then the field name and the concept name differ on purpose)
 
 **Gate run**:
 The `verify` commands executed **by the dispatcher** in the session's worktree after the child exits. A child's pasted output is a claim; the gate run is the evidence.
@@ -116,13 +116,13 @@ The rule a scorer replaces, kept as the bound it cannot cross. The scorer may on
 The append-only record of every scorer call — context, options, chosen, probability — opened at decision time and **resolved** with its outcome when the run closes. An unresolved record is unlabelled data, never a wrong label.
 
 **Free label**:
-An outcome that is itself the answer: a session that blocked on a socket needed `unix-socket`. Costs nothing and is mined before any teacher runs.
+An outcome that is itself the answer: a session that blocked on a socket required the `unix-socket` capability. Costs nothing and is mined before any teacher runs.
 
 **Inferred label**:
 A label the **teacher** wrote from hindsight artefacts, for decisions whose outcome was silent. Kept distinguishable from a free label, and outranked by one wherever they disagree.
 
 **Silent half**:
-The decisions whose failure leaves no trace — an over-declared `need`, a permitted read that was waste. Free labels are biased by construction because only the loud half announces itself; labelling the silent half is the teacher's actual job.
+The decisions whose failure leaves no trace — an over-declared capability, a permitted read that was waste. Free labels are biased by construction because only the loud half announces itself; labelling the silent half is the teacher's actual job.
 
 **Trivial baseline**:
 The majority answer at a decision site. A scorer that does not beat it has learned nothing, whatever its accuracy reads.

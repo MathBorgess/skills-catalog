@@ -54,6 +54,85 @@ How a child gets RTK: `hook` (a Claude child's scoped PreToolUse) or `prompt` (t
 **Settle window**:
 Seconds `dispatch` keeps waiting after the first actionable event to coalesce others before returning. A tunable.
 
+**Supervisor**:
+The parent session: it cuts the graph, writes briefs, dispatches, and reads digests. It is the system's bottleneck, so every design question about cost is asked as "does this take work off the supervisor?".
+_Avoid_: orchestrator, parent agent (one name per role)
+
+**Child**:
+The agent running one **session** in its own worktree. It has no supervisor context and never reads another child's brief.
+
+**Capabilities**:
+The sandbox facilities a session declares it requires — `network`, `unix-socket`, `git-write`, `pty`, `disk-write`, `high-memory`. `route` excludes any provider whose sandbox blocks one of them, and refuses the plan when no provider satisfies all of them. A **requirement of the work**, never a permission granted to it: you grant a permission, you discover a requirement.
+_Avoid_: permissions; `needs` (the field is still spelled `needs` in `plan.json` — the rename rides the capability-prediction change, and until then the field name and the concept name differ on purpose)
+
+**Gate run**:
+The `verify` commands executed **by the dispatcher** in the session's worktree after the child exits. A child's pasted output is a claim; the gate run is the evidence.
+_Avoid_: tests (a gate run is whatever the plan declared, and it is not the child's own run)
+
+**Accepted**:
+A session whose gate run passed and whose **verdict** cleared. Only an accepted session unblocks its dependents.
+_Avoid_: done (`done` means the child wrote a result file saying so — it is a claim, not acceptance)
+
+**Verdict**:
+The typed acceptance decision over a finished session: `approved`, `revise`, `rejected` or `escalate`. Produced from artefacts by the dispatcher, never by the session's own author.
+
+**Risk level**:
+The ordered consequence class of what a session changed — `routine`, `notable`, `consequential`, `critical`. It answers who has to look, not whether the work is correct.
+
+**Attention matrix**:
+The table that turns a **verdict** and a **risk level** into one action. Risk gates who looks; verdict gates where it goes.
+
+**Revise round**:
+One relaunch of a session against its existing worktree with a **named defect**, under a fresh brief and a fresh session. Capped at one; the cap is a constant, not a setting.
+_Avoid_: retry (a retry repeats the attempt; a revise round states what was wrong)
+
+**Named defect**:
+The observed failure a revise round must carry — gate output, a diffstat fact, a missed `Done when` item. Evidence, never the supervisor's diagnosis. A revise without one is an **escalation**.
+
+**Escalation**:
+Work handed back up because no automatic path is safe: a `critical` risk, a rejected brief, or a spent revise round. Escalation is a state a session can leave, not an ending.
+
+**Teacher**:
+The offline batch process that labels past decisions from their outcomes, after a run closes. Never the supervisor, never a child, never inside a live run.
+_Avoid_: judge, reviewer (a teacher writes labels, never verdicts)
+
+### System One
+
+**Scorer**:
+A small local model returning a typed decision with a calibrated probability, used where a step is judgment that repeats. It decides who looks and what runs next — never whether work is correct.
+_Avoid_: classifier (a classifier has fixed classes; a scorer's option list is data)
+
+**Choice / Score / Noul**:
+The three decision shapes. **Choice** picks one of N options. **Score** rates against ordered levels. **Noul** returns the probability that the answer is yes. The shape is chosen by the question: unordered alternatives, ordered levels, or an independent yes/no.
+_Avoid_: modelling non-exclusive requirements as a Choice
+
+**Abstention**:
+A scorer declining because no option cleared its threshold. A first-class outcome with a declared destination — the graph gate, the supervisor, or the permissive default — never a guess.
+
+**Floor**:
+The rule a scorer replaces, kept as the bound it cannot cross. The scorer may only widen the permissive side, so the worst case of adopting one is today's behaviour.
+
+**Shadow log**:
+The append-only record of every scorer call — context, options, chosen, probability — opened at decision time and **resolved** with its outcome when the run closes. An unresolved record is unlabelled data, never a wrong label.
+
+**Free label**:
+An outcome that is itself the answer: a session that blocked on a socket required the `unix-socket` capability. Costs nothing and is mined before any teacher runs.
+
+**Inferred label**:
+A label the **teacher** wrote from hindsight artefacts, for decisions whose outcome was silent. Kept distinguishable from a free label, and outranked by one wherever they disagree.
+
+**Silent half**:
+The decisions whose failure leaves no trace — an over-declared capability, a permitted read that was waste. Free labels are biased by construction because only the loud half announces itself; labelling the silent half is the teacher's actual job.
+
+**Trivial baseline**:
+The majority answer at a decision site. A scorer that does not beat it has learned nothing, whatever its accuracy reads.
+
+**Shuffled-context control**:
+Scoring each option list against the wrong context. If accuracy barely drops, the scorer is reading option statistics rather than the task. Costs one flag and is the difference between knowing and assuming.
+
+**Calibration**:
+How closely a scorer's stated probability matches its observed hit rate, reported as expected calibration error. It is what licenses a threshold; an uncalibrated scorer may not suppress a review.
+
 ### Evaluation
 
 **Metrics line**:
@@ -67,7 +146,12 @@ A skill doing work its `description` does not claim, or another skill's work.
 - **Shunt** produces **recover events** and **excerpts**; the ratio of the first to compressed reads is its failure rate.
 - **Handoff** turns a plan into **sessions** on **slots**, gated once by the **graph gate**, reported through the **digest**.
 - Every skill writes **metrics lines**; `skills-evaluate` reads them and never the other way round.
+- A **gate run** produces evidence; a **verdict** and a **risk level** read it; the **attention matrix** turns the pair into a **revise round**, an **escalation**, or an **accepted** session.
+- **Scorers** write the **shadow log**; the **teacher** resolves what the outcome left silent; neither ever acts inside a run.
 
 ## Flagged ambiguities
 
 - "Recovery" meant both expected excerpts and failed compression — resolved: only failures are **recover events**.
+- "Done" meant both "the child finished" and "the work is good" — resolved: `done` is the child's claim, **accepted** is the system's conclusion.
+- "Review" named both a session tier and the correction loop — resolved: a **review** session verifies and never edits; a **revise round** edits and never judges its own result.
+- "Teacher" and **supervisor** were briefly the same role — resolved: they must not be. A supervisor labelling its own decisions trains a scorer to reproduce the supervisor's bias.

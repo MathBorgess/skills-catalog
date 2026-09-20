@@ -4,10 +4,12 @@ description: Use when the user wants to compact work for a later agent, split it
 argument-hint: "compact | fan-out | provider or model constraints | rtk"
 metadata:
   author: Matheus Borges
-  version: 2.1.0
+  version: 2.2.0
 ---
 
 # Handoff
+
+[`references/mechanism.md`](references/mechanism.md) draws the whole run — the six phases, the three owner gates and the session graph — and marks which parts are shipped and which are roadmap. Read it to understand the machine, not to execute a run.
 
 Turn current work into self-contained session briefs. In **compact**, make one successor brief. In **fan-out**, cut independent work and let `scripts/handoff.mjs` probe supply, route, launch, recover, and score. Do not repeat its arithmetic, launch a child by hand, read child logs/worktrees, or implement a child's scope.
 

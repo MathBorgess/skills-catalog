@@ -1,8 +1,8 @@
 # Handoff mechanism — sequence, gates and the session graph
 
-How a handoff run actually behaves, end to end. Vocabulary is defined in [`CONTEXT.md`](../../../CONTEXT.md); the roadmap these diagrams anticipate is [#31](https://github.com/MathBorgess/skills-catalog/issues/31).
+For whoever maintains the skill. How a handoff run actually behaves, end to end. Vocabulary is defined in [`CONTEXT.md`](../../CONTEXT.md); the roadmap these diagrams anticipate is [#31](https://github.com/MathBorgess/skills-catalog/issues/31).
 
-> **Read this first.** Phases 1–4, the digest and the scorecard are what the skill does **today**. The acceptance phase, the environment preflight, the escalation gate, the teacher and every scorer are **roadmap** — they are drawn because the diagram is the design. Do not follow a roadmap box while executing a run: if a command or a state below is not in `SKILL.md`, it does not exist yet.
+> **Read this first.** Phases 1–4, the digest and the scorecard are what the skill does **today**. The acceptance phase, the environment preflight, the escalation gate, the teacher and every scorer are **roadmap** — they are drawn because the diagram is the design. Do not follow a roadmap box while executing a run: if a command or a state below is not in [`SKILL.md`](../../skills/handoff/SKILL.md), it does not exist yet.
 
 | Part | Status |
 | --- | --- |

@@ -2303,16 +2303,21 @@ async function dispatch(dir) {
         state.events.push(
           `${nowISO()} ${s.id} launched on ${s.lane ? `${s.slot}/${s.lane}` : s.slot} pid ${child.pid}`,
         );
-        child.on("exit", (code) => {
+        // `spawn` reports a missing or unexecutable binary asynchronously, as an
+        // `error` event — never as a throw the try/catch below could see. With no
+        // listener Node rethrows it as an unhandled `error`, which kills the
+        // dispatcher and abandons every other session in the run. A slot whose CLI
+        // is simply not installed is an ordinary launch failure, so it takes the
+        // same dead-lane-and-reroute path as any other.
+        let settled = false;
+        const settle = (verdict) => {
           live.delete(s.id);
+          if (settled) return;
+          settled = true;
           if (isTerminal(st.status)) {
             writeJSON(join(dir, "state.json"), state);
             return;
           }
-          const elapsedSec = st.started_at
-            ? Math.max(0, Math.round((Date.now() - Date.parse(st.started_at)) / 1000))
-            : 0;
-          const verdict = classifyExit(dir, s, code ?? -1, elapsedSec);
           st.ended_at = nowISO();
           if (
             verdict.status === "quota" ||
@@ -2345,6 +2350,22 @@ async function dispatch(dir) {
             state.events.push(`${nowISO()} ${s.id} ${verdict.status}`);
           }
           writeJSON(join(dir, "state.json"), state);
+        };
+        // Both can fire for one failed spawn, in either order; `settle` is
+        // idempotent so whichever arrives first decides.
+        child.on("error", (err) => {
+          // Name the binary and the errno: a reason of "exited immediately with
+          // code -1" would hide that the CLI is simply not on PATH.
+          settle({
+            status: "launch_fail",
+            reason: `could not launch ${bin}: ${err?.code ?? err?.message ?? "spawn failed"}`,
+          });
+        });
+        child.on("exit", (code) => {
+          const elapsedSec = st.started_at
+            ? Math.max(0, Math.round((Date.now() - Date.parse(st.started_at)) / 1000))
+            : 0;
+          settle(classifyExit(dir, s, code ?? -1, elapsedSec));
         });
       } catch (e) {
         st.status = "failed";

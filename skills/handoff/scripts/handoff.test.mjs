@@ -553,6 +553,50 @@ function makeRouteRun({ plan, quota, state } = {}) {
   const rDispatchAccepted = run("dispatch", dirApprove, ["--budget", "1"]);
   assert("dispatch accepts multi-session plan with matching approved.json hash", rDispatchAccepted.status === 0);
 
+  // 2b. A slot whose CLI is not installed must not kill the dispatcher.
+  // `spawn` reports a missing binary as an async `error` event, never as a
+  // throw, so before the handler existed an absent CLI crashed the whole run
+  // and abandoned every other session. It is an ordinary launch failure.
+  const absentBin = "handoff-test-absent-binary";
+  const dirAbsent = makeRouteRun({
+    plan: {
+      mode: "fan-out",
+      horizon_s: 7200,
+      sessions: [{ id: "01", goal: "solo task", writes: ["a.txt"], deps: [] }],
+    },
+    quota: {
+      ts: new Date().toISOString(),
+      slots: [
+        {
+          key: "codex",
+          provider: "codex",
+          account: "default",
+          installed: true,
+          bin: absentBin,
+          remaining_pct: 80,
+          bucket: "ok",
+          windows: [{ name: "5h", remaining_pct: 80, resets_at: null, window_secs: 18000 }],
+          source: "codex-test",
+        },
+      ],
+    },
+  });
+  assert("route succeeds with an absent binary on the only slot", run("route", dirAbsent).status === 0);
+  writeFileSync(join(dirAbsent, "sessions", "01.prompt.md"), "prompt 01");
+  const rAbsent = run("dispatch", dirAbsent, ["--budget", "6"]);
+  assert("dispatch survives a slot whose binary is missing", rAbsent.status === 0);
+  const absentState = JSON.parse(readFileSync(join(dirAbsent, "state.json"), "utf8"));
+  assert(
+    "the session is blocked, not left running",
+    absentState.sessions["01"].status === "blocked",
+  );
+  // P26: a guard prints the evidence it acted on. "exited with code -1" would
+  // hide that the CLI is simply not on PATH.
+  assert(
+    "the event names the binary and the errno",
+    absentState.events.some((e) => e.includes(`could not launch ${absentBin}`) && e.includes("ENOENT")),
+  );
+
   // 3. Plan modified after approval: dispatch refused with hash mismatch
   const pModified = {
     ...pMulti,

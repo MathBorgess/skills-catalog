@@ -23,12 +23,30 @@ import { basename, join, resolve } from "node:path";
 import { createHash } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { RTK_ENV, historyStats, modeFromArgv, rewrite, rtkVersion } from "./rtk.mjs";
+import {
+  BYTE_MAX,
+  EDIT_BYTE_MAX,
+  EDIT_LINE_MAX,
+  LINE_MAX,
+  READ_LEVELS,
+  isOver,
+  noul,
+  score,
+  windowAllowed,
+} from "./s1.mjs";
 
-export const LINE_MAX = 350;
-export const BYTE_MAX = 32 * 1024;
-export const EDIT_LINE_MAX = LINE_MAX * 2;
-export const EDIT_BYTE_MAX = BYTE_MAX * 2;
+export {
+  BYTE_MAX,
+  EDIT_BYTE_MAX,
+  EDIT_LINE_MAX,
+  LINE_MAX,
+  READ_LEVELS,
+  isOver,
+  windowAllowed,
+};
+
 export const OUTLINE_MAX = 80;
+const RTK_WHOLE = "must the output reach the model whole?";
 export const LIVE_MAX_AGE_S = 7200;
 
 const nowISO = () => new Date().toISOString();
@@ -150,21 +168,6 @@ export function lineAndByteCount(path) {
   }
 }
 
-export function isOver({ lines, bytes }) {
-  return lines > LINE_MAX || bytes > BYTE_MAX;
-}
-
-export function windowAllowed(offset, limit, lines) {
-  const off = Number(offset);
-  const lim = Number(limit);
-  const hasOff = Number.isFinite(off) && off > 0;
-  const hasLim = Number.isFinite(lim) && lim > 0;
-  if (hasOff && hasLim) return lim <= LINE_MAX;
-  if (hasLim) return lim <= LINE_MAX;
-  if (hasOff) return lines - off + 1 <= LINE_MAX;
-  return false;
-}
-
 function slug(file) {
   return basename(file).replace(/[^A-Za-z0-9._-]+/g, "_").slice(0, 80);
 }
@@ -275,7 +278,12 @@ export function isHandoffChildPath(p) {
   return n.includes("/handoff/") && (n.includes("/wt/") || n.includes("/logs/"));
 }
 
-export function classifyRead(abs, offset, limit, state, counts) {
+export function mustReachWhole(command, extra = {}) {
+  const { question = RTK_WHOLE, ...rest } = extra;
+  return noul(command, question, { site: "rtk", ...rest });
+}
+
+export function classifyRead(abs, offset, limit, state, counts, extra = {}) {
   if (isHandoffChildPath(abs)) return { allow: true, reason: "handoff" };
   const underRun = resolve(abs).startsWith(runDir(state.cwd) + "/") ||
     resolve(abs).startsWith(runDir() + "/");
@@ -296,16 +304,28 @@ export function classifyRead(abs, offset, limit, state, counts) {
     };
   }
 
-  const isEditTarget = state.edit?.targets?.includes(abs);
-  if (isEditTarget && counts.lines <= EDIT_LINE_MAX && counts.bytes <= EDIT_BYTE_MAX) {
-    if (isOver(counts)) return { allow: true, reason: "edit_bypass" };
-  }
-
-  if (!isOver(counts)) return { allow: true, reason: "under" };
-  if (windowAllowed(offset, limit, counts.lines)) return { allow: true, reason: "window" };
-
+  const isEditTarget = Boolean(state.edit?.targets?.includes(abs));
   const outline = state.read.outlines[abs];
   const summary = summaryPathFor(abs, state.cwd);
+  const decided = score(
+    {
+      lines: counts.lines,
+      bytes: counts.bytes,
+      offset,
+      limit,
+      edit: isEditTarget,
+      outline: Boolean(outline),
+    },
+    READ_LEVELS,
+    { site: "read", ...extra },
+  );
+
+  if (decided.level === "read-whole") {
+    if (isOver(counts) && isEditTarget) return { allow: true, reason: "edit_bypass" };
+    return { allow: true, reason: "under" };
+  }
+  if (decided.level === "excerpt") return { allow: true, reason: "window" };
+
   return {
     allow: false,
     reason:
@@ -426,7 +446,9 @@ export async function cmdRun(cmdString, cwd = process.cwd()) {
   const state = loadState(cwd);
   if (!isLive(state)) die("shunt is not active — run activate");
 
-  const rewritten = rewrite(cmdString, state.rtk?.mode);
+  const mode = state.rtk?.mode;
+  const rewritten =
+    mode === "guarded" && mustReachWhole(cmdString).yes ? null : rewrite(cmdString, mode);
   if (rewritten) {
     // RTK filters and keeps its own recall store; its output is the view.
     const { code, raw } = await runCommand(rewritten, cwd);

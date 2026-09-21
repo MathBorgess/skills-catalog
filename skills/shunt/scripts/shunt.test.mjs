@@ -11,6 +11,7 @@ import {
   LINE_MAX,
   EDIT_LINE_MAX,
   EDIT_BYTE_MAX,
+  OUTLINE_MAX,
   buildOutline,
   classifyRead,
   emptyState,
@@ -21,7 +22,17 @@ import {
   readEvents,
   runDir,
   computeMetrics,
+  mustReachWhole,
+  summaryPathFor,
 } from "./shunt.mjs";
+import {
+  READ_LEVELS,
+  decisionsPath,
+  getBackend,
+  guardedSkip as s1GuardedSkip,
+  rules,
+  setBackend,
+} from "./s1.mjs";
 import { chmodSync } from "node:fs";
 import { createRequire } from "node:module";
 import {
@@ -379,6 +390,156 @@ esac
   });
   assert("rtk e2e: without --rtk the guard ignores Bash", plain.stdout === "");
   spawnSync(process.execPath, [cli, "clean"], { cwd: d, encoding: "utf8", env });
+}
+
+// ------------------------------------------------------------------ s1 (wave 0)
+{
+  function decisionRecords() {
+    const p = decisionsPath();
+    if (!existsSync(p)) return [];
+    return readFileSync(p, "utf8")
+      .split("\n")
+      .filter(Boolean)
+      .map((line) => JSON.parse(line));
+  }
+
+  function pickBackend(name, index, n, p = 0.6) {
+    const dist = Array.from({ length: n }, (_, i) => (i === index ? p : 0));
+    return { name, decide: () => ({ index, p, dist }) };
+  }
+
+  function legacyClassifyRead(abs, offset, limit, state, counts) {
+    const n = abs.replace(/\\/g, "/");
+    if (n.includes("/handoff/") && (n.includes("/wt/") || n.includes("/logs/"))) {
+      return { allow: true, reason: "handoff" };
+    }
+    const underRun =
+      abs.startsWith(runDir(state.cwd) + "/") || abs.startsWith(runDir() + "/");
+    if (underRun && !isOver(counts)) return { allow: true, reason: "artifact" };
+    if (state.write.running.includes(abs)) {
+      return {
+        allow: false,
+        reason: `${abs} is write-delegate running. Do not Read/Edit/Write it. Wait, then \`write-done --file\` and excerpt only if you must edit.`,
+      };
+    }
+    if (state.write.done.includes(abs) && !windowAllowed(offset, limit, counts.lines)) {
+      return {
+        allow: false,
+        reason: `${abs} was written by a small subagent. Do not Read it back. Excerpt a span if you must edit: \`shunt.mjs excerpt --file ${abs} --start N --end M\`.`,
+      };
+    }
+    const isEditTarget = state.edit?.targets?.includes(abs);
+    if (isEditTarget && counts.lines <= EDIT_LINE_MAX && counts.bytes <= EDIT_BYTE_MAX) {
+      if (isOver(counts)) return { allow: true, reason: "edit_bypass" };
+    }
+    if (!isOver(counts)) return { allow: true, reason: "under" };
+    if (windowAllowed(offset, limit, counts.lines)) return { allow: true, reason: "window" };
+    const outline = state.read.outlines[abs];
+    const summary = summaryPathFor(abs, state.cwd);
+    return {
+      allow: false,
+      reason:
+        `${abs} is ${counts.lines} lines / ${counts.bytes} bytes (caps ${LINE_MAX} lines, ${BYTE_MAX} bytes). Do not Read it. ` +
+        `Run \`node <skill>/scripts/shunt.mjs inspect --file ${abs}\`, then Read the outline` +
+        (outline ? ` at ${outline}` : "") +
+        `. If the outline is not enough, spawn a small/fast subagent to write a summary to ${summary} (≤ ${OUTLINE_MAX} lines) and Read only that. ` +
+        `For an edit, \`excerpt --file ${abs} --start N --end M\` and Read the excerpt.`,
+    };
+  }
+
+  const s1State = emptyState(dir);
+  s1State.activatedAt = new Date().toISOString();
+  s1State.cwd = dir;
+
+  const equivalenceCases = [
+    [small, undefined, undefined, countsSmall],
+    [tall, undefined, undefined, countsTall],
+    [tall, 10, 20, countsTall],
+    [wide, undefined, undefined, countsWide],
+    [mediumTall, undefined, undefined, lineAndByteCount(mediumTall)],
+  ];
+  let equivOk = true;
+  for (const [path, offset, limit, counts] of equivalenceCases) {
+    const got = classifyRead(path, offset, limit, s1State, counts);
+    const want = legacyClassifyRead(path, offset, limit, s1State, counts);
+    if (got.allow !== want.allow || got.reason !== want.reason) equivOk = false;
+  }
+  const marked = emptyState(dir);
+  marked.activatedAt = s1State.activatedAt;
+  marked.cwd = dir;
+  marked.edit.targets = [mediumTall];
+  {
+    const counts = lineAndByteCount(mediumTall);
+    const got = classifyRead(mediumTall, undefined, undefined, marked, counts);
+    const want = legacyClassifyRead(mediumTall, undefined, undefined, marked, counts);
+    if (got.allow !== want.allow || got.reason !== want.reason) equivOk = false;
+  }
+  const hugeCounts = lineAndByteCount(hugeTall);
+  marked.edit.targets = [hugeTall];
+  {
+    const got = classifyRead(hugeTall, undefined, undefined, marked, hugeCounts);
+    const want = legacyClassifyRead(hugeTall, undefined, undefined, marked, hugeCounts);
+    if (got.allow !== want.allow || got.reason !== want.reason) equivOk = false;
+  }
+  assert("s1: classifyRead matches pre-scorer allow/reason", equivOk);
+
+  const cmds = [
+    "git diff HEAD~1",
+    "git -C repo show abc",
+    "cargo build && cat out.txt",
+    "LC_ALL=C grep -rn foo .",
+    "cargo test && git status",
+    "npm test",
+  ];
+  assert(
+    "s1: guardedSkip matches rtk.mjs",
+    cmds.every((c) => s1GuardedSkip(c) === guardedSkip(c)),
+  );
+  assert("s1: git diff must reach the model whole", mustReachWhole("git diff HEAD").yes === true && mustReachWhole("git diff HEAD").p === 1);
+  assert("s1: cargo test is not a guarded skip", mustReachWhole("cargo test").yes === false && mustReachWhole("cargo test").p === 1);
+
+  const before = decisionRecords().length;
+  classifyRead(tall, undefined, undefined, s1State, countsTall);
+  classifyRead(small, undefined, undefined, s1State, countsSmall);
+  mustReachWhole("git status");
+  const after = decisionRecords();
+  const added = after.slice(before);
+  assert("s1: one record per caller invocation", added.length === 3);
+  assert(
+    "s1: records are unresolved rules decisions",
+    added.every((r) => r.outcome?.unresolved === true && r.resolved_at === null && r.backend === "rules"),
+  );
+  const handoffBefore = decisionRecords().length;
+  classifyRead("/tmp/handoff/run/wt/01/f.js", undefined, undefined, s1State, countsSmall);
+  assert("s1: hard-rule paths do not log a decision", decisionRecords().length === handoffBefore);
+
+  const secretCmd =
+    "echo ana@example.invalid ghp_AAAAAAAAAAAAAAAAAAAA at /Users/someone/secret.env";
+  mustReachWhole(secretCmd);
+  const redacted = decisionRecords().at(-1);
+  const dumped = JSON.stringify(redacted);
+  assert("s1: redaction strips email, token, and home path", !dumped.includes("ana@example.invalid") && !dumped.includes("ghp_AAAAAAAAAAAAAAAAAAAA") && !dumped.includes("/Users/someone/secret.env"));
+  assert("s1: redaction leaves placeholders", dumped.includes("<redacted>") && dumped.includes("<path>"));
+
+  const teacherRead = pickBackend("teacher", 0, READ_LEVELS.length);
+  const swapped = classifyRead(tall, undefined, undefined, s1State, countsTall, { backend: teacherRead });
+  assert("s1: call-site backend swap can widen a read", swapped.allow === true);
+  const floorAgain = classifyRead(tall, undefined, undefined, s1State, countsTall);
+  assert("s1: rules floor still denies the same read", floorAgain.allow === false);
+
+  const teacherRtk = pickBackend("teacher", 0, 2);
+  assert("s1: noul call site accepts a backend swap", mustReachWhole("cargo test", { backend: teacherRtk }).yes === true);
+
+  const boom = { name: "boom", decide() { throw new Error("backend down"); } };
+  const fallback = classifyRead(tall, undefined, undefined, s1State, countsTall, { backend: boom });
+  assert("s1: backend errors fail open to the rules floor", fallback.allow === false && fallback.reason.includes("Do not Read"));
+
+  const prev = getBackend();
+  setBackend(teacherRead);
+  const viaActive = classifyRead(tall, undefined, undefined, s1State, countsTall);
+  setBackend(rules);
+  assert("s1: setBackend swaps without changing classifyRead", viaActive.allow === true && getBackend() === rules);
+  setBackend(prev);
 }
 
 if (failed) {

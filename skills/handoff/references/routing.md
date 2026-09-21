@@ -14,7 +14,7 @@ Leave `model` and `effort` unset unless the owner chose them. Route selects an e
 | design | high | frontier |
 | review | medium | frontier |
 
-An explicit `model` pins its lane. An explicit `effort` replaces the tier default. Both are owner overrides, marked `✎` in the graph gate. Route warns when an override is costly, mismatched, or unavailable; it does not reroute it. Probe CLI model lists rather than inventing identifiers.
+An explicit `model` pins its lane. An explicit `effort` replaces the tier default. Both are owner overrides, marked `✎` in the graph gate. Route warns when an override is costly, mismatched, or unavailable; it does not reroute it. Probe CLI model lists rather than inventing identifiers. For Codex sessions, route resolves the actual configured model (e.g. from `config.toml` or `models_cache.json`) instead of presenting a `default` placeholder.
 
 Each provider's lanes are alternatives; each lane's quota windows are simultaneous. Route estimates supply over `horizon_s`, admits demand against it, assigns work by projected lane utilisation, and holds a lane that reopens inside the horizon. It can reroute quota deaths only where the approved plan permits it. See [`quota.md`](quota.md) for supply diagnosis.
 

@@ -4,7 +4,7 @@ description: Use when the user wants to compact work for a later agent, split it
 argument-hint: "compact | fan-out | provider or model constraints | rtk"
 metadata:
   author: Matheus Borges
-  version: 2.2.2
+  version: 2.3.0
 ---
 
 # Handoff
@@ -35,7 +35,7 @@ Write `$HANDOFF_RUN/plan.json`:
 
 **Recommended: if `rtk --version` works, set `"rtk": "guarded"` in the plan** and raise it in the graph gate; `route` prints a `tip` when RTK is installed and the plan leaves it out. Whether RTK lowers task cost is still being measured ([skills-catalog#27](https://github.com/MathBorgess/skills-catalog/issues/27)).
 
-`model` and `effort` are optional owner overrides. `rtk` (`off` | `guarded` | `full`, plan-wide or per session; absent = `off`) routes the children's shell output through [RTK](https://github.com/rtk-ai/rtk) — see §4. A dependency means B needs A's output; independent sessions run in parallel. Give independent sessions disjoint write-sets. Set `tier`, `size`, `needs`, and an honest `horizon_s`; see [`references/routing.md`](references/routing.md).
+`model` and `effort` are optional owner overrides; unpinned sessions resolve real model names from local configuration or CLI lists and never report `default`. `rtk` (`off` | `guarded` | `full`, plan-wide or per session; absent = `off`) routes the children's shell output through [RTK](https://github.com/rtk-ai/rtk) — see §4. A dependency means B needs A's output; independent sessions run in parallel. Give independent sessions disjoint write-sets. Set `tier`, `size`, `needs`, and an honest `horizon_s`; see [`references/routing.md`](references/routing.md).
 
 ## 2. Route and graph gate
 

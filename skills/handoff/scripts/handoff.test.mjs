@@ -15,7 +15,11 @@ import {
   launchArgs,
   cursorModelWithEffort,
   EFFORT_BY_TIER,
+  DEFAULT_EFFORT,
   renderModel,
+  resolveCodexModel,
+  buildParentTurnsByCause,
+  cliModels,
   hashSessions,
   hashPlan,
   rtkFor,
@@ -24,7 +28,30 @@ import {
   nonCausalDeps,
   clean,
   score,
+  markSession,
+  mergeStateFromDisk,
+  saveState,
+  loadState,
+  classifyExit,
+  reconcileFromResults,
 } from "./handoff.mjs";
+import { redactEvidence, evaluatePreToolUse } from "./guard.mjs";
+import { runAllGateTests } from "./gate.test.mjs";
+import {
+  choice,
+  score as s1Score,
+  noul,
+  rules,
+  setBackend,
+  getBackend,
+  redact,
+  decisionsPath,
+  readDecisions,
+  resolveDecisions,
+  EFFORTS,
+  READ_LEVELS,
+  guardedSkip,
+} from "./s1.mjs";
 
 // Keep test runs out of the real metrics history in the OS temp dir.
 process.env.TMPDIR = mkdtempSync(join(tmpdir(), "skills-test-"));
@@ -896,6 +923,475 @@ esac
   const bad = makeRouteRun({ plan: { mode: "fan-out", rtk: "loud", sessions: [{ id: "01", goal: "a", tier: "mechanical", size: "s", writes: ["a"], deps: [] }] } });
   const rb = run("route", bad, [], env);
   assert("rtk route: unknown mode is refused", rb.status !== 0 && /rtk mode must be one of/.test(rb.stderr));
+}
+
+// ------------------------------------------------------------------ s1 byte-drift
+{
+  const shuntS1 = join(here, "..", "..", "shunt", "scripts", "s1.mjs");
+  if (existsSync(shuntS1)) {
+    assert(
+      "s1.mjs is identical in shunt and handoff",
+      readFileSync(shuntS1, "utf8") === readFileSync(join(here, "s1.mjs"), "utf8"),
+    );
+  }
+}
+
+// ------------------------------------------------------------------ s1 backend-swap & fail-open
+{
+  assert("s1: default backend is rules", getBackend()?.name === "rules");
+
+  const customBackend = {
+    name: "custom-mock",
+    decide({ kind, options }) {
+      if (kind === "choice") return { index: 1, p: 0.85, dist: [0.15, 0.85, 0] };
+      if (kind === "score") return { index: 0, p: 0.9, dist: [0.9, 0.1, 0, 0] };
+      if (kind === "noul") return { index: 1, p: 0.75, dist: [0.25, 0.75] };
+      return null;
+    },
+  };
+
+  setBackend(customBackend);
+  assert("s1: backend was swapped", getBackend()?.name === "custom-mock");
+
+  const ch = choice({ tier: "mechanical" }, EFFORTS);
+  assert("s1 custom choice uses custom backend", ch.label === "medium" && ch.p === 0.85);
+
+  const perCall = choice({ tier: "design" }, EFFORTS, { backend: rules });
+  assert("s1 per-call backend override works", perCall.label === "high" && perCall.p === 1);
+
+  const buggyBackend = {
+    name: "buggy",
+    decide() {
+      throw new Error("crash");
+    },
+  };
+  setBackend(buggyBackend);
+  const rescued = choice({ tier: "design" }, EFFORTS);
+  assert("s1 backend error fails open to rules floor", rescued.label === "high");
+
+  setBackend(rules);
+  assert("s1: reset backend to rules", getBackend()?.name === "rules");
+}
+
+// ------------------------------------------------------------------ s1 redaction
+{
+  assert("redact: api key is redacted", redact("my key AKIAIOSFODNN7EXAMPLE is secret") === "my key <redacted> is secret");
+  assert("redact: ghp token is redacted", redact("ghp_123456789012345678901234567890") === "<redacted>");
+  assert("redact: bearer token is redacted", redact("Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.e30.t-IDcSemACt8x4iTMC6Y9JaGQFsWiHGuxZKZ0WjwtDA") === "<redacted>");
+  assert("redact: email is redacted", redact("contact me@example.invalid now") === "contact <redacted> now");
+  assert("redact: phone is redacted", redact("call 555-123-4567 today") === "call <redacted> today");
+  assert("redact: absolute path is redacted", redact("look in /Users/someone/secret.env file") === "look in <path> file");
+  assert("redact: sensitive key in object is redacted", redact({ apiKey: "secret123", normal: "ok" }).apiKey === "<redacted>");
+  assert("redact: sensitive key password is redacted", redact({ password: "pass", normal: "ok" }).password === "<redacted>");
+
+  const runId = "test-redact-run";
+  choice("contact dev@example.invalid with token: ghp_123456789012345678901234567890 at /Users/john/repo", EFFORTS, {
+    site: "effort",
+    run: runId,
+  });
+  const records = readDecisions(runId);
+  assert("shadow log writes record for run", records.length >= 1);
+  const rec = records[records.length - 1];
+  assert("shadow log context redacts email", !rec.context.includes("dev@example.invalid"));
+  assert("shadow log context redacts secret token", !rec.context.includes("ghp_123456789012345678901234567890"));
+  assert("shadow log context redacts absolute path", !rec.context.includes("/Users/john/repo"));
+  assert("shadow log has outcome.unresolved true", rec.outcome?.unresolved === true);
+}
+
+// ------------------------------------------------------------------ s1 resolution
+{
+  const testRun = `res-test-${Date.now()}`;
+  choice({ session: "01", tier: "mechanical" }, EFFORTS, { site: "effort", run: testRun, session: "01" });
+  choice({ session: "02", tier: "design" }, EFFORTS, { site: "effort", run: testRun, session: "02" });
+
+  const unres = readDecisions(testRun);
+  assert("resolution: 2 records initially written", unres.length === 2);
+  assert("resolution: initial records are unresolved", unres.every((r) => r.outcome?.unresolved === true && r.resolved_at === null));
+
+  const summary = resolveDecisions(testRun, (row) => {
+    if (row.session === "01") return { observed: "done", status: "done" };
+    return { unresolved: true };
+  });
+
+  assert("resolution: summary reports 2 total", summary.total === 2);
+  assert("resolution: summary reports 1 resolved", summary.resolved === 1);
+  assert("resolution: summary reports 1 unresolved", summary.unresolved === 1);
+  assert("resolution: summary by_site effort total 2", summary.by_site.effort?.total === 2);
+  assert("resolution: summary by_site effort resolved 1", summary.by_site.effort?.resolved === 1);
+  assert("resolution: summary by_site effort unresolved 1", summary.by_site.effort?.unresolved === 1);
+
+  const after = readDecisions(testRun);
+  const r01 = after.find((r) => r.session === "01");
+  const r02 = after.find((r) => r.session === "02");
+  assert("resolved row has observed done", r01.outcome?.observed === "done");
+  assert("resolved row has resolved_at timestamp", typeof r01.resolved_at === "string" && r01.resolved_at.length > 0);
+  assert("unresolved row stays unresolved", r02.outcome?.unresolved === true && r02.resolved_at === null);
+}
+
+// ------------------------------------------------------------------ ledger & parent_turns_by_cause
+{
+  const stateEmpty = { parent_turns: 3, empty_slots: ["claude", "cursor"], events: [] };
+  const ledger1 = buildParentTurnsByCause(stateEmpty);
+  assert("ledger: dead_slot matches empty_slots count", ledger1.dead_slot === 2);
+  assert("ledger: other gets remaining parent_turns", ledger1.other === 1);
+  assert("ledger: env_precondition defaults to 0", ledger1.env_precondition === 0);
+
+  const stateExplicit = {
+    parent_turns: 5,
+    empty_slots: ["claude"],
+    parent_turns_by_cause: {
+      env_precondition: 2,
+      dead_slot: 1,
+      scope_conflict: 1,
+      verify_by_hand: 1,
+      disk: 0,
+      other: 0,
+    },
+  };
+  const ledger2 = buildParentTurnsByCause(stateExplicit);
+  assert("ledger: explicit causes are preserved", ledger2.env_precondition === 2 && ledger2.scope_conflict === 1);
+
+  const dir = makeRouteRun({
+    state: {
+      started_at: new Date().toISOString(),
+      parent_turns: 2,
+      settle_s: 30,
+      sessions: { "01": { status: "done", attempts: 1, slot: "claude" } },
+      empty_slots: ["claude"],
+      events: [],
+    },
+  });
+  run("route", dir);
+  const r = run("score", dir);
+  assert("score runs with ledger", r.status === 0);
+  const metricsFile = join(tmpdir(), "handoff", "metrics.jsonl");
+  const lastMetric = JSON.parse(readFileSync(metricsFile, "utf8").trim().split("\n").at(-1));
+  assert("metrics records parent_turns_by_cause", typeof lastMetric.parent_turns_by_cause === "object");
+  assert("metrics records dead_slot in parent_turns_by_cause", lastMetric.parent_turns_by_cause.dead_slot === 1);
+  assert("metrics records decisions summary", typeof lastMetric.decisions === "object");
+  assert("metrics records explicit unresolved_decisions count", typeof lastMetric.unresolved_decisions === "number");
+}
+
+// ------------------------------------------------------------------ caller equivalence
+{
+  // 1. Effort equivalence
+  for (const tier of ["mechanical", "review", "design", "unknown", undefined]) {
+    const direct = EFFORT_BY_TIER[tier] ?? DEFAULT_EFFORT;
+    const s1Res = choice({ tier }, EFFORTS, { site: "effort" });
+    assert(`caller equivalence effort for tier ${tier}`, s1Res.label === direct);
+  }
+  for (const override of ["low", "medium", "high"]) {
+    const s1Override = choice({ tier: "design", effort: override }, EFFORTS, { site: "effort" });
+    assert(`caller equivalence effort override ${override}`, s1Override.label === override);
+  }
+
+  // 2. RTK guardedSkip equivalence
+  const testCommands = [
+    "git diff HEAD",
+    "git show",
+    "cat file.txt",
+    "head -n 10 file.txt",
+    "tail -n 10 file.txt",
+    "grep pattern file.txt",
+    "rg pattern",
+    "cargo test",
+    "npm test",
+    "pytest",
+    "git status",
+    "git commit -m 'test'",
+  ];
+  for (const cmd of testCommands) {
+    const directSkip = guardedSkip(cmd);
+    const noulRes = noul(cmd, "must command reach whole?", { site: "rtk" });
+    assert(`caller equivalence rtk for "${cmd}"`, noulRes.yes === directSkip);
+  }
+
+  // 3. Read score equivalence
+  const readFacts = [
+    { lines: 100, bytes: 2000 },
+    { lines: 400, bytes: 40000 },
+    { lines: 400, bytes: 1000, offset: 1, limit: 50 },
+    { lines: 500, bytes: 50000, edit: true },
+    { lines: 1000, bytes: 100000, outline: true },
+  ];
+  for (const facts of readFacts) {
+    const scored = s1Score(facts, READ_LEVELS, { site: "read" });
+    assert(`caller equivalence read score for lines=${facts.lines}`, typeof scored.level === "string" && READ_LEVELS.includes(scored.level));
+  }
+}
+
+// ------------------------------------------------------------------ codex model resolution & no placeholder
+{
+  const defaultResolved = resolveCodexModel();
+  assert("resolveCodexModel is non-empty", Boolean(defaultResolved));
+  assert("resolveCodexModel is not 'default'", defaultResolved !== "default");
+
+  const envModel = resolveCodexModel("codex", null);
+  assert("resolveCodexModel returns a real model name", typeof envModel === "string" && envModel.length > 0 && envModel !== "default");
+
+  const codexSessionNoModel = { id: "01", provider: "codex", tier: "mechanical", size: "s" };
+  const rendered = renderModel(codexSessionNoModel);
+  assert("renderModel for codex session does not contain 'default'", !/\bdefault\b/.test(rendered));
+  assert("renderModel contains resolved model", rendered.includes(defaultResolved));
+
+  const digestBlock = formatResultDigestBlock(codexSessionNoModel, { status: "done", slot: "codex" }, { ok: true, paths: ["a.js"], summary: "done", remaining: "none" });
+  assert("formatResultDigestBlock does not contain 'default'", !/\bdefault\b/.test(digestBlock));
+  assert("formatResultDigestBlock contains resolved model", digestBlock.includes(defaultResolved));
+
+  const codexDir = makeRouteRun({
+    plan: {
+      mode: "fan-out",
+      horizon_s: 7200,
+      sessions: [
+        { id: "01", goal: "codex run", provider: "codex", tier: "mechanical", size: "s", writes: ["a.txt"], deps: [] },
+      ],
+    },
+    quota: {
+      ts: new Date().toISOString(),
+      slots: [
+        {
+          key: "codex",
+          provider: "codex",
+          account: "default",
+          installed: true,
+          bin: "codex",
+          remaining_pct: 80,
+          bucket: "ok",
+          windows: [{ name: "5h", remaining_pct: 80, resets_at: null, window_secs: 18000 }],
+          source: "codex-test",
+        },
+      ],
+    },
+  });
+  const rRoute = run("route", codexDir);
+  assert("route exits 0 for codex plan", rRoute.status === 0);
+  const routing = JSON.parse(readFileSync(join(codexDir, "routing.json"), "utf8"));
+  const assignedModel = routing.sessions[0].model;
+  assert("routed codex session has model assigned", Boolean(assignedModel));
+  assert("routed codex session model is NOT 'default'", assignedModel !== "default");
+  assert("route stdout table does not contain 'default' in model column", !/\|\s*default\s*\|/.test(rRoute.stdout));
+  assert("route stdout table contains real model name", rRoute.stdout.includes(assignedModel));
+
+  const models = cliModels("codex", "codex");
+  assert("cliModels('codex', 'codex') returns non-empty list", models.length > 0);
+  assert("cliModels('codex', 'codex') does not contain 'default'", !models.includes("default"));
+}
+
+// ----------------------------------------------------------- verifier gates & fixtures
+{
+  runAllGateTests();
+
+  // Test classifyExit integrating with s.verify
+  const dVerify = makeRouteRun({
+    plan: {
+      mode: "fan-out",
+      horizon_s: 7200,
+      sessions: [
+        { id: "01", goal: "task", writes: ["a.txt"], deps: [], verify: ["sh -c 'exit 1'"] },
+        { id: "02", goal: "task2", writes: ["b.txt"], deps: [], verify: ["echo passed"] },
+        { id: "03", goal: "task3", writes: ["c.txt"], deps: [], verify: [{ cmd: "true", expect_output: true }] },
+      ],
+    },
+  });
+  run("route", dVerify);
+  // Write result files claiming "status: done"
+  writeFileSync(join(dVerify, "sessions", "01.result.md"), "# Result 01\n- status: done\n- summary: claimed done\n");
+  writeFileSync(join(dVerify, "sessions", "02.result.md"), "# Result 02\n- status: done\n- summary: passing test\n");
+  writeFileSync(join(dVerify, "sessions", "03.result.md"), "# Result 03\n- status: done\n- summary: empty output\n");
+
+  const routingVerify = JSON.parse(readFileSync(join(dVerify, "routing.json"), "utf8"));
+  const s01 = routingVerify.sessions.find((s) => s.id === "01");
+  const s02 = routingVerify.sessions.find((s) => s.id === "02");
+  const s03 = routingVerify.sessions.find((s) => s.id === "03");
+
+  // s01: verify fails -> classifyExit downgrades to failed
+  const c01 = classifyExit(dVerify, s01, 0, 10, dVerify);
+  assert("verifier: failing gate downgrades claimed done to failed", c01.status === "failed");
+  assert("verifier: failure reason explains gate verification failed", c01.reason?.includes("gate verification failed"));
+  assert("verifier: gate_results recorded", Array.isArray(c01.gate_results) && c01.gate_results.length === 1);
+
+  // s02: verify passes -> classifyExit returns done
+  const c02 = classifyExit(dVerify, s02, 0, 10, dVerify);
+  assert("verifier: passing gate confirms done", c02.status === "done" && c02.reason === null);
+  assert("verifier: gate_results recorded on success", Array.isArray(c02.gate_results) && c02.gate_results[0].ok === true);
+
+  // s03: verify empty expected output -> classifyExit downgrades to failed
+  const c03 = classifyExit(dVerify, s03, 0, 10, dVerify);
+  assert("verifier: empty expected output in session gate downgrades to failed", c03.status === "failed" && c03.reason?.includes("empty expected output"));
+
+  // Test reconcileFromResults with gates
+  const stateVerify = {
+    started_at: new Date().toISOString(),
+    parent_turns: 0,
+    sessions: {
+      "01": { status: "running" },
+      "02": { status: "running" },
+    },
+    empty_slots: [],
+    events: [],
+  };
+  reconcileFromResults(dVerify, routingVerify, stateVerify);
+  assert("reconcile: failing gate reconciles running to failed", stateVerify.sessions["01"].status === "failed");
+  assert("reconcile: passing gate reconciles running to done", stateVerify.sessions["02"].status === "done");
+}
+
+// ----------------------------------------------------------- guard matched evidence & redaction
+{
+  // 1. Redaction of secrets, credentials, and PII
+  const secretKey = "sk-ant-api03-abcdef123456789012345678";
+  const ghToken = "ghp_1234567890abcdefghijklmnopqrstuvwxyz";
+  const bearerToken = "Bearer secret_bearer_token_value_xyz123";
+  const flagSecret = "--token super_secret_pass_123";
+  const email = "developer@internal.company.com";
+  const sampleText = `Call API with ${secretKey} and ${ghToken} using ${bearerToken} and ${flagSecret}. Contact ${email}.`;
+
+  const redacted = redactEvidence(sampleText);
+  assert("guard redact: sk- key is redacted", !redacted.includes(secretKey) && redacted.includes("[REDACTED]"));
+  assert("guard redact: ghp_ token is redacted", !redacted.includes(ghToken) && redacted.includes("[REDACTED]"));
+  assert("guard redact: bearer token is redacted", !redacted.includes(bearerToken) && redacted.includes("Bearer [REDACTED]"));
+  assert("guard redact: --token flag value is redacted", !redacted.includes("super_secret_pass_123") && redacted.includes("--token [REDACTED]"));
+  assert("guard redact: email is redacted", !redacted.includes(email) && redacted.includes("[EMAIL REDACTED]"));
+
+  // 2. Guard evidence reporting on tool interception
+  const mockRunDir = join(tmpdir(), `mock-guard-run-${Date.now()}`);
+  const mockRuns = [{ dir: mockRunDir, running: ["01"] }];
+
+  // Reading worktree file
+  const denyWt = evaluatePreToolUse(
+    { tool_name: "Read", tool_input: { file_path: join(mockRunDir, "wt", "01", "secret.txt") } },
+    mockRuns
+  );
+  assert("guard evidence: worktree denial contains matched worktree path evidence",
+    denyWt !== null &&
+    denyWt.includes('evidence: matched worktree path "') &&
+    denyWt.includes("inside session 01's worktree")
+  );
+
+  // Reading log file
+  const denyLog = evaluatePreToolUse(
+    { tool_name: "Read", tool_input: { file_path: join(mockRunDir, "logs", "01.log") } },
+    mockRuns
+  );
+  assert("guard evidence: log denial contains matched log path evidence",
+    denyLog !== null &&
+    denyLog.includes('evidence: matched log path "') &&
+    denyLog.includes("is session 01's raw stdout")
+  );
+
+  // Bash command reading logs
+  const denyBashLog = evaluatePreToolUse(
+    { tool_name: "Bash", tool_input: { command: `cat ${join(mockRunDir, "logs", "01.log")}` } },
+    mockRuns
+  );
+  assert("guard evidence: bash log denial contains matched log path in command evidence",
+    denyBashLog !== null &&
+    denyBashLog.includes('evidence: matched log path "') &&
+    denyBashLog.includes('in command "cat ')
+  );
+
+  // Bash command raw launch
+  const denyLaunch = evaluatePreToolUse(
+    { tool_name: "Bash", tool_input: { command: `claude -p "do something"` } },
+    mockRuns
+  );
+  assert("guard evidence: raw launch denial contains matched launch pattern in command evidence",
+    denyLaunch !== null &&
+    denyLaunch.includes('evidence: matched launch pattern "claude -p" in command "claude -p "do something""')
+  );
+
+  // Bash read-only diagnostics allowed (P10)
+  const allowPgrep = evaluatePreToolUse(
+    { tool_name: "Bash", tool_input: { command: "pgrep -f claude" } },
+    mockRuns
+  );
+  assert("guard allows: pgrep process inspection allowed", allowPgrep === null);
+
+  const allowVersion = evaluatePreToolUse(
+    { tool_name: "Bash", tool_input: { command: "claude --version" } },
+    mockRuns
+  );
+  assert("guard allows: --version diagnostic allowed", allowVersion === null);
+}
+
+// ----------------------------------------------------------- P19 parent correction & durability
+{
+  const p19Dir = makeRouteRun({
+    plan: {
+      mode: "fan-out",
+      horizon_s: 7200,
+      sessions: [
+        { id: "01", goal: "task 1", writes: ["a.txt"], deps: [] },
+        { id: "02", goal: "task 2", writes: ["b.txt"], deps: ["01"] },
+      ],
+    },
+  });
+
+  // Initial state on disk
+  const initialState = {
+    started_at: new Date().toISOString(),
+    parent_turns: 1,
+    sessions: {
+      "01": { status: "blocked", attempts: 1, reason: "sandbox constraint" },
+      "02": { status: "pending", attempts: 0 },
+    },
+    empty_slots: [],
+    events: ["2026-09-20T00:00:00.000Z 01 blocked"],
+  };
+  writeFileSync(join(p19Dir, "state.json"), JSON.stringify(initialState, null, 2));
+
+  // 1. markSession sets status, note, parent_correction, and event
+  const updated = markSession(p19Dir, "01", "done", { note: "manually verified fmt/clippy clean" });
+  assert("P19 mark: status updated to done", updated.sessions["01"].status === "done");
+  assert("P19 mark: note saved", updated.sessions["01"].note === "manually verified fmt/clippy clean");
+  assert("P19 mark: parent_correction recorded", updated.sessions["01"].parent_correction?.status === "done");
+  assert("P19 mark: durable event added to state.events",
+    updated.events.some((e) => e.includes("01 marked done by parent") && e.includes("manually verified fmt/clippy clean"))
+  );
+
+  // 2. Dispatcher in-memory state merging from disk (mergeStateFromDisk)
+  // Simulate running dispatcher having in-memory state where 01 was still "blocked" or "running"
+  const inMemState = {
+    started_at: new Date().toISOString(),
+    parent_turns: 1,
+    sessions: {
+      "01": { status: "running", attempts: 1 },
+      "02": { status: "pending", attempts: 0 },
+    },
+    empty_slots: [],
+    events: ["initial in-memory event"],
+  };
+
+  mergeStateFromDisk(p19Dir, inMemState);
+  assert("P19 merge: in-memory state adopts parent correction status", inMemState.sessions["01"].status === "done");
+  assert("P19 merge: in-memory state adopts parent note", inMemState.sessions["01"].note === "manually verified fmt/clippy clean");
+  assert("P19 merge: in-memory state retains parent correction metadata", inMemState.sessions["01"].parent_correction?.status === "done");
+  assert("P19 merge: events merged without losing parent event",
+    inMemState.events.some((e) => e.includes("01 marked done by parent"))
+  );
+
+  // 3. Subsequent dispatcher write preserves parent correction
+  saveState(p19Dir, inMemState);
+  const diskAfterWrite = JSON.parse(readFileSync(join(p19Dir, "state.json"), "utf8"));
+  assert("P19 durability: parent correction survives subsequent dispatcher write",
+    diskAfterWrite.sessions["01"].status === "done" &&
+    diskAfterWrite.sessions["01"].note === "manually verified fmt/clippy clean" &&
+    diskAfterWrite.events.some((e) => e.includes("01 marked done by parent"))
+  );
+
+  // 4. Dependent session is unblocked
+  const depsDone = (s) => (s.deps ?? []).every((d) => diskAfterWrite.sessions[d]?.status === "done");
+  const s02 = { id: "02", deps: ["01"] };
+  assert("P19 unblocking: dependent session 02 is now runnable", depsDone(s02) === true);
+
+  // 5. CLI invocation: handoff mark
+  const rMarkCLI = run("mark", p19Dir, ["02", "done", "--note", "verified by lead"]);
+  assert("P19 CLI: handoff mark exits 0", rMarkCLI.status === 0);
+  const stateCLI = JSON.parse(readFileSync(join(p19Dir, "state.json"), "utf8"));
+  assert("P19 CLI: session 02 marked done via CLI",
+    stateCLI.sessions["02"].status === "done" &&
+    stateCLI.sessions["02"].note === "verified by lead" &&
+    stateCLI.events.some((e) => e.includes("02 marked done by parent") && e.includes("verified by lead"))
+  );
 }
 
 // Remove every worktree (and its branch) the tests created under the isolated TMPDIR.

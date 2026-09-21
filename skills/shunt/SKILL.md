@@ -4,7 +4,7 @@ description: "Use when a large or frontier model is about to read a large file, 
 argument-hint: "activate [--rtk[=full]] | inspect <path> | edit <path> | run -- <cmd> | deactivate | clean"
 metadata:
   author: Matheus Borges
-  version: 1.1.0
+  version: 1.2.0
 ---
 
 # Shunt
@@ -12,6 +12,8 @@ metadata:
 Keep **this** model's context small. Heavy I/O is absorbed by `scripts/shunt.mjs` or by a small/fast subagent. You keep judgment: architecture, hard debug, security review, and edits from excerpts.
 
 The plugin hook (`scripts/guard.mjs`) enforces the Read rules only while this skill is active. Cursor and Codex have no PreToolUse — this file is the whole enforcement there.
+
+Read caps and the guarded-RTK skip are the **floor** of a System One scorer in `scripts/s1.mjs` (`rules` backend). Each call appends one redacted unresolved decision. Errors and abstentions fail open to this floor; a later backend swaps without changing the call site.
 
 ## 1. Policy by output kind
 

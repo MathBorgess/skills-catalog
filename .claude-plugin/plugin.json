@@ -1,6 +1,6 @@
 {
   "name": "skills-catalog",
-  "version": "2.2.2",
+  "version": "2.3.0",
   "description": "Matheus Borges's agent skills: study wikis, teaching sessions, cross-provider handoff, shunt (keep a large model off heavy I/O), and skills-evaluate (turn run metrics into improvements). Guard hooks protect live handoff runs and an active shunt. Inspired by Matt Pocock's skills packaging.",
   "author": {
     "name": "Matheus Borges",

@@ -49,9 +49,25 @@ import { fileURLToPath } from "node:url";
 import { RTK_ENV, RTK_PROMPT, historyStats, normalizeMode, rtkVersion } from "./rtk.mjs";
 import {
   claudeConfigDirs,
+  codexHomes,
   localSearchPaths,
   localSnapshot,
 } from "./local-usage.mjs";
+import {
+  choice,
+  score as s1Score,
+  noul,
+  rules,
+  setBackend,
+  getBackend,
+  EFFORTS,
+  EFFORT_BY_TIER,
+  DEFAULT_EFFORT,
+  decisionsPath,
+  resolveDecisions,
+  readDecisions,
+} from "./s1.mjs";
+import { runSessionGates } from "./gate.mjs";
 
 const LOW_PCT = Number(process.env.HANDOFF_LOW_PCT ?? 20);
 const PROBE_TTL_S = 300;
@@ -561,6 +577,42 @@ function cursorLanes(plan, payload) {
   ];
 }
 
+export function resolveCodexModel(bin = "codex", account = null) {
+  if (process.env.CODEX_MODEL) return process.env.CODEX_MODEL;
+  for (const dir of codexHomes()) {
+    if (account && account !== "default") {
+      const profCfg = join(dir, `${account}.config.toml`);
+      if (existsSync(profCfg)) {
+        try {
+          const text = readFileSync(profCfg, "utf8");
+          const m = text.match(/^\s*model\s*=\s*["']?([^"'\s#]+)["']?/m);
+          if (m && m[1] && m[1].toLowerCase() !== "default") return m[1];
+        } catch {}
+      }
+    }
+    const cfg = join(dir, "config.toml");
+    if (existsSync(cfg)) {
+      try {
+        const text = readFileSync(cfg, "utf8");
+        const m = text.match(/^\s*model\s*=\s*["']?([^"'\s#]+)["']?/m);
+        if (m && m[1] && m[1].toLowerCase() !== "default") return m[1];
+      } catch {}
+    }
+    const cache = join(dir, "models_cache.json");
+    if (existsSync(cache)) {
+      try {
+        const j = JSON.parse(readFileSync(cache, "utf8"));
+        if (j.default_model && j.default_model.toLowerCase() !== "default") return j.default_model;
+        if (Array.isArray(j.models) && j.models.length > 0) {
+          const slug = j.models[0]?.slug || j.models[0]?.id;
+          if (slug && slug.toLowerCase() !== "default") return slug;
+        }
+      } catch {}
+    }
+  }
+  return "gpt-5.6-sol";
+}
+
 // The CLI's own model list, so a lane can be pinned to a real id instead of an
 // invented one. Each CLI publishes it differently — `cursor-agent
 // --list-models`, `agy models` — and a CLI with no such command exits non-zero,
@@ -569,6 +621,21 @@ function cursorLanes(plan, payload) {
 const MODEL_LIST_ARGS = { cursor: ["--list-models"], antigravity: ["models"] };
 const modelListCache = new Map();
 export function cliModels(bin, provider) {
+  if (provider === "codex") {
+    for (const dir of codexHomes()) {
+      const cachePath = join(dir, "models_cache.json");
+      if (existsSync(cachePath)) {
+        try {
+          const j = JSON.parse(readFileSync(cachePath, "utf8"));
+          if (Array.isArray(j.models)) {
+            const list = j.models.map((m) => m.slug || m.id).filter(Boolean);
+            if (list.length) return list;
+          }
+        } catch {}
+      }
+    }
+    return [resolveCodexModel(bin)];
+  }
   const listArgs = MODEL_LIST_ARGS[provider];
   if (!listArgs) return [];
   if (modelListCache.has(bin)) return modelListCache.get(bin);
@@ -1622,7 +1689,12 @@ export function route(dir) {
   };
   for (const s of [...plan.sessions].sort((a, b) => a.id.localeCompare(b.id))) {
     const size = s.size ?? "m";
-    const effort = s.effort ?? EFFORT_BY_TIER[s.tier] ?? DEFAULT_EFFORT;
+    const decision = choice(
+      { session: s.id, tier: s.tier, effort: s.effort },
+      EFFORTS,
+      { site: "effort", run: dir, session: s.id }
+    );
+    const effort = decision.label;
     const hasModelOverride = Boolean(s.model);
     const hasEffortOverride = Boolean(s.effort);
     const isOverride = hasModelOverride || hasEffortOverride;
@@ -1695,7 +1767,13 @@ export function route(dir) {
     // Pin the lane to a model id the CLI actually lists. Without a pin the lane
     // is only a preference and the CLI's default model decides the pool, so the
     // table says so rather than claiming a routing decision it did not make.
-    const model = s.model ?? (cand.lane ? pickModelForLane(slot.bin, slot.provider, cand.lane) : null);
+    let model = s.model;
+    if (!model && cand.lane) {
+      model = pickModelForLane(slot.bin, slot.provider, cand.lane);
+    }
+    if (!model && slot.provider === "codex") {
+      model = resolveCodexModel(slot.bin, slot.account);
+    }
     assigned.push({
       ...s,
       size,
@@ -1835,7 +1913,7 @@ function renderQuota(quota) {
 // The model and the lane are one decision, so they share a cell: the model id is
 // what actually decides which pool the session spends.
 export function renderModel(s) {
-  const model = s.model ?? "default";
+  const model = s.model ?? (s.provider === "codex" ? resolveCodexModel(s.bin, s.account) : "default");
   const effort = s.effort ? ` ${s.effort}` : "";
   const mark = s.override ? " \u270e" : "";
   if (!s.lane) return `${model}${effort}${mark}`;
@@ -1878,8 +1956,7 @@ function renderRouting(r) {
 
 // ---------------------------------------------------------------- dispatch
 
-export const EFFORT_BY_TIER = { mechanical: "low", review: "medium", design: "high" };
-export const DEFAULT_EFFORT = "medium";
+export { EFFORT_BY_TIER, DEFAULT_EFFORT };
 export const AGY_EFFORT = EFFORT_BY_TIER;
 
 export function cursorModelWithEffort(model, effort) {
@@ -2087,7 +2164,12 @@ export function formatResultDigestBlock(session, st, parsed) {
   const lane = st?.lane ?? session?.lane;
   const slot = st?.slot ?? session?.slot ?? "unknown";
   const slotLane = lane ? `${slot}/${lane}` : slot;
-  const model = st?.model ?? session?.model ?? "default";
+  const model =
+    st?.model ??
+    session?.model ??
+    (session?.provider === "codex" || slot.startsWith("codex")
+      ? resolveCodexModel(session?.bin, session?.account)
+      : "default");
   const effort = session?.effort ?? "medium";
   const status = st?.status ?? "unknown";
 
@@ -2129,11 +2211,25 @@ export function evaluateSettle({ state, settleDeadline, settleS = DEFAULT_SETTLE
   };
 }
 
-function classifyExit(dir, s, code, elapsedSec = 0) {
+export function classifyExit(dir, s, code, elapsedSec = 0, cwd = null) {
   const resultPath = join(dir, "sessions", `${s.id}.result.md`);
   if (existsSync(resultPath)) {
     const parsed = parseResultStatus(readFileSync(resultPath, "utf8"));
-    if (parsed) return { status: parsed, reason: null };
+    if (parsed) {
+      if (parsed === "done" && s?.verify && (Array.isArray(s.verify) ? s.verify.length : true)) {
+        const gateCwd = cwd || (existsSync(join(dir, "wt", s.id)) ? join(dir, "wt", s.id) : dir);
+        const gateRes = runSessionGates(s.verify, { cwd: gateCwd, env: RTK_ENV });
+        if (!gateRes.ok) {
+          return {
+            status: "failed",
+            reason: `gate verification failed: ${gateRes.summary}`,
+            gate_results: gateRes.results,
+          };
+        }
+        return { status: "done", reason: null, gate_results: gateRes.results };
+      }
+      return { status: parsed, reason: null };
+    }
   }
   const tail = tailOf(join(dir, "logs", `${s.id}.log`));
   // P2: Auth failure or immediate launch crash (< 15s)
@@ -2153,24 +2249,40 @@ function classifyExit(dir, s, code, elapsedSec = 0) {
 // session already wrote a terminal result, that file wins. Already-terminal
 // failed/blocked/done/abandoned is left alone, including when the file is
 // ambiguous or even clearly done.
-function reconcileFromResults(dir, routing, state) {
+export function reconcileFromResults(dir, routing, state) {
   let changed = false;
   for (const s of routing?.sessions ?? []) {
     const st = state.sessions[s.id];
-    if (!st || st.status !== "running") continue;
+    if (!st || st.status !== "running" || st.parent_correction) continue;
     const resultPath = join(dir, "sessions", `${s.id}.result.md`);
     if (!existsSync(resultPath)) continue;
     const parsed = parseResultStatus(readFileSync(resultPath, "utf8"));
     if (!parsed) continue;
-    st.status = parsed;
+    let finalStatus = parsed;
+    let reason = null;
+    let gateResults = null;
+    if (parsed === "done" && s?.verify && (Array.isArray(s.verify) ? s.verify.length : true)) {
+      const gateCwd = st.cwd || (existsSync(join(dir, "wt", s.id)) ? join(dir, "wt", s.id) : dir);
+      const gateRes = runSessionGates(s.verify, { cwd: gateCwd, env: RTK_ENV });
+      if (!gateRes.ok) {
+        finalStatus = "failed";
+        reason = `gate verification failed: ${gateRes.summary}`;
+      }
+      gateResults = gateRes.results;
+      st.gate_results = gateResults;
+    }
+    st.status = finalStatus;
+    if (reason) st.reason = reason;
     st.ended_at ??= nowISO();
-    state.events.push(`${nowISO()} ${s.id} ${parsed} (result file)`);
+    state.events.push(
+      `${nowISO()} ${s.id} ${finalStatus}${reason ? `: ${reason}` : ""} (result file)`,
+    );
     changed = true;
   }
   return changed;
 }
 
-function loadState(dir) {
+export function loadState(dir) {
   return (
     readJSON(join(dir, "state.json")) ?? {
       started_at: nowISO(),
@@ -2180,6 +2292,103 @@ function loadState(dir) {
       events: [],
     }
   );
+}
+
+// P19: Supported parent correction mechanism that survives subsequent dispatcher writes
+export function markSession(dir, id, status, { note = null } = {}) {
+  const validStatuses = ["done", "failed", "blocked", "pending"];
+  if (!validStatuses.includes(status)) {
+    die(`invalid status '${status}'. Must be one of: ${validStatuses.join(", ")}`);
+  }
+  const statePath = join(dir, "state.json");
+  const state = loadState(dir);
+  state.sessions[id] ??= {};
+  const prevStatus = state.sessions[id].status ?? "unknown";
+
+  state.sessions[id].status = status;
+  state.sessions[id].parent_correction = {
+    previous_status: prevStatus,
+    status,
+    note: note || null,
+    ts: nowISO(),
+  };
+  if (note) state.sessions[id].note = note;
+  if (status === "done" && !state.sessions[id].ended_at) {
+    state.sessions[id].ended_at = nowISO();
+  }
+
+  const notePart = note ? `: ${note}` : "";
+  const eventMsg = `${nowISO()} ${id} marked ${status} by parent (was ${prevStatus})${notePart}`;
+  state.events.push(eventMsg);
+
+  writeJSON(statePath, state);
+  console.log(`marked session ${id} as ${status}${note ? ` (${note})` : ""}`);
+  return state;
+}
+
+// Merge state from disk before dispatcher writes so parent corrections persist
+export function mergeStateFromDisk(dir, state) {
+  const onDisk = readJSON(join(dir, "state.json"));
+  if (!onDisk) return state;
+
+  // Merge events: append any disk events not yet in memory
+  if (Array.isArray(onDisk.events)) {
+    const existing = new Set(state.events);
+    for (const ev of onDisk.events) {
+      if (!existing.has(ev)) {
+        state.events.push(ev);
+        existing.add(ev);
+      }
+    }
+  }
+
+  // Merge empty_slots
+  if (Array.isArray(onDisk.empty_slots)) {
+    for (const slot of onDisk.empty_slots) {
+      if (!state.empty_slots.includes(slot)) state.empty_slots.push(slot);
+    }
+  }
+
+  // Merge sessions
+  if (onDisk.sessions && typeof onDisk.sessions === "object") {
+    for (const [id, diskSess] of Object.entries(onDisk.sessions)) {
+      const memSess = state.sessions[id];
+      if (!memSess) {
+        state.sessions[id] = diskSess;
+        continue;
+      }
+
+      // If disk has an explicit parent correction, disk wins unconditionally!
+      if (diskSess.parent_correction) {
+        memSess.status = diskSess.status;
+        memSess.parent_correction = diskSess.parent_correction;
+        if (diskSess.note) memSess.note = diskSess.note;
+        if (diskSess.ended_at) memSess.ended_at = diskSess.ended_at;
+        continue;
+      }
+
+      // If status changed on disk (e.g. manual edit or parent intervention)
+      if (diskSess.status !== memSess.status) {
+        const wasTerminal = isTerminal(diskSess.status);
+        if (wasTerminal || memSess.status === "running" || memSess.status === "pending") {
+          memSess.status = diskSess.status;
+          if (diskSess.note) memSess.note = diskSess.note;
+          if (diskSess.ended_at) memSess.ended_at = diskSess.ended_at;
+          const correctionEv = `${nowISO()} ${id} corrected to ${diskSess.status} from disk${diskSess.note ? `: ${diskSess.note}` : ""}`;
+          if (!state.events.some((e) => e.includes(`${id} corrected to ${diskSess.status}`))) {
+            state.events.push(correctionEv);
+          }
+        }
+      }
+    }
+  }
+
+  return state;
+}
+
+export function saveState(dir, state) {
+  mergeStateFromDisk(dir, state);
+  writeJSON(join(dir, "state.json"), state);
 }
 
 async function dispatch(dir) {
@@ -2263,6 +2472,7 @@ async function dispatch(dir) {
   };
 
   while (Date.now() < deadline) {
+    mergeStateFromDisk(dir, state);
     reconcileFromResults(dir, routing, state);
 
     // 1. launch everything whose dependencies are satisfied
@@ -2314,11 +2524,18 @@ async function dispatch(dir) {
           live.delete(s.id);
           if (settled) return;
           settled = true;
+          if (st.parent_correction) {
+            saveState(dir, state);
+            return;
+          }
           if (isTerminal(st.status)) {
-            writeJSON(join(dir, "state.json"), state);
+            saveState(dir, state);
             return;
           }
           st.ended_at = nowISO();
+          if (verdict.gate_results) {
+            st.gate_results = verdict.gate_results;
+          }
           if (
             verdict.status === "quota" ||
             verdict.status === "auth_death" ||
@@ -2347,9 +2564,11 @@ async function dispatch(dir) {
           } else {
             st.status = verdict.status;
             st.reason = verdict.reason ?? undefined;
-            state.events.push(`${nowISO()} ${s.id} ${verdict.status}`);
+            state.events.push(
+              `${nowISO()} ${s.id} ${verdict.status}${verdict.reason ? `: ${verdict.reason}` : ""}`,
+            );
           }
-          writeJSON(join(dir, "state.json"), state);
+          saveState(dir, state);
         };
         // Both can fire for one failed spawn, in either order; `settle` is
         // idempotent so whichever arrives first decides.
@@ -2365,7 +2584,7 @@ async function dispatch(dir) {
           const elapsedSec = st.started_at
             ? Math.max(0, Math.round((Date.now() - Date.parse(st.started_at)) / 1000))
             : 0;
-          settle(classifyExit(dir, s, code ?? -1, elapsedSec));
+          settle(classifyExit(dir, s, code ?? -1, elapsedSec, cwd));
         });
       } catch (e) {
         st.status = "failed";
@@ -2374,7 +2593,7 @@ async function dispatch(dir) {
       }
     }
 
-    writeJSON(join(dir, "state.json"), state);
+    saveState(dir, state);
 
     const all = routing.sessions.map((s) => state.sessions[s.id]);
     if (all.every((st) => isTerminal(st.status))) break;
@@ -2402,7 +2621,7 @@ async function dispatch(dir) {
     await new Promise((r) => setTimeout(r, POLL_MS));
   }
 
-  writeJSON(join(dir, "state.json"), state);
+  saveState(dir, state);
   console.log(renderStatus(dir, routing, state));
   const pending = routing.sessions.filter((s) => !isTerminal(state.sessions[s.id].status));
   if (pending.length) {
@@ -2418,7 +2637,7 @@ export function renderStatus(dir, routing, state) {
   const rows = routing.sessions.map((s) => {
     const st = state.sessions[s.id] ?? {};
     const res = join(dir, "sessions", `${s.id}.result.md`);
-    let summary = st.reason ?? "";
+    let summary = st.note ?? st.reason ?? "";
     if (!summary && existsSync(res)) {
       // One line only. The result file's own body stays out of the model's
       // context unless the model decides to open it.
@@ -2471,11 +2690,63 @@ export function sessionRtk(s, st, historyOpts = {}) {
   return { mode: r.mode, via: r.via, rewrites, recalls, history, shared_cwd: s.isolation === "cwd" || undefined };
 }
 
+export function buildParentTurnsByCause(state) {
+  const base = {
+    env_precondition: 0,
+    dead_slot: 0,
+    scope_conflict: 0,
+    verify_by_hand: 0,
+    disk: 0,
+    other: 0,
+  };
+  if (state?.empty_slots?.length) {
+    base.dead_slot = state.empty_slots.length;
+  }
+  if (state?.parent_turns_by_cause && typeof state.parent_turns_by_cause === "object") {
+    for (const [k, v] of Object.entries(state.parent_turns_by_cause)) {
+      if (typeof v === "number") base[k] = v;
+    }
+  } else {
+    const known = base.dead_slot;
+    base.other = Math.max(0, (state?.parent_turns ?? 0) - known);
+  }
+  return base;
+}
+
 export async function score(dir) {
   const routing = readJSON(join(dir, "routing.json"));
   const before = readJSON(join(dir, "quota.json"));
   const state = loadState(dir);
   if (!routing || !before) die("routing.json or quota.json missing");
+
+  const run = basename(resolve(dir));
+  const st = (id) => state.sessions[id] ?? {};
+  const decisionSummary = resolveDecisions(run, (row) => {
+    let sid = row.session;
+    if (!sid && row.context) {
+      try {
+        const parsed = JSON.parse(row.context);
+        sid = parsed.session ?? parsed.id;
+      } catch {
+        const m = row.context.match(/\b(?:session|id)\s*[:=]\s*["']?([a-zA-Z0-9_-]+)["']?/);
+        if (m) sid = m[1];
+      }
+    }
+    if (!sid && routing.sessions.length === 1) {
+      sid = routing.sessions[0].id;
+    }
+    if (sid) {
+      const sState = st(sid);
+      if (sState?.status && ["done", "failed", "blocked", "abandoned"].includes(sState.status)) {
+        return {
+          observed: sState.status,
+          status: sState.status,
+          attempts: sState.attempts ?? 1,
+        };
+      }
+    }
+    return { unresolved: true };
+  });
 
   const after = await probe();
   writeJSON(join(dir, "quota-after.json"), after);
@@ -2500,7 +2771,6 @@ export async function score(dir) {
     }
   }
 
-  const st = (id) => state.sessions[id] ?? {};
   const done = routing.sessions.filter((s) => st(s.id).status === "done");
   const providersUsed = [...new Set(routing.sessions.map((s) => st(s.id).slot).filter(Boolean))];
   const providersAvail = before.slots.filter((s) => s.installed).map((s) => s.key);
@@ -2516,6 +2786,7 @@ export async function score(dir) {
     n_done: done.length,
     wall_clock_s: wall,
     parent_turns: state.parent_turns,
+    parent_turns_by_cause: buildParentTurnsByCause(state),
     providers_available: providersAvail,
     providers_used: providersUsed,
     quota_delta_pct: cost,
@@ -2539,6 +2810,9 @@ export async function score(dir) {
     independence_miss: 0,
     spread_miss: providersAvail.length >= 2 && providersUsed.length === 1 ? 1 : 0,
     admission_ignored: routing.admission?.ok === false ? 1 : 0,
+    decisions: decisionSummary,
+    decision_summary: decisionSummary,
+    unresolved_decisions: decisionSummary.unresolved,
   };
 
   const jsonl = join(tmpdir(), "handoff", "metrics.jsonl");
@@ -2561,7 +2835,8 @@ export async function score(dir) {
         })
         .join(", ") || "not measurable (every probe was unknown)"
     }`,
-    `Wall clock ${fmtDur(wall)} across ${state.parent_turns} parent turn(s).`,
+    `Wall clock ${fmtDur(wall)} across ${state.parent_turns} parent turn(s) (${Object.entries(metrics.parent_turns_by_cause).map(([k, v]) => `${k}:${v}`).join(", ")}).`,
+    `Decisions: ${decisionSummary.total} (${decisionSummary.resolved} resolved, ${decisionSummary.unresolved} unresolved).`,
     ...metrics.sessions
       .filter((x) => x.rtk.mode !== "off")
       .map((x) => {
@@ -2672,8 +2947,28 @@ if (isCLI) {
     const dir = runDir();
     const routing = readJSON(join(dir, "routing.json"));
     const state = loadState(dir);
-    if (reconcileFromResults(dir, routing, state)) writeJSON(join(dir, "state.json"), state);
+    if (reconcileFromResults(dir, routing, state)) saveState(dir, state);
     console.log(renderStatus(dir, routing, state));
+  } else if (cmd === "mark") {
+    const dir = runDir();
+    const positionals = [];
+    for (let i = 3; i < process.argv.length; i++) {
+      const a = process.argv[i];
+      if (a.startsWith("--")) {
+        if ((a === "--run" || a === "--note") && i + 1 < process.argv.length && !process.argv[i + 1].startsWith("--")) {
+          i++;
+        }
+      } else {
+        positionals.push(a);
+      }
+    }
+    const id = positionals[0];
+    const status = positionals[1];
+    const note = arg("note");
+    if (!id || !status) {
+      die("usage: handoff mark [--run DIR] <session-id> <status> [--note NOTE]");
+    }
+    markSession(dir, id, status, { note });
   } else if (cmd === "score") {
     await score(runDir());
   } else if (cmd === "clean") {
@@ -2689,6 +2984,8 @@ if (isCLI) {
   dispatch --run DIR [--budget S] [--settle S]
                                     launch ready sessions, wait, reroute on quota death
   status   --run DIR                one line per session + result digest blocks
+  mark     [--run DIR] <id> <status> [--note NOTE]
+                                    durable parent correction; records event and unblocks dependents
   score    --run DIR                cost + defect scorecard, appends metrics.jsonl
   clean    --run DIR [--branches]   remove clean worktrees and run dir; --branches also
                                    deletes this run's session branches merged into HEAD

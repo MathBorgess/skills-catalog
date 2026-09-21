@@ -29,14 +29,15 @@ Every delegated task or session must be classified across three dimensions:
 - **`m`**: Touches one module or subsystem (3–6 files), established interfaces, standard test suite.
 - **`l`**: Cross-cutting subsystem, deep refactoring, or foundational contracts affecting multiple downstream consumers.
 
-### Capabilities (`needs`)
-Declared environment requirements that execution slots must guarantee:
+### Capabilities (`capabilities`)
+Declared environment requirements that execution slots must guarantee. The plan field is `capabilities`; `needs` is the legacy spelling and still routes, with a warning.
 - **`network`**: Outbound HTTP/API access (e.g. dependency download, remote API tests).
-- **`unix-socket`**: Binding local IPC/Unix domain sockets or loopback servers during tests.
 - **`git-write`**: Creating git commits, worktrees, branches, or mutating git state.
-- **`pty`**: Interactive terminal / pseudoterminal allocation.
 - **`disk-write`**: Standard filesystem mutation permissions.
-- **`high-memory`**: Large compilation units or heavy build pipelines (> 4 GB RAM).
+- **`docker`**: Running containers or talking to a Docker daemon.
+- **`browser`**: Driving a real browser / web interaction in the sandbox.
+- **`secrets`**: Reading credentials, tokens, or a secret store.
+- Wave 0 names still accepted on the gate: **`unix-socket`**, **`pty`**, **`high-memory`**.
 
 ---
 
@@ -54,15 +55,15 @@ Declared environment requirements that execution slots must guarantee:
 
 ---
 
-## 4. Capability Filtering (`needs` Gate)
+## 4. Capability Filtering (`capabilities` Gate)
 
-Before assigning a task to any slot/sandbox, check intersection against known sandbox constraints:
+Before assigning a task to any slot/sandbox, check intersection against known sandbox constraints. Effective capabilities are the fail-closed union of owner declaration and classifier output; the classifier never subtracts.
 
-1. If task declares `needs: ["unix-socket"]` or `needs: ["network"]`:
+1. If the task's effective capabilities include `unix-socket`, `network`, `docker`, or `browser`:
    - Exclude any sandbox running under restricted isolation (e.g. sandboxed workspace-write runners with forbidden loopback/sockets).
-2. If task declares `needs: ["git-write"]`:
+2. If the task's effective capabilities include `git-write`:
    - Exclude runners whose working directory cannot mutate parent git state or where `.git` is outside writable roots.
-3. If no slot satisfies all `needs`:
+3. If no slot satisfies all `capabilities`:
    - Fail early during planning. Do **not** dispatch and hope the child ignores the requirement.
 
 ---

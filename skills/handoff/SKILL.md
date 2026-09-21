@@ -28,14 +28,14 @@ Write `$HANDOFF_RUN/plan.json`:
 
 ```json
 {"mode":"fan-out","horizon_s":7200,"rtk":"guarded","sessions":[
-  {"id":"01","goal":"…","tier":"design","size":"m","writes":["src/auth/**"],"reads":["**"],"deps":[],"needs":[]},
+  {"id":"01","goal":"…","tier":"design","size":"m","writes":["src/auth/**"],"reads":["**"],"deps":[],"capabilities":[]},
   {"id":"02","goal":"…","tier":"mechanical","size":"s","writes":["docs/**"],"reads":["**"],"deps":[],"model":"…","effort":"low"}
 ]}
 ```
 
 **Recommended: if `rtk --version` works, set `"rtk": "guarded"` in the plan** and raise it in the graph gate; `route` prints a `tip` when RTK is installed and the plan leaves it out. Whether RTK lowers task cost is still being measured ([skills-catalog#27](https://github.com/MathBorgess/skills-catalog/issues/27)).
 
-`model` and `effort` are optional owner overrides; unpinned sessions resolve real model names from local configuration or CLI lists and never report `default`. `rtk` (`off` | `guarded` | `full`, plan-wide or per session; absent = `off`) routes the children's shell output through [RTK](https://github.com/rtk-ai/rtk) — see §4. A dependency means B needs A's output; independent sessions run in parallel. Give independent sessions disjoint write-sets. Set `tier`, `size`, `needs`, and an honest `horizon_s`; see [`references/routing.md`](references/routing.md).
+`model` and `effort` are optional owner overrides; unpinned sessions resolve real model names from local configuration or CLI lists and never report `default`. `rtk` (`off` | `guarded` | `full`, plan-wide or per session; absent = `off`) routes the children's shell output through [RTK](https://github.com/rtk-ai/rtk) — see §4. A dependency means B needs A's output; independent sessions run in parallel. Give independent sessions disjoint write-sets. Set `tier`, `size`, `capabilities`, and an honest `horizon_s`; see [`references/routing.md`](references/routing.md). Legacy `needs` still routes, with a warning.
 
 ## 2. Route and graph gate
 

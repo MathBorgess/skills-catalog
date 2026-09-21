@@ -62,8 +62,14 @@ _Avoid_: orchestrator, parent agent (one name per role)
 The agent running one **session** in its own worktree. It has no supervisor context and never reads another child's brief.
 
 **Capabilities**:
-The sandbox facilities a session declares it requires — `network`, `unix-socket`, `git-write`, `pty`, `disk-write`, `high-memory`. `route` excludes any provider whose sandbox blocks one of them, and refuses the plan when no provider satisfies all of them. A **requirement of the work**, never a permission granted to it: you grant a permission, you discover a requirement.
-_Avoid_: permissions; `needs` (the field is still spelled `needs` in `plan.json` — the rename rides the capability-prediction change, and until then the field name and the concept name differ on purpose)
+The sandbox facilities a session requires. The six classifier Nouls are `network`, `git-write`, `disk-write`, `docker`, `browser`, and `secrets`. Owner-declared Wave 0 names `unix-socket`, `pty`, and `high-memory` remain valid on the gate. The plan field is `capabilities`; `needs` is the legacy spelling and still routes, with a warning. A **requirement of the work**, never a permission granted to it: you grant a permission, you discover a requirement.
+_Avoid_: permissions; treating `needs` as the canonical field
+
+**Effective capabilities**:
+The fail-closed union of owner declaration and classifier output. The classifier only adds; it never removes an owner-declared capability.
+
+**Capability disagreement**:
+Predicted-versus-declared at the graph gate. An owner declaration the classifier missed is kept and shown, not dropped.
 
 **Gate run**:
 The `verify` commands executed **by the dispatcher** in the session's worktree after the child exits. A child's pasted output is a claim; the gate run is the evidence.

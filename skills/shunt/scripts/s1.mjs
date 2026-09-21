@@ -239,6 +239,7 @@ function inferSite(kind, facts, options, question) {
   if (kind === "noul" && (facts.command != null || looksLikeCommand(facts.text) || /whole|raw|guarded|\brtk\b/i.test(question ?? ""))) {
     return "rtk";
   }
+  if (kind === "noul" && /capability|capabilities/i.test(question ?? "")) return "capabilities";
   if (kind === "score" && (num(facts.lines) != null || num(facts.bytes) != null || options.includes("read-whole"))) {
     return "read";
   }
@@ -298,6 +299,11 @@ function decideRules({ kind, context, options, site, question }) {
   if (resolved === "effort") {
     const effort = facts.effort ?? encodedEffort(facts.model) ?? EFFORT_BY_TIER[facts.tier] ?? DEFAULT_EFFORT;
     return hit(options, String(effort));
+  }
+
+  if (resolved === "capabilities") {
+    // Floor: do not add undeclared capabilities. Today's routing behaviour.
+    return hit(options, "no");
   }
 
   return { abstain: true, index: 0, p: 0, dist: oneHot(0, options.length) };
@@ -421,7 +427,11 @@ export function score(context, levels, extra = {}) {
 
 export function noul(context, question, extra = {}) {
   const d = decide("noul", context, YES_NO, { ...extra, question });
-  return { yes: d.label === "yes", p: d.p };
+  const yesIndex = Math.max(0, YES_NO.indexOf("yes"));
+  const pYes = Array.isArray(d.dist) && d.dist.length > yesIndex
+    ? d.dist[yesIndex]
+    : d.label === "yes" ? d.p : 1 - d.p;
+  return { yes: d.label === "yes", p: d.p, p_yes: pYes, dist: d.dist, abstain: Boolean(d.abstain) };
 }
 
 export function readDecisions(run = null) {

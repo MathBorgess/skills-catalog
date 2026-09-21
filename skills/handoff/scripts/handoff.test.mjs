@@ -34,6 +34,14 @@ import {
   loadState,
   classifyExit,
   reconcileFromResults,
+  route,
+  CAPABILITY_NOULS,
+  CAPABILITY_THRESHOLD,
+  declaredCapabilities,
+  predictCapabilities,
+  effectiveCapabilities,
+  capabilityDisagreement,
+  mineRecordedCapabilityExamples,
 } from "./handoff.mjs";
 import { redactEvidence, evaluatePreToolUse } from "./guard.mjs";
 import { runAllGateTests } from "./gate.test.mjs";
@@ -52,6 +60,7 @@ import {
   EFFORTS,
   READ_LEVELS,
   guardedSkip,
+  createLocalBackend,
 } from "./s1.mjs";
 
 // Keep test runs out of the real metrics history in the OS temp dir.
@@ -312,7 +321,7 @@ function makeRouteRun({ plan, quota, state } = {}) {
   });
   const r = run("route", dir);
   assert("route refuses plan pinning codex with unix-socket needs", r.status !== 0);
-  assert("route error message explains sandbox capability violation", /does not satisfy required needs/.test(r.stderr));
+  assert("route error message explains sandbox capability violation", /does not satisfy required capabilities/.test(r.stderr));
 }
 
 {
@@ -1411,6 +1420,290 @@ esac
     stateCLI.sessions["02"].status === "done" &&
     stateCLI.sessions["02"].note === "verified by lead" &&
     stateCLI.events.some((e) => e.includes("02 marked done by parent") && e.includes("verified by lead"))
+  );
+}
+
+// ----------------------------------------------------------- E1: capabilities Nouls, union, mining
+{
+  const SIX = ["network", "git-write", "disk-write", "docker", "browser", "secrets"];
+  assert("CAPABILITY_NOULS is exactly the six classifier outputs", JSON.stringify(CAPABILITY_NOULS) === JSON.stringify(SIX));
+  assert("CAPABILITY_THRESHOLD is the named fail-closed floor", CAPABILITY_THRESHOLD === 0.25);
+
+  const fromCaps = declaredCapabilities({ id: "01", capabilities: ["network", "docker"] });
+  assert("canonical capabilities field is accepted", JSON.stringify(fromCaps) === JSON.stringify(["network", "docker"]));
+
+  const fromNeeds = declaredCapabilities({ id: "01", needs: ["unix-socket", "git-write"] });
+  assert("legacy needs remains compatible", JSON.stringify(fromNeeds) === JSON.stringify(["unix-socket", "git-write"]));
+
+  const both = declaredCapabilities({
+    id: "01",
+    capabilities: ["network"],
+    needs: ["git-write", "network"],
+  });
+  assert("capabilities unions with leftover needs and does not drop either", JSON.stringify(both) === JSON.stringify(["network", "git-write"]));
+
+  const capDir = makeRouteRun({
+    plan: {
+      mode: "fan-out",
+      horizon_s: 7200,
+      sessions: [
+        { id: "01", goal: "daemon test", tier: "mechanical", size: "s", writes: ["d.txt"], deps: [], capabilities: ["unix-socket"] },
+      ],
+    },
+  });
+  const capRoute = run("route", capDir);
+  assert("route exits 0 for canonical capabilities field", capRoute.status === 0);
+  const capRouting = JSON.parse(readFileSync(join(capDir, "routing.json"), "utf8"));
+  assert("capabilities: unix-socket still excludes Codex", capRouting.sessions[0].provider === "claude");
+  assert("canonical capabilities does not emit a needs deprecation warning", !/legacy `needs`|deprecated.*needs/i.test(capRoute.stderr + capRoute.stdout));
+
+  const needsDir = makeRouteRun({
+    plan: {
+      mode: "fan-out",
+      horizon_s: 7200,
+      sessions: [
+        { id: "01", goal: "a", tier: "mechanical", size: "s", writes: ["a.txt"], deps: [], needs: ["unix-socket"] },
+        { id: "02", goal: "b", tier: "mechanical", size: "s", writes: ["b.txt"], deps: [], needs: ["git-write"] },
+      ],
+    },
+  });
+  const needsRoute = run("route", needsDir);
+  const needsWarn = `${needsRoute.stderr}\n${needsRoute.stdout}`;
+  assert("legacy needs still routes", needsRoute.status === 0);
+  assert("legacy needs emits a visible deprecation warning", /legacy `needs`|deprecated.*`needs`/i.test(needsWarn));
+  assert(
+    "legacy needs warns once per plan, not once per session",
+    (needsWarn.match(/legacy `needs`|deprecated.*`needs`/gi) ?? []).length === 1,
+  );
+
+  const rulesNouls = {};
+  for (const cap of CAPABILITY_NOULS) {
+    const d = noul(
+      { goal: "bind a unix socket and git commit", writes: ["crates/daemon/**"], verify: ["cargo test"] },
+      `does this session require the ${cap} capability?`,
+      { site: "capabilities", backend: rules, session: "01", run: "e1-rules-noul" },
+    );
+    rulesNouls[cap] = d;
+    assert(`rules noul for ${cap} exposes dist`, Array.isArray(d.dist) && d.dist.length === 2);
+    assert(`rules noul for ${cap} does not add (today's floor)`, d.yes === false && d.p_yes === 0);
+  }
+  assert("rules remains the default backend", getBackend()?.name === "rules");
+
+  const predictedNone = predictCapabilities(
+    { id: "01", goal: "bind a unix socket", writes: ["d.txt"], verify: ["cargo test"] },
+    { backend: rules, mode: "rules" },
+  );
+  assert("rules prediction adds none of the six", CAPABILITY_NOULS.every((c) => predictedNone[c]?.yes !== true));
+
+  const mock = {
+    name: "cap-mock",
+    decide({ question }) {
+      const cap = CAPABILITY_NOULS.find((c) => String(question).includes(c));
+      const pYes = {
+        network: 0.9,
+        "git-write": 0.05,
+        "disk-write": 0.8,
+        docker: 0.3,
+        browser: 0.24,
+        secrets: 0.1,
+      }[cap] ?? 0;
+      return { index: pYes >= 0.5 ? 0 : 1, p: Math.max(pYes, 1 - pYes), dist: [pYes, 1 - pYes] };
+    },
+  };
+
+  const predicted = predictCapabilities(
+    { id: "01", goal: "cargo test a daemon", writes: ["crates/daemon/**"], verify: ["cargo test"], capabilities: ["git-write"] },
+    { backend: mock, mode: "action", run: "e1-mock-predict" },
+  );
+  assert("noul network is declared on high p(yes)", predicted.network.yes === true);
+  assert("noul disk-write is declared on high p(yes)", predicted["disk-write"].yes === true);
+  assert("noul docker is declared on suspicion at p=0.3 even when argmax is no", predicted.docker.yes === true && predicted.docker.p_yes === 0.3);
+  assert("noul browser abstains below the 0.25 threshold", predicted.browser.abstain === true && predicted.browser.yes !== true);
+  assert("noul secrets abstains well below threshold", predicted.secrets.abstain === true && predicted.secrets.yes !== true);
+  assert("noul git-write classifier says no", predicted["git-write"].yes !== true);
+
+  const declared = ["git-write"];
+  const predictedYes = CAPABILITY_NOULS.filter((c) => predicted[c].yes);
+  const effective = effectiveCapabilities(declared, predictedYes);
+  assert("union includes owner git-write even though the classifier said no", effective.includes("git-write"));
+  assert("union adds classifier network and docker", effective.includes("network") && effective.includes("docker"));
+  assert("union does not add abstained browser or secrets", !effective.includes("browser") && !effective.includes("secrets"));
+  assert(
+    "classifier cannot subtract an owner-declared capability",
+    JSON.stringify(effectiveCapabilities(["secrets", "git-write"], ["network"]).sort()) ===
+      JSON.stringify(["git-write", "network", "secrets"].sort()),
+  );
+
+  const disagree = capabilityDisagreement(declared, predictedYes);
+  assert("disagreement lists classifier additions", disagree.added.includes("network") && disagree.added.includes("docker"));
+  assert("disagreement lists owner-kept capabilities the classifier missed", disagree.kept.includes("git-write"));
+  assert("disagreement never lists a drop", !disagree.dropped || disagree.dropped.length === 0);
+
+  const actionDir = makeRouteRun({
+    plan: {
+      mode: "fan-out",
+      horizon_s: 7200,
+      s1: { mode: "action" },
+      sessions: [
+        {
+          id: "01",
+          goal: "cargo test a daemon that binds a socket",
+          tier: "mechanical",
+          size: "s",
+          writes: ["d.txt"],
+          deps: [],
+          capabilities: ["git-write"],
+        },
+      ],
+    },
+  });
+  const actionRoute = run("route", actionDir, [], { ...process.env, HANDOFF_S1_BACKEND: "cap-mock" });
+  // Without the in-process mock, CLI rules path must not steal git-write.
+  assert("rules default leaves owner git-write in place", actionRoute.status === 0);
+  const actionRouting = JSON.parse(readFileSync(join(actionDir, "routing.json"), "utf8"));
+  assert(
+    "rules/default effective capabilities keep owner git-write",
+    (actionRouting.sessions[0].effective_capabilities ?? actionRouting.sessions[0].capabilities ?? []).includes("git-write"),
+  );
+
+  const inProcessDir = makeRouteRun({
+    plan: {
+      mode: "fan-out",
+      horizon_s: 7200,
+      s1: { mode: "action" },
+      sessions: [
+        {
+          id: "01",
+          goal: "cargo test a daemon that binds a socket",
+          tier: "mechanical",
+          size: "s",
+          writes: ["d.txt"],
+          deps: [],
+          capabilities: ["git-write"],
+        },
+      ],
+    },
+  });
+  const prev = getBackend();
+  setBackend(mock);
+  try {
+    route(inProcessDir);
+  } finally {
+    setBackend(prev);
+  }
+  const inRouting = JSON.parse(readFileSync(join(inProcessDir, "routing.json"), "utf8"));
+  const inSess = inRouting.sessions[0];
+  assert("action mode effective is the fail-closed union", inSess.effective_capabilities.includes("git-write") && inSess.effective_capabilities.includes("network") && inSess.effective_capabilities.includes("docker"));
+  assert("action mode does not drop owner git-write", inSess.effective_capabilities.includes("git-write"));
+  assert("action mode routes off Codex when union requires git-write/network/docker", inSess.provider === "claude");
+  const inOut = readFileSync(join(inProcessDir, "routing.json"), "utf8");
+  assert("routing.json records predicted-versus-declared disagreement", /added/.test(JSON.stringify(inSess.capability_disagreement)));
+
+  const shadowDir = makeRouteRun({
+    plan: {
+      mode: "fan-out",
+      horizon_s: 7200,
+      s1: { mode: "shadow" },
+      sessions: [
+        {
+          id: "01",
+          goal: "cargo test a daemon that binds a socket",
+          tier: "mechanical",
+          size: "s",
+          writes: ["d.txt"],
+          deps: [],
+          capabilities: ["git-write"],
+        },
+      ],
+    },
+  });
+  setBackend(mock);
+  try {
+    route(shadowDir);
+  } finally {
+    setBackend(rules);
+  }
+  const shadowSess = JSON.parse(readFileSync(join(shadowDir, "routing.json"), "utf8")).sessions[0];
+  assert("shadow mode does not change routing capabilities", JSON.stringify(shadowSess.effective_capabilities) === JSON.stringify(["git-write"]));
+  assert("shadow mode still records a prediction", shadowSess.predicted_capabilities.includes("network") || shadowSess.predicted_capabilities.includes("docker"));
+  assert("shadow still keeps the session off Codex because owner declared git-write", shadowSess.provider === "claude");
+
+  const examples = mineRecordedCapabilityExamples();
+  const again = mineRecordedCapabilityExamples();
+  assert("recorded-run mining is deterministic", JSON.stringify(examples) === JSON.stringify(again));
+  assert("mining yields one record per (run, session, capability)", examples.length === 3 * 6 && examples.every((r) => r.site === "capabilities"));
+  const minedRuns = [...new Set(examples.map((r) => r.run))].sort();
+  assert(
+    "mining covers the three recorded runs",
+    JSON.stringify(minedRuns) === JSON.stringify(["20260915T135101Z", "20260915T182254Z", "20260915T225713Z"]),
+  );
+  const blob = JSON.stringify(examples);
+  assert("mining redacts planted secrets", !blob.includes("ghp_MINEDSECRETTOKEN0000000000") && blob.includes("<redacted>"));
+  assert("mining redacts planted email", !blob.includes("alice@example.invalid"));
+  assert("mining redacts absolute paths", !blob.includes("/Users/alice/"));
+  assert("mining examples are usable labels", examples.some((r) => r.capability === "network" && r.outcome?.observed === true));
+
+  const fixture = join(here, "fixtures", "cua-s1-tinyx-toy", "checkpoint.json");
+  const local = createLocalBackend(fixture);
+  const localPred = predictCapabilities(
+    { id: "01", goal: "fetch crates.io and docker build", writes: ["src/**"], verify: ["cargo test"] },
+    { backend: local, mode: "action", run: "e1-local-infer" },
+  );
+  assert("local checkpoint actually infers all six Nouls", CAPABILITY_NOULS.every((c) => typeof localPred[c]?.p_yes === "number" && Number.isFinite(localPred[c].p_yes)));
+  const localRecords = readDecisions("e1-local-infer");
+  assert("local capability records used the local backend", localRecords.filter((r) => r.site === "capabilities").every((r) => r.backend === "local"));
+  assert("local infer does not promote itself to the default backend", getBackend()?.name === "rules");
+
+  const localShadowDir = makeRouteRun({
+    plan: {
+      mode: "fan-out",
+      horizon_s: 7200,
+      s1: { mode: "shadow", checkpoint: fixture },
+      sessions: [
+        { id: "01", goal: "fetch crates.io", tier: "mechanical", size: "s", writes: ["a.txt"], deps: [], capabilities: [] },
+      ],
+    },
+  });
+  const localShadow = run("route", localShadowDir);
+  assert("local shadow route exits 0", localShadow.status === 0);
+  const localShadowSess = JSON.parse(readFileSync(join(localShadowDir, "routing.json"), "utf8")).sessions[0];
+  assert("local shadow does not add capabilities to the gate", (localShadowSess.effective_capabilities ?? []).length === 0);
+  assert("local shadow still records model output", Array.isArray(localShadowSess.predicted_capabilities));
+  assert("graph gate output mentions predicted vs declared", /predicted|disagreement|declared/i.test(localShadow.stdout));
+
+  const localActionDir = makeRouteRun({
+    plan: {
+      mode: "fan-out",
+      horizon_s: 7200,
+      s1: { mode: "action", checkpoint: fixture },
+      sessions: [
+        { id: "01", goal: "fetch crates.io", tier: "mechanical", size: "s", writes: ["a.txt"], deps: [], capabilities: ["disk-write"] },
+      ],
+    },
+  });
+  const localAction = run("route", localActionDir);
+  assert("local action route exits 0 or fail-closed-refuses, not a crash", localAction.status === 0 || localAction.status === 1);
+  if (localAction.status === 0) {
+    const localActionSess = JSON.parse(readFileSync(join(localActionDir, "routing.json"), "utf8")).sessions[0];
+    assert("local action keeps owner disk-write", localActionSess.effective_capabilities.includes("disk-write"));
+  }
+
+  const docsRoot = join(here, "..", "..", "..");
+  const gateDoc = readFileSync(join(here, "..", "references", "graph-gate.md"), "utf8");
+  const routingDoc = readFileSync(join(here, "..", "references", "routing.md"), "utf8");
+  const skillDoc = readFileSync(join(here, "..", "SKILL.md"), "utf8");
+  const promptDoc = readFileSync(join(docsRoot, "prompts", "model-routing.md"), "utf8");
+  const contextDoc = readFileSync(join(docsRoot, "CONTEXT.md"), "utf8");
+  assert("graph-gate documents predicted vs declared capabilities", /predicted.*declared|disagreement/i.test(gateDoc));
+  assert("graph-gate never presents default as a model name", !/`default` as a model|model is `default`|model: default/i.test(gateDoc));
+  assert("routing.md uses the capabilities field", /Declare `capabilities`/.test(routingDoc) || /`"capabilities"`/.test(routingDoc));
+  assert("SKILL.md plan example uses capabilities", /"capabilities":\s*\[/.test(skillDoc));
+  assert("model-routing §2 names the capabilities field", /### Capabilities \(`capabilities`\)/.test(promptDoc));
+  assert("model-routing §4 gates on capabilities", /Capability Filtering \(`capabilities` Gate\)/.test(promptDoc));
+  assert("CONTEXT.md treats needs as the legacy spelling", /legacy|deprecated/.test(contextDoc) && /`capabilities`/.test(contextDoc));
+  assert(
+    "renderModel never uses default as a model name for claude",
+    !/\bdefault\b/.test(renderModel({ provider: "claude", effort: "medium" })),
   );
 }
 

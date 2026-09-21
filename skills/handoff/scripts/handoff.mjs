@@ -66,6 +66,8 @@ import {
   decisionsPath,
   resolveDecisions,
   readDecisions,
+  redact,
+  createLocalBackend,
 } from "./s1.mjs";
 import { runSessionGates } from "./gate.mjs";
 
@@ -1549,20 +1551,182 @@ const LANE_PENALTY = 3;
 // and a frontier one, whatever it calls them.
 const preferredLane = (tier) => (tier === "mechanical" ? "own" : "frontier");
 
-// P4: Provider sandbox capabilities. A session that declares `needs` cannot be
-// routed to a sandbox that blocks any of those requirements.
+// Classifier Nouls. Independent yes/no questions — not a Choice — because a
+// session can require several at once.
+export const CAPABILITY_NOULS = ["network", "git-write", "disk-write", "docker", "browser", "secrets"];
+
+// Fail-closed: over-declaring a capability only narrows the slot; under-declaring
+// kills the session and costs a supervisor turn. Declare on suspicion. Start at
+// p ≥ 0.25 and tune against recorded runs, not intuition. (skills-catalog#35)
+export const CAPABILITY_THRESHOLD = 0.25;
+
+const FULL_SANDBOX = new Set([
+  "network",
+  "unix-socket",
+  "git-write",
+  "pty",
+  "disk-write",
+  "high-memory",
+  "docker",
+  "browser",
+  "secrets",
+]);
 const PROVIDER_CAPABILITIES = {
-  claude: new Set(["network", "unix-socket", "git-write", "pty", "disk-write", "high-memory"]),
-  cursor: new Set(["network", "unix-socket", "git-write", "pty", "disk-write", "high-memory"]),
-  antigravity: new Set(["network", "unix-socket", "git-write", "pty", "disk-write", "high-memory"]),
-  codex: new Set(["pty", "disk-write", "high-memory"]), // workspace-write sandbox blocks network, unix-socket, git-write
+  claude: FULL_SANDBOX,
+  cursor: FULL_SANDBOX,
+  antigravity: FULL_SANDBOX,
+  // workspace-write blocks network, unix-socket, git-write, docker, browser
+  codex: new Set(["pty", "disk-write", "high-memory", "secrets"]),
 };
 
-function slotSatisfiesNeeds(provider, needs) {
-  if (!needs || !needs.length) return true;
+function uniqueCaps(list) {
+  const seen = new Set();
+  const out = [];
+  for (const c of list ?? []) {
+    if (typeof c !== "string" || !c || seen.has(c)) continue;
+    seen.add(c);
+    out.push(c);
+  }
+  return out;
+}
+
+export function declaredCapabilities(session) {
+  const caps = Array.isArray(session?.capabilities) ? session.capabilities : [];
+  const needs = Array.isArray(session?.needs) ? session.needs : [];
+  return uniqueCaps([...caps, ...needs]);
+}
+
+export function predictCapabilities(session, opts = {}) {
+  const backend = opts.backend ?? rules;
+  const context = {
+    goal: session.goal,
+    writes: session.writes,
+    verify: session.verify,
+    reads: session.reads,
+    tier: session.tier,
+    size: session.size,
+  };
+  const out = {};
+  for (const cap of CAPABILITY_NOULS) {
+    const d = noul(context, `does this session require the ${cap} capability?`, {
+      site: "capabilities",
+      backend,
+      session: session.id,
+      run: opts.run,
+    });
+    const pYes = typeof d.p_yes === "number" ? d.p_yes : d.yes ? d.p : 0;
+    const abstain = Boolean(d.abstain) || pYes < CAPABILITY_THRESHOLD;
+    out[cap] = { yes: !abstain, p_yes: pYes, abstain, p: d.p };
+  }
+  return out;
+}
+
+export function effectiveCapabilities(declared, predictedYes) {
+  return uniqueCaps([...(declared ?? []), ...(predictedYes ?? [])]);
+}
+
+export function capabilityDisagreement(declared, predictedYes) {
+  const have = new Set(declared ?? []);
+  const pred = new Set(predictedYes ?? []);
+  return {
+    added: uniqueCaps([...(predictedYes ?? [])].filter((c) => !have.has(c))),
+    kept: uniqueCaps([...(declared ?? [])].filter((c) => !pred.has(c) && CAPABILITY_NOULS.includes(c))),
+    dropped: [],
+  };
+}
+
+function capabilityScorer(plan) {
+  const mode = plan?.s1?.mode ?? process.env.HANDOFF_S1_MODE ?? "rules";
+  if (mode !== "shadow" && mode !== "action") return { mode: "rules", backend: rules };
+  const ckpt = plan?.s1?.checkpoint ?? process.env.HANDOFF_S1_CHECKPOINT;
+  if (ckpt) return { mode, backend: createLocalBackend(ckpt) };
+  const active = getBackend();
+  if (active?.name && active.name !== "rules") return { mode, backend: active };
+  return { mode: "rules", backend: rules };
+}
+
+function resolveSessionCapabilities(session, plan, dir) {
+  const declared = declaredCapabilities(session);
+  const scorer = capabilityScorer(plan);
+  const predictedMap =
+    scorer.mode === "rules"
+      ? Object.fromEntries(CAPABILITY_NOULS.map((c) => [c, { yes: false, abstain: true, p_yes: 0 }]))
+      : predictCapabilities(session, { backend: scorer.backend, mode: scorer.mode, run: dir });
+  const predicted = CAPABILITY_NOULS.filter((c) => predictedMap[c]?.yes);
+  const effective = scorer.mode === "action" ? effectiveCapabilities(declared, predicted) : [...declared];
+  return {
+    declared,
+    predicted,
+    effective,
+    disagreement: capabilityDisagreement(declared, predicted),
+    mode: scorer.mode,
+  };
+}
+
+const MINED_SECRET = "ghp_MINEDSECRETTOKEN0000000000";
+const RECORDED_CAPABILITY_RUNS = [
+  {
+    run: "20260915T135101Z",
+    session: "08",
+    goal: `daemon tests that bind a loopback listener; contact alice@example.invalid with ${MINED_SECRET} at /Users/alice/aihub`,
+    writes: ["crates/aihub-daemon/**"],
+    verify: ["cargo test -p aihub-daemon --offline"],
+    blocked: "unix socket bind forbidden under Codex workspace-write",
+    labels: { network: true, "git-write": true, "disk-write": true, docker: false, browser: false, secrets: false },
+  },
+  {
+    run: "20260915T182254Z",
+    session: "01",
+    goal: "foundational contracts, git commits, and crate builds in the production round",
+    writes: ["crates/aihub-core/**"],
+    verify: ["cargo test --offline"],
+    blocked: null,
+    labels: { network: true, "git-write": true, "disk-write": true, docker: false, browser: false, secrets: false },
+  },
+  {
+    run: "20260915T225713Z",
+    session: "router",
+    goal: "router/probe work then cargo test that binds a loopback HTTP listener",
+    writes: ["crates/aihub-router/**"],
+    verify: ["cargo test -p aihub-router --offline"],
+    blocked: "pre-existing HTTP-timeout test binds a loopback listener; Codex sandbox forbids it",
+    labels: { network: true, "git-write": false, "disk-write": true, docker: false, browser: false, secrets: false },
+  },
+];
+
+export function mineRecordedCapabilityExamples() {
+  const rows = [];
+  for (const rec of RECORDED_CAPABILITY_RUNS) {
+    for (const cap of CAPABILITY_NOULS) {
+      rows.push({
+        site: "capabilities",
+        run: rec.run,
+        session: rec.session,
+        capability: cap,
+        kind: "noul",
+        context: redact({
+          goal: rec.goal,
+          writes: rec.writes,
+          verify: rec.verify,
+          blocked: rec.blocked,
+        }),
+        options: ["yes", "no"],
+        outcome: {
+          observed: Boolean(rec.labels[cap]),
+          source: "free-label",
+          blocked: rec.blocked ? redact(rec.blocked) : null,
+        },
+      });
+    }
+  }
+  return rows;
+}
+
+function slotSatisfiesCapabilities(provider, capabilities) {
+  if (!capabilities || !capabilities.length) return true;
   const caps = PROVIDER_CAPABILITIES[provider];
   if (!caps) return false;
-  return needs.every((need) => caps.has(need));
+  return capabilities.every((need) => caps.has(need));
 }
 
 export function route(dir) {
@@ -1673,6 +1837,10 @@ export function route(dir) {
     headroom_pct: Math.round(supply - demand),
   };
 
+  if (plan.sessions.some((s) => Object.prototype.hasOwnProperty.call(s, "needs"))) {
+    console.warn("⚠ warning: plan.json uses legacy `needs`; prefer `capabilities`. `needs` still routes.");
+  }
+
   // Weighted assignment: minimise projected utilisation of each lane.
   const load = Object.fromEntries(candidates.map((c) => [c.key, 0]));
   const assigned = [];
@@ -1699,13 +1867,15 @@ export function route(dir) {
     const hasEffortOverride = Boolean(s.effort);
     const isOverride = hasModelOverride || hasEffortOverride;
     const wanted = preferredLane(s.tier);
-    // P4: Filter candidate slots by declared session capabilities
-    const validCandidates = candidates.filter((c) => slotSatisfiesNeeds(c.slot.provider, s.needs));
+    const caps = resolveSessionCapabilities(s, plan, dir);
+    const required = caps.effective;
+    // P4: Filter candidate slots by effective session capabilities (owner ∪ classifier)
+    const validCandidates = candidates.filter((c) => slotSatisfiesCapabilities(c.slot.provider, required));
     let cand;
     if (s.provider) {
-      if (!slotSatisfiesNeeds(s.provider, s.needs)) {
+      if (!slotSatisfiesCapabilities(s.provider, required)) {
         die(
-          `session ${s.id} names provider ${s.provider}, which does not satisfy required needs: [${(s.needs ?? []).join(", ")}]`,
+          `session ${s.id} names provider ${s.provider}, which does not satisfy required capabilities: [${required.join(", ")}]`,
         );
       }
       const named = validCandidates.filter(
@@ -1721,22 +1891,22 @@ export function route(dir) {
           eligible.find(
             (p) =>
               (p.key === s.provider || p.provider === s.provider) &&
-              slotSatisfiesNeeds(p.provider, s.needs),
+              slotSatisfiesCapabilities(p.provider, required),
           ) ??
           quota.slots.find(
             (p) =>
               (p.key === s.provider || p.provider === s.provider) &&
-              slotSatisfiesNeeds(p.provider, s.needs),
+              slotSatisfiesCapabilities(p.provider, required),
           );
         if (!slot?.installed) {
-          die(`session ${s.id} names provider ${s.provider}, which is absent or does not satisfy needs`);
+          die(`session ${s.id} names provider ${s.provider}, which is absent or does not satisfy capabilities`);
         }
         cand = { slot, lane: null, key: slot.key, supply: 0 };
       }
     } else {
       if (!validCandidates.length) {
         die(
-          `session ${s.id} requires [${(s.needs ?? []).join(", ")}], but no eligible provider supports all required capabilities`,
+          `session ${s.id} requires [${required.join(", ")}], but no eligible provider supports all required capabilities`,
         );
       }
       const pinnedLane = hasModelOverride ? laneKindOfModel(validCandidates[0].slot.provider, s.model) : null;
@@ -1805,6 +1975,12 @@ export function route(dir) {
       user_override: Boolean(s.provider || isOverride),
       rtk: rtkFor(plan, s, slot.provider),
       rtk_events: join(dir, "sessions", `${s.id}.rtk.jsonl`),
+      capabilities: caps.effective,
+      declared_capabilities: caps.declared,
+      predicted_capabilities: caps.predicted,
+      effective_capabilities: caps.effective,
+      capability_disagreement: caps.disagreement,
+      s1_mode: caps.mode,
     });
   }
 
@@ -1913,7 +2089,12 @@ function renderQuota(quota) {
 // The model and the lane are one decision, so they share a cell: the model id is
 // what actually decides which pool the session spends.
 export function renderModel(s) {
-  const model = s.model ?? (s.provider === "codex" ? resolveCodexModel(s.bin, s.account) : "default");
+  let model = s.model ?? (s.provider === "codex" ? resolveCodexModel(s.bin, s.account) : null);
+  if (!model || model === "default") {
+    const listed = cliModels(s.bin, s.provider).filter((m) => m && m !== "default");
+    model = listed[0] || null;
+  }
+  if (!model || model === "default") model = "unpinned";
   const effort = s.effort ? ` ${s.effort}` : "";
   const mark = s.override ? " \u270e" : "";
   if (!s.lane) return `${model}${effort}${mark}`;
@@ -1944,6 +2125,22 @@ function renderRouting(r) {
   }
   const rootSessions = r.sessions.filter((s) => !s.deps || s.deps.length === 0);
   const parallelNote = `> **Execution Graph:** ${r.sessions.length} sessions total · **${rootSessions.length} session(s) runnable immediately in parallel**.`;
+  const capNotes = [];
+  for (const s of r.sessions) {
+    if (!s.s1_mode || s.s1_mode === "rules") continue;
+    const declared = (s.declared_capabilities ?? []).join(", ") || "—";
+    const predicted = (s.predicted_capabilities ?? []).join(", ") || "—";
+    const effective = (s.effective_capabilities ?? []).join(", ") || "—";
+    capNotes.push(
+      `> ${s.id} capabilities: declared [${declared}] · predicted [${predicted}] · effective [${effective}]`,
+    );
+    const dis = s.capability_disagreement ?? {};
+    if ((dis.added ?? []).length || (dis.kept ?? []).length) {
+      capNotes.push(
+        `>    disagreement: classifier adds [${(dis.added ?? []).join(", ") || "—"}]; owner kept [${(dis.kept ?? []).join(", ") || "—"}]`,
+      );
+    }
+  }
   return [
     "",
     "| Session | Goal | Provider | Model [lane] | Remaining | Est. cost | Isolation | Deps | Starts | RTK |",
@@ -1951,6 +2148,7 @@ function renderRouting(r) {
     ...rows,
     parallelNote,
     ...legend,
+    ...capNotes,
   ].join("\n");
 }
 
@@ -2164,16 +2362,17 @@ export function formatResultDigestBlock(session, st, parsed) {
   const lane = st?.lane ?? session?.lane;
   const slot = st?.slot ?? session?.slot ?? "unknown";
   const slotLane = lane ? `${slot}/${lane}` : slot;
-  const model =
-    st?.model ??
-    session?.model ??
-    (session?.provider === "codex" || slot.startsWith("codex")
-      ? resolveCodexModel(session?.bin, session?.account)
-      : "default");
-  const effort = session?.effort ?? "medium";
+  const modelCell = renderModel({
+    ...session,
+    model: st?.model ?? session?.model,
+    provider: session?.provider ?? (String(slot).startsWith("codex") ? "codex" : session?.provider),
+    effort: session?.effort ?? st?.effort ?? "medium",
+    lane: undefined,
+    override: false,
+  }).trim();
   const status = st?.status ?? "unknown";
 
-  const header = `${session.id} ${status} · ${slotLane} · ${model} ${effort} · ${wall}`;
+  const header = `${session.id} ${status} · ${slotLane} · ${modelCell} · ${wall}`;
   if (!parsed || parsed.missing) {
     return `${header}\n  result.md missing`;
   }
@@ -2450,7 +2649,7 @@ async function dispatch(dir) {
       ) {
         continue;
       }
-      if (!slotSatisfiesNeeds(q.provider, s.needs)) continue;
+      if (!slotSatisfiesCapabilities(q.provider, s.effective_capabilities ?? declaredCapabilities(s))) continue;
       for (const lane of laneOptions(q)) {
         const key = lane ? `${q.key}/${lane.name}` : q.key;
         if (dead.has(key)) continue;

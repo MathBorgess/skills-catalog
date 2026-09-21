@@ -2,7 +2,7 @@
 // Tests for handoff.mjs status/dispatch result-file reconciliation.
 // Run: node skills/handoff/scripts/handoff.test.mjs
 
-import { spawnSync } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { chmodSync, mkdirSync, mkdtempSync, realpathSync, writeFileSync, readFileSync, existsSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, dirname } from "node:path";
@@ -34,6 +34,8 @@ import {
   loadState,
   classifyExit,
   reconcileFromResults,
+  isPidAlive,
+  adoptLiveSessions,
   route,
   CAPABILITY_NOULS,
   CAPABILITY_THRESHOLD,
@@ -242,6 +244,141 @@ function persistedStatus(dir, id = "01") {
   assert(
     "dispatch does not relaunch a reconciled session",
     !/still running/.test(r.stdout) && /all sessions terminal/.test(r.stdout),
+  );
+}
+
+{
+  const dir = makeRun({ status: "pending", resultBody: CONTRACT_RESULT });
+  const state = JSON.parse(readFileSync(join(dir, "state.json"), "utf8"));
+  state.sessions["01"].parent_correction = {
+    previous_status: "abandoned",
+    status: "pending",
+    note: "undo premature abandonment",
+    ts: "2026-09-21T12:30:35.000Z",
+  };
+  writeFileSync(join(dir, "state.json"), JSON.stringify(state, null, 2) + "\n");
+  const routing = JSON.parse(readFileSync(join(dir, "routing.json"), "utf8"));
+  const loaded = loadState(dir);
+  assert(
+    "reconcile: pending + parent_correction + result file becomes done",
+    reconcileFromResults(dir, routing, loaded) === true && loaded.sessions["01"].status === "done",
+  );
+}
+
+{
+  const dir = makeRun({ status: "abandoned", resultBody: OBSERVED_RESULT });
+  const routing = JSON.parse(readFileSync(join(dir, "routing.json"), "utf8"));
+  const loaded = loadState(dir);
+  assert(
+    "reconcile: abandoned + durable result file becomes done",
+    reconcileFromResults(dir, routing, loaded) === true && loaded.sessions["01"].status === "done",
+  );
+}
+
+{
+  const dir = makeRun({
+    status: "pending",
+    extraSessions: { "02": { status: "pending", attempts: 0, deps: ["01"] } },
+  });
+  const routing = JSON.parse(readFileSync(join(dir, "routing.json"), "utf8"));
+  const loaded = loadState(dir);
+  loaded.sessions["01"].pid = 1;
+  assert(
+    "adopt: pending + live pid becomes running",
+    adoptLiveSessions(routing, loaded, { isAlive: (pid) => pid === 1 }) === true &&
+      loaded.sessions["01"].status === "running" &&
+      loaded.sessions["02"].status === "pending",
+  );
+}
+
+{
+  assert("isPidAlive rejects non-positive pids", isPidAlive(0) === false && isPidAlive(-1) === false);
+  const sleeper = spawn("sleep", ["30"], { detached: true, stdio: "ignore" });
+  sleeper.unref();
+  try {
+    assert("isPidAlive sees a live sleep pid", isPidAlive(sleeper.pid) === true);
+    const dir = makeRun({
+      status: "running",
+      extraSessions: { "02": { status: "pending", attempts: 0, deps: ["01"] } },
+    });
+    const state = JSON.parse(readFileSync(join(dir, "state.json"), "utf8"));
+    state.sessions["01"].pid = sleeper.pid;
+    writeFileSync(join(dir, "state.json"), JSON.stringify(state, null, 2) + "\n");
+    const routing = JSON.parse(readFileSync(join(dir, "routing.json"), "utf8"));
+    routing.mode = "compact";
+    writeFileSync(join(dir, "routing.json"), JSON.stringify(routing, null, 2) + "\n");
+
+    const r = run("dispatch", dir, ["--budget", "1"]);
+    const after = JSON.parse(readFileSync(join(dir, "state.json"), "utf8"));
+    const launchEvents = (after.events ?? []).filter((e) => / 01 launched /.test(e));
+    assert("detached dispatch exits 0 with a live upstream pid", r.status === 0);
+    assert(
+      "detached dispatch does not abandon dependents of a live node",
+      after.sessions["02"].status === "pending" && after.sessions["02"].reason == null,
+    );
+    assert("detached dispatch keeps the live session running", after.sessions["01"].status === "running");
+    assert("detached dispatch does not relaunch a still-live pid", after.sessions["01"].attempts === 1);
+    assert("detached dispatch does not record a second launch", launchEvents.length === 1);
+  } finally {
+    try { process.kill(sleeper.pid, "SIGTERM"); } catch {}
+  }
+}
+
+{
+  const dir = makeRun({
+    status: "pending",
+    resultBody: CONTRACT_RESULT,
+    extraSessions: { "02": { status: "pending", attempts: 0, deps: ["01"] } },
+  });
+  const state = JSON.parse(readFileSync(join(dir, "state.json"), "utf8"));
+  state.sessions["01"].parent_correction = {
+    previous_status: "abandoned",
+    status: "pending",
+    ts: "2026-09-21T12:30:35.000Z",
+  };
+  writeFileSync(join(dir, "state.json"), JSON.stringify(state, null, 2) + "\n");
+  const routing = JSON.parse(readFileSync(join(dir, "routing.json"), "utf8"));
+  routing.mode = "compact";
+  writeFileSync(join(dir, "routing.json"), JSON.stringify(routing, null, 2) + "\n");
+  const r = run("dispatch", dir, ["--budget", "1"]);
+  const after = JSON.parse(readFileSync(join(dir, "state.json"), "utf8"));
+  assert("durable result dispatch exits 0", r.status === 0);
+  assert("durable result unlocks the finished session", after.sessions["01"].status === "done");
+  assert(
+    "durable result does not abandon the dependent",
+    after.sessions["02"].status !== "abandoned",
+  );
+}
+
+{
+  const pDir = mkdtempSync(join(tmpdir(), "handoff-merge-pending-"));
+  const disk = {
+    sessions: {
+      "01": {
+        status: "pending",
+        pid: 4242,
+        parent_correction: {
+          previous_status: "abandoned",
+          status: "pending",
+          ts: "2026-09-21T12:30:35.000Z",
+        },
+      },
+    },
+    events: [],
+    empty_slots: [],
+  };
+  writeFileSync(join(pDir, "state.json"), JSON.stringify(disk, null, 2) + "\n");
+  const mem = {
+    sessions: {
+      "01": { status: "running", pid: 4242, attempts: 1, started_at: "2026-09-21T12:30:43.000Z" },
+    },
+    events: [],
+    empty_slots: [],
+  };
+  mergeStateFromDisk(pDir, mem);
+  assert(
+    "merge: pending parent_correction does not clobber a later running launch",
+    mem.sessions["01"].status === "running" && mem.sessions["01"].parent_correction?.status === "pending",
   );
 }
 

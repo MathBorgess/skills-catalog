@@ -2443,16 +2443,56 @@ export function classifyExit(dir, s, code, elapsedSec = 0, cwd = null) {
   return { status: "failed", reason: `exit ${code}` };
 }
 
+const PARENT_TERMINAL = new Set(["done", "failed", "blocked"]);
+const isParentTerminal = (st) => PARENT_TERMINAL.has(st);
+
+export function isPidAlive(pid) {
+  if (!Number.isInteger(pid) || pid <= 0) return false;
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+// Resume path: the previous dispatcher exited, but the provider may still be
+// alive. A live pid is adopted as running so dependents are not abandoned and
+// the child is not spawned twice.
+export function adoptLiveSessions(routing, state, { isAlive = isPidAlive } = {}) {
+  let changed = false;
+  for (const s of routing?.sessions ?? []) {
+    const st = state.sessions[s.id];
+    if (!st || isParentTerminal(st.status)) continue;
+    if (!isAlive(st.pid)) continue;
+    if (st.status !== "running") {
+      st.status = "running";
+      st.reason = undefined;
+      state.events.push(`${nowISO()} ${s.id} adopted live pid ${st.pid}`);
+      changed = true;
+    }
+  }
+  return changed;
+}
+
+function sessionInflight(id, st, live, isAlive = isPidAlive) {
+  if (live.has(id)) return true;
+  if (!st) return false;
+  if (st.status === "running") return true;
+  if (!isTerminal(st.status) && isAlive(st.pid)) return true;
+  return false;
+}
+
 // A later `status`/`dispatch` has no child `exit` listener — the previous
-// dispatch process is gone, and the provider may still be alive. If a running
-// session already wrote a terminal result, that file wins. Already-terminal
-// failed/blocked/done/abandoned is left alone, including when the file is
-// ambiguous or even clearly done.
+// dispatch process is gone, and the provider may still be alive. A parseable
+// terminal result is durable: it wins over pending, running, and abandoned so
+// dependents unlock from the file, not from in-memory status. Already-applied
+// done/failed/blocked is left alone, including when the file disagrees.
 export function reconcileFromResults(dir, routing, state) {
   let changed = false;
   for (const s of routing?.sessions ?? []) {
     const st = state.sessions[s.id];
-    if (!st || st.status !== "running" || st.parent_correction) continue;
+    if (!st || isParentTerminal(st.status)) continue;
     const resultPath = join(dir, "sessions", `${s.id}.result.md`);
     if (!existsSync(resultPath)) continue;
     const parsed = parseResultStatus(readFileSync(resultPath, "utf8"));
@@ -2557,12 +2597,20 @@ export function mergeStateFromDisk(dir, state) {
         continue;
       }
 
-      // If disk has an explicit parent correction, disk wins unconditionally!
+      // Parent corrections must survive dispatcher writes (P19). A correction
+      // to pending must not clobber a later launch or a durable terminal
+      // status — that reset is what made a resumed dispatcher relaunch a
+      // still-live child.
       if (diskSess.parent_correction) {
-        memSess.status = diskSess.status;
         memSess.parent_correction = diskSess.parent_correction;
         if (diskSess.note) memSess.note = diskSess.note;
-        if (diskSess.ended_at) memSess.ended_at = diskSess.ended_at;
+        const diskTerminal = isParentTerminal(diskSess.status);
+        const memProgressed =
+          memSess.status === "running" || isParentTerminal(memSess.status);
+        if (diskTerminal || !memProgressed) {
+          memSess.status = diskSess.status;
+          if (diskSess.ended_at) memSess.ended_at = diskSess.ended_at;
+        }
         continue;
       }
 
@@ -2673,11 +2721,12 @@ async function dispatch(dir) {
   while (Date.now() < deadline) {
     mergeStateFromDisk(dir, state);
     reconcileFromResults(dir, routing, state);
+    adoptLiveSessions(routing, state);
 
     // 1. launch everything whose dependencies are satisfied
     for (const s of routing.sessions) {
       const st = state.sessions[s.id];
-      if (st.status !== "pending" || live.has(s.id) || !depsDone(s)) continue;
+      if (st.status !== "pending" || live.has(s.id) || isPidAlive(st.pid) || !depsDone(s)) continue;
       if (s.not_before && Date.parse(s.not_before) > Date.now()) {
         st.held_until = s.not_before; // slot refills before this is worth starting
         continue;
@@ -2723,7 +2772,7 @@ async function dispatch(dir) {
           live.delete(s.id);
           if (settled) return;
           settled = true;
-          if (st.parent_correction) {
+          if (st.parent_correction && isParentTerminal(st.parent_correction.status)) {
             saveState(dir, state);
             return;
           }
@@ -2796,8 +2845,19 @@ async function dispatch(dir) {
 
     const all = routing.sessions.map((s) => state.sessions[s.id]);
     if (all.every((st) => isTerminal(st.status))) break;
-    // Nothing running and nothing launchable: the DAG is stuck on a blocked dep.
-    if (!live.size && !routing.sessions.some((s) => state.sessions[s.id].status === "pending" && depsDone(s))) {
+    // Nothing inflight and nothing launchable: the DAG is stuck on a blocked
+    // dep. A previous dispatch's live children are inflight even though this
+    // process's `live` map is empty — do not abandon their dependents.
+    const inflight = routing.sessions.some((s) =>
+      sessionInflight(s.id, state.sessions[s.id], live),
+    );
+    const launchable = routing.sessions.some(
+      (s) =>
+        state.sessions[s.id].status === "pending" &&
+        depsDone(s) &&
+        !isPidAlive(state.sessions[s.id].pid),
+    );
+    if (!inflight && !launchable) {
       const stuck = routing.sessions.filter((s) => state.sessions[s.id].status === "pending");
       if (stuck.length) {
         for (const s of stuck) {

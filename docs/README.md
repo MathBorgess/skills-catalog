@@ -35,3 +35,4 @@ Each skill **may** have one, and there is no required shape. A page earns its pl
 | Skill | Page |
 | --- | --- |
 | [`handoff`](../skills/handoff/) | [mechanism](handoff/mechanism.md) — the six phases, the three owner gates, the session graph, and what is shipped versus roadmap |
+| System One (E1 / E3) | [wave 1 setup, opt-in, rollback](system-one/README.md) · [measurement / #27](system-one/measurement.md) |

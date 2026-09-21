@@ -59,7 +59,7 @@ Write every `NN.md` and `NN.prompt.md` after approval, using [`references/brief.
 node <skill>/scripts/handoff.mjs dispatch --run "$HANDOFF_RUN" --budget 540 --settle 30
 ```
 
-`--settle` is the adjustable settle window; its default is 30 seconds. Dispatch refuses a plan changed since approval. It launches eligible work, waits for dependencies, and reroutes recoverable provider failures without another approval.
+`--settle` is the adjustable settle window; its default is 30 seconds. Dispatch refuses a plan changed since approval. It launches eligible work, waits for dependencies, and reroutes recoverable provider failures without another approval. A later `dispatch` on the same run adopts still-live provider pids, treats a parseable `result.md` as durable even if state was reset to pending, and does not abandon dependents just because the previous dispatcher exited. Dependents unlock only after that durable terminal result.
 
 Read the dispatch digest. It includes each finished session's result block. Open `sessions/NN.result.md` only when action is required. Never open `logs/`, a child transcript, or `wt/`; relaunch a blocked child with a corrected brief instead of doing its work.
 

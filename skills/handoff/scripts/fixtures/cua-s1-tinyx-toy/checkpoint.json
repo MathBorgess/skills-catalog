@@ -14,9 +14,9 @@
   "format_version": 1,
   "metadata": {
     "architecture": "trycua/cua TinyTransformerScorer encoder=tinyx",
-    "license": "MIT source architecture; this fixture is synthetic weights, not cua-s1-form-v0",
+    "license": "MIT source architecture; this fixture is synthetic weights, not cua-ai/cua-s1-forms",
     "not_claims": [
-      "not the unpublished cua-s1-form-v0 weights",
+      "not the real cua-ai/cua-s1-forms weights (published on Hugging Face; see docs/system-one/README.md)",
       "not calibrated",
       "not a production form-filling checkpoint"
     ],

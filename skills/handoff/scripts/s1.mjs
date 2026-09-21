@@ -509,10 +509,13 @@ export function resolveDecisions(run, resolver) {
 
 // --- local CUA-S1 tinyx backend (opt-in) ------------------------------------
 // Architecture: trycua/cua TinyTransformerScorer, encoder=tinyx
-// (libs/cua-s1/python/src/cua_s1/model.py, commit 9bbfa7dd3e27ca7f1861ede70aaca390174493f9).
-// Official weights are safetensors+JSON and are not distributed. This path loads
-// a reviewable JSON-tensor encoding of the same schema, never pickle, and never
-// the unpublished cua-s1-form-v0 checkpoint.
+// (libs/cua-s1/python/src/cua_s1/model.py). Two checkpoint encodings load
+// through the same loadCheckpoint(path)/infer() pair:
+//  - a reviewable JSON-tensor fixture (encoding: "json-tensors"), never pickle;
+//  - the real published cua-ai/cua-s1-forms safetensors+JSON pair (see
+//    docs/system-one/README.md for the pinned revision, the explicit
+//    scripts/fetch-cua-s1.mjs fetch step, and integrity verification). Weights
+//    are never committed to git and never fetched implicitly.
 
 const CUA_S1_FORMAT = "cua-s1";
 const CUA_S1_VERSION = 1;
@@ -601,6 +604,121 @@ function stateSignature(tensors, config) {
   return digest.digest("hex");
 }
 
+// --- safetensors reader (bounded, dependency-free) --------------------------
+// Format: https://github.com/huggingface/safetensors — an 8-byte little-endian
+// header length, a JSON header {tensor: {dtype, shape, data_offsets}, ...,
+// __metadata__?}, then the raw tensor bytes. Only float32 ("F32") tensors are
+// supported, matching this runtime's forward pass.
+
+const SAFETENSORS_HEADER_MAX = 65_536;
+const SAFETENSORS_DTYPE_TORCH_NAME = { F32: "torch.float32" };
+
+// Scan only top-level (depth 1) keys of the header object; JSON.parse silently
+// keeps the last value for a duplicate key, so this must run before parsing.
+function safetensorsDuplicateKeyCheck(headerText) {
+  const seen = new Set();
+  let depth = 0;
+  let inString = false;
+  let escape = false;
+  let key = null;
+  for (let i = 0; i < headerText.length; i++) {
+    const c = headerText[i];
+    if (inString) {
+      if (escape) {
+        escape = false;
+      } else if (c === "\\") {
+        escape = true;
+      } else if (c === '"') {
+        inString = false;
+      } else if (depth === 1) {
+        key = (key ?? "") + c;
+      }
+      continue;
+    }
+    if (c === '"') {
+      inString = true;
+      if (depth === 1) key = "";
+      continue;
+    }
+    if (c === "{" || c === "[") {
+      if (depth === 1 && key !== null) {
+        if (seen.has(key)) throw new Error(`safetensors header has a duplicate tensor name: ${key}`);
+        seen.add(key);
+        key = null;
+      }
+      depth++;
+      continue;
+    }
+    if (c === "}" || c === "]") {
+      depth--;
+      continue;
+    }
+  }
+}
+
+function parseSafetensorsHeader(buf) {
+  if (!Buffer.isBuffer(buf) || buf.length < 8) throw new Error("safetensors file is too small");
+  const headerLen = buf.readBigUInt64LE(0);
+  if (headerLen <= 0n || headerLen > BigInt(SAFETENSORS_HEADER_MAX)) {
+    throw new Error("safetensors header length is out of bounds");
+  }
+  const n = Number(headerLen);
+  const dataStart = 8 + n;
+  if (dataStart > buf.length) throw new Error("safetensors header exceeds file size");
+  const headerText = buf.toString("utf8", 8, dataStart);
+  safetensorsDuplicateKeyCheck(headerText);
+  let header;
+  try {
+    header = JSON.parse(headerText);
+  } catch (err) {
+    throw new Error(`invalid safetensors header JSON: ${err.message}`);
+  }
+  if (!header || typeof header !== "object" || Array.isArray(header)) {
+    throw new Error("safetensors header must be an object");
+  }
+  const rawMeta = header.__metadata__;
+  const metadata = rawMeta && typeof rawMeta === "object" && !Array.isArray(rawMeta) ? rawMeta : {};
+  const dataLen = buf.length - dataStart;
+  const tensors = {};
+  for (const [name, spec] of Object.entries(header)) {
+    if (name === "__metadata__") continue;
+    if (!spec || typeof spec !== "object") throw new Error(`safetensors tensor ${name} entry must be an object`);
+    if (spec.dtype !== "F32") throw new Error(`safetensors tensor ${name} has an unsupported dtype: ${spec.dtype}`);
+    if (!Array.isArray(spec.shape) || !spec.shape.length || spec.shape.some((d) => !Number.isInteger(d) || d <= 0)) {
+      throw new Error(`safetensors tensor ${name} has a malformed shape`);
+    }
+    const offsets = spec.data_offsets;
+    if (!Array.isArray(offsets) || offsets.length !== 2) throw new Error(`safetensors tensor ${name} has malformed offsets`);
+    const [start, end] = offsets;
+    if (!Number.isInteger(start) || !Number.isInteger(end) || start < 0 || end < start || end > dataLen) {
+      throw new Error(`safetensors tensor ${name} offsets are out of bounds`);
+    }
+    const count = product(spec.shape);
+    if (count > CKPT_LIMITS.tensor_elems) throw new Error(`safetensors tensor ${name} exceeds size limit`);
+    if (end - start !== count * 4) throw new Error(`safetensors tensor ${name} byte length does not match its shape`);
+    tensors[name] = { shape: spec.shape, start: dataStart + start, end: dataStart + end };
+  }
+  return { tensors, metadata };
+}
+
+function readF32Range(buf, start, end) {
+  const n = (end - start) / 4;
+  const data = new Float32Array(n);
+  for (let i = 0; i < n; i++) data[i] = buf.readFloatLE(start + i * 4);
+  return data;
+}
+
+function realStateSignature(headerTensors, rawConfig, buf) {
+  const digest = createHash("sha256");
+  digest.update(stableJson(rawConfig));
+  for (const name of Object.keys(headerTensors).sort()) {
+    const t = headerTensors[name];
+    digest.update(stableJson([name, SAFETENSORS_DTYPE_TORCH_NAME.F32, t.shape]));
+    digest.update(buf.subarray(t.start, t.end));
+  }
+  return digest.digest("hex");
+}
+
 function asTensor(spec, name) {
   if (!spec || spec.dtype !== "float32" || !Array.isArray(spec.shape) || !Array.isArray(spec.data)) {
     throw new Error(`tensor ${name} must be float32 with shape and data arrays`);
@@ -622,31 +740,7 @@ function asTensor(spec, name) {
   return { shape: spec.shape, data };
 }
 
-export function loadCheckpoint(path) {
-  if (typeof path !== "string" || !path) throw new Error("checkpoint path required");
-  if (path.includes("\0")) throw new Error("unsafe checkpoint path");
-  if (/^(https?:|file:)/i.test(path)) throw new Error("network and file URLs are unsupported checkpoint paths");
-  if (UNSAFE_CKPT.test(path)) {
-    throw new Error("legacy pickle-based checkpoints are not supported; use a JSON tensor checkpoint");
-  }
-  const resolved = resolve(path);
-  if (!resolved.toLowerCase().endsWith(".json")) throw new Error("checkpoint path must be a .json file");
-  if (!existsSync(resolved)) throw new Error(`checkpoint not found: ${resolved}`);
-  const bytes = statSync(resolved).size;
-  if (bytes > CKPT_LIMITS.file_bytes) throw new Error("checkpoint file exceeds size limit");
-  let doc;
-  try {
-    doc = JSON.parse(readFileSync(resolved, "utf8"));
-  } catch (err) {
-    throw new Error(`invalid checkpoint JSON: ${err.message}`);
-  }
-  if (!doc || typeof doc !== "object" || Array.isArray(doc)) throw new Error("checkpoint JSON must contain an object");
-  if (doc.format !== CUA_S1_FORMAT) throw new Error(`unsupported checkpoint format: ${doc.format}`);
-  if (doc.format_version !== CUA_S1_VERSION) {
-    throw new Error(`unsupported checkpoint format version: ${doc.format_version}`);
-  }
-  if (doc.encoding !== "json-tensors") throw new Error("unsupported checkpoint encoding");
-  const config = doc.config;
+function parseArchConfig(config) {
   if (!config || typeof config !== "object") throw new Error("checkpoint JSON field 'config' must be an object");
   if (config.encoder !== "tinyx" && config.encoder !== "tiny") {
     throw new Error("model config field 'encoder' must be 'tiny' or 'tinyx'");
@@ -662,9 +756,42 @@ export function loadCheckpoint(path) {
   if (config.dropout != null && !(typeof config.dropout === "number" && config.dropout >= 0 && config.dropout < 1)) {
     throw new Error("dropout must be in [0, 1)");
   }
-  if (typeof doc.state_signature !== "string" || doc.state_signature.length !== 64) {
-    throw new Error("checkpoint JSON field 'state_signature' must be a SHA-256 digest");
+  return {
+    encoder: "tinyx",
+    width,
+    rank,
+    layers,
+    heads,
+    context_tokens: contextTokens,
+    option_tokens: optionTokens,
+    dropout: config.dropout ?? 0,
+  };
+}
+
+function readDocument(resolved, label) {
+  if (!existsSync(resolved)) throw new Error(`${label} not found: ${resolved}`);
+  const bytes = statSync(resolved).size;
+  if (bytes > CKPT_LIMITS.file_bytes) throw new Error(`${label} exceeds size limit`);
+  let doc;
+  try {
+    doc = JSON.parse(readFileSync(resolved, "utf8"));
+  } catch (err) {
+    throw new Error(`invalid ${label} JSON: ${err.message}`);
   }
+  if (!doc || typeof doc !== "object" || Array.isArray(doc)) throw new Error(`${label} must contain an object`);
+  if (doc.format !== CUA_S1_FORMAT) throw new Error(`unsupported checkpoint format: ${doc.format}`);
+  if (doc.format_version !== CUA_S1_VERSION) {
+    throw new Error(`unsupported checkpoint format version: ${doc.format_version}`);
+  }
+  if (typeof doc.state_signature !== "string" || doc.state_signature.length !== 64) {
+    throw new Error(`${label} field 'state_signature' must be a SHA-256 digest`);
+  }
+  return doc;
+}
+
+function loadJsonTensorCheckpoint(resolved, doc) {
+  const config = doc.config;
+  const arch = parseArchConfig(config);
   const rawTensors = doc.tensors;
   if (!rawTensors || typeof rawTensors !== "object") throw new Error("checkpoint JSON field 'tensors' must be an object");
   let total = 0;
@@ -675,13 +802,7 @@ export function loadCheckpoint(path) {
   if (stateSignature(rawTensors, config) !== doc.state_signature) {
     throw new Error("checkpoint state signature mismatch");
   }
-  const expected = expectedTensors({
-    width,
-    rank,
-    layers,
-    context_tokens: contextTokens,
-    option_tokens: optionTokens,
-  });
+  const expected = expectedTensors(arch);
   const tensors = {};
   for (const [name, shape] of Object.entries(expected)) {
     const spec = rawTensors[name];
@@ -692,20 +813,90 @@ export function loadCheckpoint(path) {
     }
     tensors[name] = t;
   }
+  if (Object.keys(rawTensors).length !== Object.keys(expected).length) {
+    throw new Error("checkpoint contains unknown tensors for this config");
+  }
   return {
-    config: {
-      encoder: "tinyx",
-      width,
-      rank,
-      layers,
-      heads,
-      context_tokens: contextTokens,
-      option_tokens: optionTokens,
-      dropout: config.dropout ?? 0,
-    },
+    config: arch,
     tensors,
     metadata: doc.metadata && typeof doc.metadata === "object" ? doc.metadata : {},
   };
+}
+
+function safetensorsPathFor(resolved) {
+  return resolved.replace(/\.json$/i, ".safetensors");
+}
+
+function jsonPathFor(resolved) {
+  return resolved.replace(/\.safetensors$/i, ".json");
+}
+
+function loadSafetensorsCheckpoint(weightsPath, doc) {
+  const config = doc.config;
+  const arch = parseArchConfig(config);
+  if (!existsSync(weightsPath)) throw new Error(`checkpoint weights not found: ${weightsPath}`);
+  const bytes = statSync(weightsPath).size;
+  if (bytes > CKPT_LIMITS.file_bytes) throw new Error("checkpoint weights file exceeds size limit");
+  const buf = readFileSync(weightsPath);
+  const { tensors: headerTensors, metadata } = parseSafetensorsHeader(buf);
+  if (metadata.format !== CUA_S1_FORMAT) throw new Error("unsupported safetensors checkpoint format");
+  if (metadata.format_version !== String(CUA_S1_VERSION)) {
+    throw new Error("unsupported safetensors checkpoint format version");
+  }
+  if (metadata.state_signature !== doc.state_signature) {
+    throw new Error("checkpoint state signature mismatch");
+  }
+  let total = 0;
+  for (const spec of Object.values(headerTensors)) total += product(spec.shape);
+  if (total > CKPT_LIMITS.tensor_elems) throw new Error("checkpoint tensors exceed size limit");
+  if (realStateSignature(headerTensors, doc.config, buf) !== doc.state_signature) {
+    throw new Error("checkpoint state signature mismatch");
+  }
+  const expected = expectedTensors(arch);
+  const tensors = {};
+  for (const [name, shape] of Object.entries(expected)) {
+    const spec = headerTensors[name];
+    if (!spec) throw new Error(`checkpoint missing tensor ${name}`);
+    if (spec.shape.length !== shape.length || spec.shape.some((d, i) => d !== shape[i])) {
+      throw new Error(`tensor ${name} has malformed dimensions`);
+    }
+    tensors[name] = { shape: spec.shape, data: readF32Range(buf, spec.start, spec.end) };
+  }
+  if (Object.keys(headerTensors).length !== Object.keys(expected).length) {
+    throw new Error("checkpoint contains unknown tensors for this config");
+  }
+  return {
+    config: arch,
+    tensors,
+    metadata: doc.metadata && typeof doc.metadata === "object" ? doc.metadata : {},
+  };
+}
+
+export function loadCheckpoint(path) {
+  if (typeof path !== "string" || !path) throw new Error("checkpoint path required");
+  if (path.includes("\0")) throw new Error("unsafe checkpoint path");
+  if (/^(https?:|file:)/i.test(path)) throw new Error("network and file URLs are unsupported checkpoint paths");
+  if (UNSAFE_CKPT.test(path)) {
+    throw new Error("legacy pickle-based checkpoints are not supported; use a JSON tensor or safetensors checkpoint");
+  }
+  const resolved = resolve(path);
+  const lower = resolved.toLowerCase();
+  if (!lower.endsWith(".json") && !lower.endsWith(".safetensors")) {
+    throw new Error("checkpoint path must be a .json or .safetensors file");
+  }
+  if (lower.endsWith(".safetensors")) {
+    const jsonPath = jsonPathFor(resolved);
+    const doc = readDocument(jsonPath, "checkpoint sidecar JSON");
+    return loadSafetensorsCheckpoint(resolved, doc);
+  }
+  const doc = readDocument(resolved, "checkpoint JSON");
+  if (doc.encoding === "json-tensors") return loadJsonTensorCheckpoint(resolved, doc);
+  if (doc.encoding != null) throw new Error("unsupported checkpoint encoding");
+  // No "encoding" field and no inline "tensors": the real cua-s1 sidecar shape
+  // (cua_s1.checkpoint.save_checkpoint_files) — tensors live in the paired
+  // .safetensors file next to it.
+  if (doc.tensors) throw new Error("checkpoint JSON field 'encoding' is required alongside inline 'tensors'");
+  return loadSafetensorsCheckpoint(safetensorsPathFor(resolved), doc);
 }
 
 export function encodeBytes(text, length) {

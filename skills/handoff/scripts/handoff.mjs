@@ -1690,7 +1690,7 @@ export function route(dir) {
   for (const s of [...plan.sessions].sort((a, b) => a.id.localeCompare(b.id))) {
     const size = s.size ?? "m";
     const decision = choice(
-      { session: s.id, tier: s.tier, effort: s.effort },
+      { session: s.id, tier: s.tier, effort: s.effort, model: s.model },
       EFFORTS,
       { site: "effort", run: dir, session: s.id }
     );

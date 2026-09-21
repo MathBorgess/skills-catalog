@@ -2,15 +2,16 @@
 // Identical copies live in skills/shunt/scripts and skills/handoff/scripts so
 // each skill installs on its own; handoff.test.mjs fails if they drift.
 //
-// Three typed calls, one swappable backend. Wave 0 ships only `rules`, which
-// reproduces today's GUARDED / LINE_MAX / BYTE_MAX / EFFORT_BY_TIER floor.
+// Three typed calls, one swappable backend. `rules` is the default floor
+// (GUARDED / LINE_MAX / BYTE_MAX / EFFORT_BY_TIER). `local` is an explicit
+// opt-in TinyTransformerScorer (CUA-S1 tinyx) over a reviewable JSON checkpoint.
 // Every call appends one redacted record to $TMPDIR/handoff/decisions.jsonl.
 // Outcome resolution is not done here: records stay unresolved.
 
-import { randomUUID } from "node:crypto";
-import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { createHash, randomUUID } from "node:crypto";
+import { appendFileSync, existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, isAbsolute, join } from "node:path";
+import { dirname, isAbsolute, join, resolve } from "node:path";
 
 export const LINE_MAX = 350;
 export const BYTE_MAX = 32 * 1024;
@@ -19,7 +20,7 @@ export const EDIT_BYTE_MAX = BYTE_MAX * 2;
 export const EFFORT_BY_TIER = { mechanical: "low", review: "medium", design: "high" };
 export const DEFAULT_EFFORT = "medium";
 export const READ_LEVELS = ["read-whole", "excerpt", "outline-only", "subagent-summary"];
-export const EFFORTS = ["low", "medium", "high"];
+export const EFFORTS = ["low", "medium", "high", "xhigh"];
 export const NOUL_OPTIONS = ["yes", "no"];
 
 // Copied from rtk.mjs: one matching segment keeps the compound command raw.
@@ -197,7 +198,7 @@ function factsFrom(context) {
   } catch {
     /* plain text */
   }
-  for (const m of s.matchAll(/\b(tier|size|lines|bytes|offset|limit|command|effort)\s*[:=]\s*(\S+)/gi)) {
+  for (const m of s.matchAll(/\b(tier|size|lines|bytes|offset|limit|command|effort|model)\s*[:=]\s*(\S+)/gi)) {
     facts[m[1].toLowerCase()] = m[2];
   }
   if (/\bedit(?:target)?\s*[:=]\s*(1|true|yes)\b/i.test(s)) facts.edit = true;
@@ -218,6 +219,20 @@ function looksLikeCommand(s) {
 function isEffortOptions(options) {
   const set = new Set(options);
   return EFFORTS.filter((e) => set.has(e)).length >= 2;
+}
+
+function encodedEffort(model) {
+  if (typeof model !== "string" || !model) return undefined;
+  const patterns = [
+    /-(none|minimal|low|medium|high|xhigh|max)(?:-fast)?$/i,
+    /-(none|minimal|low|medium|high|xhigh|max)-thinking(?:-fast)?$/i,
+    /-thinking-(none|minimal|low|medium|high|xhigh|max)(?:-fast)?$/i,
+  ];
+  for (const re of patterns) {
+    const m = model.match(re);
+    if (m) return m[1].toLowerCase();
+  }
+  return undefined;
 }
 
 function inferSite(kind, facts, options, question) {
@@ -281,7 +296,7 @@ function decideRules({ kind, context, options, site, question }) {
   }
 
   if (resolved === "effort") {
-    const effort = facts.effort ?? EFFORT_BY_TIER[facts.tier] ?? DEFAULT_EFFORT;
+    const effort = facts.effort ?? encodedEffort(facts.model) ?? EFFORT_BY_TIER[facts.tier] ?? DEFAULT_EFFORT;
     return hit(options, String(effort));
   }
 
@@ -480,5 +495,508 @@ export function resolveDecisions(run, resolver) {
     writeFileSync(path, updated.length ? updated.join("\n") + "\n" : "");
   } catch {}
   return { total, resolved, unresolved, by_site };
+}
+
+// --- local CUA-S1 tinyx backend (opt-in) ------------------------------------
+// Architecture: trycua/cua TinyTransformerScorer, encoder=tinyx
+// (libs/cua-s1/python/src/cua_s1/model.py, commit 9bbfa7dd3e27ca7f1861ede70aaca390174493f9).
+// Official weights are safetensors+JSON and are not distributed. This path loads
+// a reviewable JSON-tensor encoding of the same schema, never pickle, and never
+// the unpublished cua-s1-form-v0 checkpoint.
+
+const CUA_S1_FORMAT = "cua-s1";
+const CUA_S1_VERSION = 1;
+const F32MIN = -3.4028234663852886e38;
+const UNSAFE_CKPT = /\.(pt|pth|bin|pkl|pickle)$/i;
+const CKPT_LIMITS = {
+  width: 256,
+  rank: 256,
+  layers: 8,
+  heads: 16,
+  context_tokens: 512,
+  option_tokens: 256,
+  tensor_elems: 1_000_000,
+  file_bytes: 8_000_000,
+};
+
+function f32(x) {
+  return Math.fround(x);
+}
+
+function stableJson(value) {
+  if (value === null || typeof value !== "object") return JSON.stringify(value);
+  if (Array.isArray(value)) return `[${value.map(stableJson).join(",")}]`;
+  const keys = Object.keys(value).sort();
+  return `{${keys.map((k) => `${JSON.stringify(k)}:${stableJson(value[k])}`).join(",")}}`;
+}
+
+function product(shape) {
+  return shape.reduce((a, b) => a * b, 1);
+}
+
+function positiveInt(config, key, cap) {
+  const value = config[key];
+  if (!Number.isInteger(value) || value <= 0) {
+    throw new Error(`model config field '${key}' must be a positive integer`);
+  }
+  if (value > cap) throw new Error(`model config field '${key}' exceeds limit ${cap}`);
+  return value;
+}
+
+function expectedTensors(config) {
+  const width = config.width;
+  const rank = config.rank;
+  const pos = Math.max(config.context_tokens, config.option_tokens);
+  const names = {
+    "embedding.weight": [257, width],
+    "position.weight": [pos, width],
+    "head.context_norm.weight": [width],
+    "head.context_norm.bias": [width],
+    "head.option_norm.weight": [width],
+    "head.option_norm.bias": [width],
+    "head.query.weight": [rank, width],
+    "head.key.weight": [rank, width],
+    "head.value.weight": [rank, width],
+  };
+  const prefixes = [];
+  for (let i = 0; i < config.layers; i++) prefixes.push(`encoder.layers.${i}`);
+  prefixes.push("option_encoder.layers.0");
+  for (const prefix of prefixes) {
+    names[`${prefix}.self_attn.in_proj_weight`] = [3 * width, width];
+    names[`${prefix}.self_attn.in_proj_bias`] = [3 * width];
+    names[`${prefix}.self_attn.out_proj.weight`] = [width, width];
+    names[`${prefix}.self_attn.out_proj.bias`] = [width];
+    names[`${prefix}.linear1.weight`] = [4 * width, width];
+    names[`${prefix}.linear1.bias`] = [4 * width];
+    names[`${prefix}.linear2.weight`] = [width, 4 * width];
+    names[`${prefix}.linear2.bias`] = [width];
+    names[`${prefix}.norm1.weight`] = [width];
+    names[`${prefix}.norm1.bias`] = [width];
+    names[`${prefix}.norm2.weight`] = [width];
+    names[`${prefix}.norm2.bias`] = [width];
+  }
+  return names;
+}
+
+function stateSignature(tensors, config) {
+  const digest = createHash("sha256");
+  digest.update(stableJson(config));
+  for (const name of Object.keys(tensors).sort()) {
+    const spec = tensors[name];
+    digest.update(stableJson([name, spec.dtype, spec.shape]));
+    const buf = Buffer.alloc(spec.data.length * 4);
+    for (let i = 0; i < spec.data.length; i++) buf.writeFloatLE(f32(spec.data[i]), i * 4);
+    digest.update(buf);
+  }
+  return digest.digest("hex");
+}
+
+function asTensor(spec, name) {
+  if (!spec || spec.dtype !== "float32" || !Array.isArray(spec.shape) || !Array.isArray(spec.data)) {
+    throw new Error(`tensor ${name} must be float32 with shape and data arrays`);
+  }
+  if (spec.shape.some((d) => !Number.isInteger(d) || d <= 0)) {
+    throw new Error(`tensor ${name} has malformed dimensions`);
+  }
+  const n = product(spec.shape);
+  if (n > CKPT_LIMITS.tensor_elems) throw new Error(`tensor ${name} exceeds size limit`);
+  if (spec.data.length !== n) throw new Error(`tensor ${name} data length does not match shape`);
+  const data = new Float32Array(n);
+  for (let i = 0; i < n; i++) {
+    const v = spec.data[i];
+    if (typeof v !== "number" || !Number.isFinite(v)) {
+      throw new Error(`tensor ${name} contains a non-finite value`);
+    }
+    data[i] = f32(v);
+  }
+  return { shape: spec.shape, data };
+}
+
+export function loadCheckpoint(path) {
+  if (typeof path !== "string" || !path) throw new Error("checkpoint path required");
+  if (path.includes("\0")) throw new Error("unsafe checkpoint path");
+  if (/^(https?:|file:)/i.test(path)) throw new Error("network and file URLs are unsupported checkpoint paths");
+  if (UNSAFE_CKPT.test(path)) {
+    throw new Error("legacy pickle-based checkpoints are not supported; use a JSON tensor checkpoint");
+  }
+  const resolved = resolve(path);
+  if (!resolved.toLowerCase().endsWith(".json")) throw new Error("checkpoint path must be a .json file");
+  if (!existsSync(resolved)) throw new Error(`checkpoint not found: ${resolved}`);
+  const bytes = statSync(resolved).size;
+  if (bytes > CKPT_LIMITS.file_bytes) throw new Error("checkpoint file exceeds size limit");
+  let doc;
+  try {
+    doc = JSON.parse(readFileSync(resolved, "utf8"));
+  } catch (err) {
+    throw new Error(`invalid checkpoint JSON: ${err.message}`);
+  }
+  if (!doc || typeof doc !== "object" || Array.isArray(doc)) throw new Error("checkpoint JSON must contain an object");
+  if (doc.format !== CUA_S1_FORMAT) throw new Error(`unsupported checkpoint format: ${doc.format}`);
+  if (doc.format_version !== CUA_S1_VERSION) {
+    throw new Error(`unsupported checkpoint format version: ${doc.format_version}`);
+  }
+  if (doc.encoding !== "json-tensors") throw new Error("unsupported checkpoint encoding");
+  const config = doc.config;
+  if (!config || typeof config !== "object") throw new Error("checkpoint JSON field 'config' must be an object");
+  if (config.encoder !== "tinyx" && config.encoder !== "tiny") {
+    throw new Error("model config field 'encoder' must be 'tiny' or 'tinyx'");
+  }
+  if (config.encoder !== "tinyx") throw new Error("this runtime implements the tinyx encoder only");
+  const width = positiveInt(config, "width", CKPT_LIMITS.width);
+  const rank = positiveInt(config, "rank", CKPT_LIMITS.rank);
+  const layers = positiveInt(config, "layers", CKPT_LIMITS.layers);
+  const heads = positiveInt(config, "heads", CKPT_LIMITS.heads);
+  const contextTokens = positiveInt(config, "context_tokens", CKPT_LIMITS.context_tokens);
+  const optionTokens = positiveInt(config, "option_tokens", CKPT_LIMITS.option_tokens);
+  if (width % heads) throw new Error("width not divisible by heads");
+  if (config.dropout != null && !(typeof config.dropout === "number" && config.dropout >= 0 && config.dropout < 1)) {
+    throw new Error("dropout must be in [0, 1)");
+  }
+  if (typeof doc.state_signature !== "string" || doc.state_signature.length !== 64) {
+    throw new Error("checkpoint JSON field 'state_signature' must be a SHA-256 digest");
+  }
+  const rawTensors = doc.tensors;
+  if (!rawTensors || typeof rawTensors !== "object") throw new Error("checkpoint JSON field 'tensors' must be an object");
+  let total = 0;
+  for (const spec of Object.values(rawTensors)) {
+    if (spec?.shape) total += product(spec.shape);
+  }
+  if (total > CKPT_LIMITS.tensor_elems) throw new Error("checkpoint tensors exceed size limit");
+  if (stateSignature(rawTensors, config) !== doc.state_signature) {
+    throw new Error("checkpoint state signature mismatch");
+  }
+  const expected = expectedTensors({
+    width,
+    rank,
+    layers,
+    context_tokens: contextTokens,
+    option_tokens: optionTokens,
+  });
+  const tensors = {};
+  for (const [name, shape] of Object.entries(expected)) {
+    const spec = rawTensors[name];
+    if (!spec) throw new Error(`checkpoint missing tensor ${name}`);
+    const t = asTensor(spec, name);
+    if (t.shape.length !== shape.length || t.shape.some((d, i) => d !== shape[i])) {
+      throw new Error(`tensor ${name} has malformed dimensions`);
+    }
+    tensors[name] = t;
+  }
+  return {
+    config: {
+      encoder: "tinyx",
+      width,
+      rank,
+      layers,
+      heads,
+      context_tokens: contextTokens,
+      option_tokens: optionTokens,
+      dropout: config.dropout ?? 0,
+    },
+    tensors,
+    metadata: doc.metadata && typeof doc.metadata === "object" ? doc.metadata : {},
+  };
+}
+
+export function encodeBytes(text, length) {
+  const n = Number(length);
+  if (!Number.isInteger(n) || n <= 0) throw new Error("token limit must be positive");
+  const bytes = Buffer.from(String(text ?? ""), "utf8");
+  const out = [];
+  const cap = Math.min(bytes.length, n);
+  for (let i = 0; i < cap; i++) out.push(bytes[i] + 1);
+  return out;
+}
+
+function row(tensors, name, r) {
+  const t = tensors[name];
+  const cols = t.shape[1] ?? t.shape[0];
+  if (t.shape.length === 1) return Array.from(t.data);
+  const out = new Array(cols);
+  const off = r * cols;
+  for (let j = 0; j < cols; j++) out[j] = t.data[off + j];
+  return out;
+}
+
+function vec(tensors, name) {
+  return Array.from(tensors[name].data);
+}
+
+function zeros(n) {
+  return Array.from({ length: n }, () => 0);
+}
+
+function addVec(a, b) {
+  return a.map((v, i) => f32(v + b[i]));
+}
+
+function matmul(a, b) {
+  const m = a.length;
+  const k = a[0].length;
+  const n = b[0].length;
+  const out = [];
+  for (let i = 0; i < m; i++) {
+    const rowOut = [];
+    for (let j = 0; j < n; j++) {
+      let acc = 0;
+      for (let t = 0; t < k; t++) acc = f32(acc + f32(a[i][t] * b[t][j]));
+      rowOut.push(acc);
+    }
+    out.push(rowOut);
+  }
+  return out;
+}
+
+function transpose(a) {
+  const m = a.length;
+  const n = a[0].length;
+  const out = [];
+  for (let j = 0; j < n; j++) {
+    const rowOut = [];
+    for (let i = 0; i < m; i++) rowOut.push(a[i][j]);
+    out.push(rowOut);
+  }
+  return out;
+}
+
+function weightRows(tensors, name) {
+  const t = tensors[name];
+  const [rows, cols] = t.shape;
+  const out = [];
+  for (let i = 0; i < rows; i++) {
+    const r = [];
+    const off = i * cols;
+    for (let j = 0; j < cols; j++) r.push(t.data[off + j]);
+    out.push(r);
+  }
+  return out;
+}
+
+function linear(x, weight, bias) {
+  const wt = transpose(weight);
+  const y = matmul(x, wt);
+  if (!bias) return y;
+  return y.map((r) => addVec(r, bias));
+}
+
+function reluMat(x) {
+  return x.map((r) => r.map((v) => f32(v > 0 ? v : 0)));
+}
+
+function layernorm(x, weight, bias, eps = 1e-5) {
+  const w = x[0].length;
+  return x.map((rowX) => {
+    let sum = 0;
+    for (let i = 0; i < w; i++) sum += rowX[i];
+    const mean = f32(sum / w);
+    let vsum = 0;
+    for (let i = 0; i < w; i++) {
+      const d = f32((rowX[i] - mean) * (rowX[i] - mean));
+      vsum += d;
+    }
+    const denom = f32(Math.sqrt(f32(f32(vsum / w) + eps)));
+    const out = new Array(w);
+    for (let i = 0; i < w; i++) {
+      const n = f32((rowX[i] - mean) / denom);
+      out[i] = f32(n * weight[i] + bias[i]);
+    }
+    return out;
+  });
+}
+
+function softmaxLast(x) {
+  return x.map((rowX) => {
+    const m = Math.max(...rowX);
+    const ex = rowX.map((v) => (v > F32MIN / 2 ? f32(Math.exp(f32(v - m))) : f32(0)));
+    let s = 0;
+    for (const v of ex) s += v;
+    s = f32(s) || f32(1);
+    return ex.map((v) => f32(v / s));
+  });
+}
+
+function embedIds(tensors, ids, width) {
+  const out = [];
+  for (let p = 0; p < ids.length; p++) {
+    out.push(addVec(row(tensors, "embedding.weight", ids[p]), row(tensors, "position.weight", p)));
+  }
+  if (!out.length) out.push(zeros(width));
+  return out;
+}
+
+function mha(tensors, x, padMask, prefix, width, heads) {
+  const dim = width / heads;
+  const n = x.length;
+  const qkvW = weightRows(tensors, `${prefix}.self_attn.in_proj_weight`);
+  const qkvB = vec(tensors, `${prefix}.self_attn.in_proj_bias`);
+  const qkv = linear(x, qkvW, qkvB);
+  const q = qkv.map((r) => r.slice(0, width));
+  const k = qkv.map((r) => r.slice(width, 2 * width));
+  const v = qkv.map((r) => r.slice(2 * width));
+  const scale = f32(1 / Math.sqrt(dim));
+  const scores = [];
+  for (let h = 0; h < heads; h++) {
+    const mat = [];
+    for (let i = 0; i < n; i++) {
+      const rowS = [];
+      for (let j = 0; j < n; j++) {
+        let acc = 0;
+        for (let t = 0; t < dim; t++) {
+          acc = f32(acc + f32(q[i][h * dim + t] * k[j][h * dim + t]));
+        }
+        rowS.push(padMask[j] ? f32(F32MIN) : f32(acc * scale));
+      }
+      mat.push(rowS);
+    }
+    scores.push(mat);
+  }
+  const attn = scores.map(softmaxLast);
+  const merged = Array.from({ length: n }, () => zeros(width));
+  for (let h = 0; h < heads; h++) {
+    for (let i = 0; i < n; i++) {
+      const acc = zeros(dim);
+      for (let j = 0; j < n; j++) {
+        const a = attn[h][i][j];
+        for (let t = 0; t < dim; t++) acc[t] = f32(acc[t] + f32(a * v[j][h * dim + t]));
+      }
+      for (let t = 0; t < dim; t++) merged[i][h * dim + t] = acc[t];
+    }
+  }
+  return linear(
+    merged,
+    weightRows(tensors, `${prefix}.self_attn.out_proj.weight`),
+    vec(tensors, `${prefix}.self_attn.out_proj.bias`),
+  );
+}
+
+function encoderLayer(tensors, x, padMask, prefix, width, heads) {
+  const attn = mha(
+    tensors,
+    layernorm(x, vec(tensors, `${prefix}.norm1.weight`), vec(tensors, `${prefix}.norm1.bias`)),
+    padMask,
+    prefix,
+    width,
+    heads,
+  );
+  const y = x.map((r, i) => addVec(r, attn[i]));
+  const h = reluMat(
+    linear(
+      layernorm(y, vec(tensors, `${prefix}.norm2.weight`), vec(tensors, `${prefix}.norm2.bias`)),
+      weightRows(tensors, `${prefix}.linear1.weight`),
+      vec(tensors, `${prefix}.linear1.bias`),
+    ),
+  );
+  const ff = linear(h, weightRows(tensors, `${prefix}.linear2.weight`), vec(tensors, `${prefix}.linear2.bias`));
+  return y.map((r, i) => addVec(r, ff[i]));
+}
+
+function encoderStack(tensors, x, keepMask, prefixes, width, heads) {
+  const pad = keepMask.map((k) => !k);
+  let h = x;
+  for (const prefix of prefixes) h = encoderLayer(tensors, h, pad, prefix, width, heads);
+  return h;
+}
+
+function meanPool(h, keep, width) {
+  const acc = zeros(width);
+  let n = 0;
+  for (let i = 0; i < h.length; i++) {
+    if (!keep[i]) continue;
+    for (let t = 0; t < width; t++) acc[t] = f32(acc[t] + h[i][t]);
+    n++;
+  }
+  const d = f32(Math.max(n, 1));
+  return acc.map((v) => f32(v / d));
+}
+
+function attentionHead(tensors, context, contextKeep, options, optionKeep, rank) {
+  const ctx = layernorm(context, vec(tensors, "head.context_norm.weight"), vec(tensors, "head.context_norm.bias"));
+  const opt = layernorm(options, vec(tensors, "head.option_norm.weight"), vec(tensors, "head.option_norm.bias"));
+  const query = linear(opt, weightRows(tensors, "head.query.weight"), null);
+  const key = linear(ctx, weightRows(tensors, "head.key.weight"), null);
+  const value = linear(ctx, weightRows(tensors, "head.value.weight"), null);
+  const scale = f32(1 / Math.sqrt(rank));
+  const L = ctx.length;
+  const nopt = opt.length;
+  const scores = [];
+  for (let n = 0; n < nopt; n++) {
+    const rowS = [];
+    for (let l = 0; l < L; l++) {
+      let acc = 0;
+      for (let t = 0; t < rank; t++) acc = f32(acc + f32(query[n][t] * key[l][t]));
+      rowS.push(contextKeep[l] ? f32(acc * scale) : f32(F32MIN));
+    }
+    scores.push(rowS);
+  }
+  const attn = softmaxLast(scores);
+  const logits = [];
+  for (let n = 0; n < nopt; n++) {
+    const attended = zeros(rank);
+    for (let l = 0; l < L; l++) {
+      const a = attn[n][l];
+      for (let t = 0; t < rank; t++) attended[t] = f32(attended[t] + f32(a * value[l][t]));
+    }
+    let acc = 0;
+    for (let t = 0; t < rank; t++) acc = f32(acc + f32(query[n][t] * attended[t]));
+    logits.push(optionKeep[n] ? f32(acc * scale) : f32(F32MIN));
+  }
+  return logits;
+}
+
+export function infer(checkpoint, context, options) {
+  const { config, tensors } = checkpoint;
+  const width = config.width;
+  const labels = (options ?? []).map((x) => String(x));
+  let cIds = encodeBytes(context, config.context_tokens);
+  const cKeep = cIds.length ? cIds.map(() => true) : [false];
+  if (!cIds.length) cIds = [0];
+  const oIds = labels.map((opt) => {
+    const ids = encodeBytes(opt, config.option_tokens);
+    return ids.length ? ids : [0];
+  });
+  const maxO = Math.max(1, ...oIds.map((ids) => ids.length));
+  const oPad = oIds.map((ids) => ids.concat(Array.from({ length: maxO - ids.length }, () => 0)));
+  const ctxH = encoderStack(
+    tensors,
+    embedIds(tensors, cIds, width),
+    cKeep,
+    Array.from({ length: config.layers }, (_, i) => `encoder.layers.${i}`),
+    width,
+    config.heads,
+  );
+  const optVecs = oPad.map((ids) => {
+    const keep = ids.map((tok) => tok !== 0);
+    const safe = keep.slice();
+    safe[0] = true;
+    const h = encoderStack(tensors, embedIds(tensors, ids, width), safe, ["option_encoder.layers.0"], width, config.heads);
+    return meanPool(h, keep, width);
+  });
+  const optKeep = labels.map(() => true);
+  return attentionHead(tensors, ctxH, cKeep, optVecs, optKeep, config.rank);
+}
+
+function softmax1d(logits) {
+  const m = Math.max(...logits);
+  const ex = logits.map((v) => (v > F32MIN / 2 ? f32(Math.exp(f32(v - m))) : f32(0)));
+  let s = 0;
+  for (const v of ex) s += v;
+  s = f32(s) || f32(1);
+  return ex.map((v) => f32(v / s));
+}
+
+export function createLocalBackend(path) {
+  const checkpoint = loadCheckpoint(path);
+  return {
+    name: "local",
+    decide(req) {
+      const labels = req.options ?? [];
+      if (!labels.length) return { abstain: true, index: 0, p: 0, dist: [] };
+      const logits = infer(checkpoint, contextString(req.context), labels);
+      const dist = softmax1d(logits);
+      let index = 0;
+      for (let i = 1; i < dist.length; i++) if (dist[i] > dist[index]) index = i;
+      return { index, p: dist[index], dist };
+    },
+  };
 }
 

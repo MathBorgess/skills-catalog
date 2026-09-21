@@ -37,6 +37,7 @@ import {
 } from "./handoff.mjs";
 import { redactEvidence, evaluatePreToolUse } from "./guard.mjs";
 import { runAllGateTests } from "./gate.test.mjs";
+import { runAllLocalTests } from "./s1-local.test.mjs";
 import {
   choice,
   score as s1Score,
@@ -489,6 +490,24 @@ function makeRouteRun({ plan, quota, state } = {}) {
   });
   const resNoOverride = run("route", dirNoOverride);
   assert("route output does not contain ✎ when no override in plan", resNoOverride.status === 0 && !resNoOverride.stdout.includes("✎"));
+
+  const dirXhigh = makeRouteRun({
+    plan: {
+      mode: "fan-out",
+      horizon_s: 7200,
+      sessions: [
+        { id: "01", goal: "xhigh task", effort: "xhigh", tier: "design", size: "s", writes: ["a.txt"], deps: [] },
+      ],
+    },
+  });
+  const resXhigh = run("route", dirXhigh);
+  const routingXhigh = existsSync(join(dirXhigh, "routing.json"))
+    ? JSON.parse(readFileSync(join(dirXhigh, "routing.json"), "utf8"))
+    : null;
+  assert(
+    "routing.json preserves explicit xhigh instead of collapsing it",
+    resXhigh.status === 0 && routingXhigh?.sessions?.[0]?.effort === "xhigh",
+  );
 }
 
 // Issue 19: Model validation against CLI model list
@@ -1180,6 +1199,7 @@ esac
 // ----------------------------------------------------------- verifier gates & fixtures
 {
   runAllGateTests();
+  assert("s1-local suite", runAllLocalTests() === 0);
 
   // Test classifyExit integrating with s.verify
   const dVerify = makeRouteRun({

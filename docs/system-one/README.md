@@ -6,10 +6,12 @@ Maintainer notes for the local scorer that sits behind handoff routing and shunt
 | --- | --- |
 | Shared `s1.mjs` runtime, `rules` default, shadow log | **shipped** (Wave 0, [#51](https://github.com/MathBorgess/skills-catalog/pull/51)) |
 | Safe JSON tinyx load + pure-JS forward pass | **shipped**, opt-in only |
+| Real `cua-ai/cua-s1-forms` safetensors+JSON load + parity | **shipped**, opt-in only — see [cua-s1-real-experiment.md](cua-s1-real-experiment.md) |
 | E1 capability Nouls (`capabilities` field, fail-closed union) | **shipped** as `rules` by default; local shadow/action is explicit |
 | E3 RTK Noul behind the guarded regex floor | **shipped** as `rules`/raw by default; local shadow/action is explicit |
 | Guarded regex as an immutable floor | **shipped** — a model result cannot compress a floor match |
-| Production calibration / promoted default | **not shipped** — toy fixture is not cua-s1-form-v0 |
+| Real-checkpoint E1/E3 form-adapter shadow experiment | **exploratory, shadow-only** — see [cua-s1-real-experiment.md](cua-s1-real-experiment.md); not wired into live routing |
+| Production calibration / promoted default | **not shipped** — neither the toy fixture nor the real cua-ai/cua-s1-forms checkpoint is a calibrated production default |
 | #27 task-cost A/B | **in progress / unmeasured** — see [measurement.md](measurement.md) |
 | Antigravity exit-0 without `result.md` | tracked in [#50](https://github.com/MathBorgess/skills-catalog/issues/50), not this wave |
 
@@ -18,6 +20,25 @@ Maintainer notes for the local scorer that sits behind handoff routing and shunt
 The committed checkpoint is `skills/handoff/scripts/fixtures/cua-s1-tinyx-toy/checkpoint.json`, with independently recorded logits in `reference.json`. Architecture source: trycua/cua `TinyTransformerScorer` (tinyx), commit `9bbfa7dd`. It is a synthetic reviewable JSON fixture: no pickle, no network URL, rejected if the format or state signature does not match.
 
 Load it only through `createLocalBackend(path)` in the shared runtime (`skills/handoff/scripts/s1.mjs` and the byte-identical `skills/shunt/scripts/s1.mjs`). `rules` stays the process default; constructing a local backend does not install it globally.
+
+## Real checkpoint (cua-ai/cua-s1-forms)
+
+`loadCheckpoint(path)` also accepts the real, published checkpoint — a
+`.safetensors` weights file plus a `.json` sidecar, MIT-licensed, from
+[huggingface.co/cua-ai/cua-s1-forms](https://huggingface.co/cua-ai/cua-s1-forms)
+(pinned revision and hashes in `scripts/fetch-cua-s1.mjs`). It is never fetched
+implicitly and never committed:
+
+```bash
+npm run fetch:cua-s1            # downloads + sha256-verifies into .cache/cua-s1/ (gitignored)
+npm run check:cua-s1-official   # opt-in parity test against the cached checkpoint; skips cleanly if absent
+```
+
+Full methodology, parity evidence, benchmarks, and the E1/E3 shadow-adapter
+results are in [cua-s1-real-experiment.md](cua-s1-real-experiment.md). The
+real checkpoint loads through the same `createLocalBackend(path)` /
+`loadCheckpoint(path)` entry points as the toy fixture — nothing about the
+shadow/action wiring below changes based on which checkpoint is loaded.
 
 ## Explicit opt-in
 

@@ -44,6 +44,8 @@
     "sync-plugin-version": "node scripts/sync-plugin-version.mjs",
     "version": "node scripts/sync-plugin-version.mjs && git add .claude-plugin/plugin.json",
     "prepublishOnly": "npm run check",
-    "check:version-bump": "node scripts/check-version-bump.mjs main"
+    "check:version-bump": "node scripts/check-version-bump.mjs main",
+    "fetch:cua-s1": "node scripts/fetch-cua-s1.mjs",
+    "check:cua-s1-official": "node skills/handoff/scripts/s1-official.test.mjs"
   }
 }

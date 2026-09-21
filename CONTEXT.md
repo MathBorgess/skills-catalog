@@ -141,6 +141,34 @@ One JSON object per run appended by a skill to its history in the OS temp dir.
 **Scope drift**:
 A skill doing work its `description` does not claim, or another skill's work.
 
+### Video
+
+**Format spec**:
+The durable part of a video that belongs to no single video — aspect ratio, caption treatment, pacing curve, hook shape, sound anchors, safe margins. Versioned on its own, and the unit that format experiments vary.
+_Avoid_: template, brand guide (a template is filled in once; a **format spec** is a version a **shot list** declares it targets)
+
+**Shot list**:
+The per-video contract the owner and the copilot author together and lock at the **script gate**. Holds the spoken lines inside the shots that carry them.
+_Avoid_: script, roteiro (there is no second prose document; the lines live in the shot list)
+
+**Shot**:
+The smallest directed unit: one dramatic function, one framing, one target duration. A shot with no function is cut, not shortened.
+_Avoid_: clip (a clip is a piece of media on a track; a shot is an intent, and may be cut from several clips or none)
+
+**Backbone**:
+The owner's recorded speech, which carries the structure. Every other layer is anchored to it in time; it is never anchored to them.
+_Avoid_: A-roll (A-roll names a category of footage; **backbone** names the structural role)
+
+**Script gate**:
+The owner's approval of the **shot list**, before anything is recorded. What it protects is a re-record — the most expensive item in the system, because it is the owner's own time.
+
+**Cut gate**:
+The owner's approval of the **EDL**, before the final render. What it protects is a render.
+
+**EDL**:
+The timeline compiled from a **shot list** plus the takes actually recorded. Derived, never hand-authored, and never the thing the owner arbitrates.
+_Avoid_: timeline (a timeline is also the editor's UI surface)
+
 ## Relationships
 
 - **Shunt** produces **recover events** and **excerpts**; the ratio of the first to compressed reads is its failure rate.
@@ -148,10 +176,14 @@ A skill doing work its `description` does not claim, or another skill's work.
 - Every skill writes **metrics lines**; `skills-evaluate` reads them and never the other way round.
 - A **gate run** produces evidence; a **verdict** and a **risk level** read it; the **attention matrix** turns the pair into a **revise round**, an **escalation**, or an **accepted** session.
 - **Scorers** write the **shadow log**; the **teacher** resolves what the outcome left silent; neither ever acts inside a run.
+- A **format spec** version and a **shot list** compile to an **EDL**: the owner arbitrates the first two and never the third.
+- Video carries two gates, not one — the **script gate** protects a re-record, the **cut gate** protects a render — because the two failures differ by an order of magnitude in cost.
 
 ## Flagged ambiguities
 
 - "Recovery" meant both expected excerpts and failed compression — resolved: only failures are **recover events**.
 - "Done" meant both "the child finished" and "the work is good" — resolved: `done` is the child's claim, **accepted** is the system's conclusion.
 - "Review" named both a session tier and the correction loop — resolved: a **review** session verifies and never edits; a **revise round** edits and never judges its own result.
+- "Roteiro" meant both the prose of what is said and the plan of how it is shot — resolved: one artefact, the **shot list**, carries both, and a separate script document does not exist.
+- "Direction" names both directing the owner in front of the camera and directing the agents that edit — **open**: the two are different jobs and may not share a term.
 - "Teacher" and **supervisor** were briefly the same role — resolved: they must not be. A supervisor labelling its own decisions trains a scorer to reproduce the supervisor's bias.

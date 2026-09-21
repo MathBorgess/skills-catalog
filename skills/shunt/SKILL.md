@@ -1,7 +1,7 @@
 ---
 name: shunt
 description: "Use when a large or frontier model is about to read a large file, dump a repo into context, write boilerplate, config, or mechanical tests, or the user says shunt, bulk-read, bulk reader, code writer, don't ingest, cheaper model, save tokens, or keep the large model for reasoning, or mentions rtk. Activates a guard that refuses full-file reads over the threshold and points this model at an outline script or a small/fast subagent. Not for study-wiki, teach-me, or sending work to other CLIs (that is handoff)."
-argument-hint: "activate [--rtk[=full]] | inspect <path> | edit <path> | run -- <cmd> | deactivate | clean"
+argument-hint: "activate [--rtk[=full]] [--noul=shadow|action --checkpoint PATH] | inspect <path> | edit <path> | run -- <cmd> | deactivate | clean"
 metadata:
   author: Matheus Borges
   version: 1.2.0
@@ -13,7 +13,7 @@ Keep **this** model's context small. Heavy I/O is absorbed by `scripts/shunt.mjs
 
 The plugin hook (`scripts/guard.mjs`) enforces the Read rules only while this skill is active. Cursor and Codex have no PreToolUse — this file is the whole enforcement there.
 
-Read caps and the guarded-RTK skip are the **floor** of a System One scorer in `scripts/s1.mjs` (`rules` backend). Each call appends one redacted unresolved decision. Errors and abstentions fail open to this floor; a later backend swaps without changing the call site.
+Read caps and the guarded-RTK skip are the **floor** of a System One scorer in `scripts/s1.mjs` (`rules` backend). Local Noul is opt-in (`--noul=shadow` or `--noul=action --checkpoint PATH`); it cannot override that floor. Errors, abstention, and uncertainty fail open to raw. See [`references/noul.md`](references/noul.md).
 
 ## 1. Policy by output kind
 
@@ -23,13 +23,13 @@ Read caps and the guarded-RTK skip are the **floor** of a System One scorer in `
 ## 2. Activate — before any Read or Write
 
 ```bash
-node <skill>/scripts/shunt.mjs activate [--rtk | --rtk=full]
+node <skill>/scripts/shunt.mjs activate [--rtk | --rtk=full] [--noul=shadow|--noul=action --checkpoint PATH]
 node <skill>/scripts/shunt.mjs status
 ```
 
 **Recommended: if `rtk --version` works, activate with `--rtk`.** It filters build, test, lint and git noise through RTK while keeping diffs, code and search raw (§6). `activate` prints a `tip` line when RTK is installed and you left it off — act on it or say why not. Whether RTK lowers task cost is still being measured ([skills-catalog#27](https://github.com/MathBorgess/skills-catalog/issues/27)).
 
-`<skill>` is this folder. `status` prints the run dir (`$TMPDIR/shunt/<id>/`). No marker → the hook is inert. A new `activate` starts a new run: the last run's events are dropped. `--rtk` is §6.
+`<skill>` is this folder. `status` prints the run dir (`$TMPDIR/shunt/<id>/`). No marker → the hook is inert. A new `activate` starts a new run: the last run's events are dropped. `--rtk` and `--noul` are §6.
 
 ## 3. Before every Read
 
@@ -66,7 +66,8 @@ Combined raw output goes to `<run dir>/logs/<slug>.log`. Prints filtered view: A
 
 [RTK](https://github.com/rtk-ai/rtk) filters command output per command (100+ tools) and keeps the raw output recallable. With `activate --rtk`, while the run is live the guard sends each Bash command through `rtk rewrite` and `run --` delegates to `rtk <cmd>`. Needs `rtk` on PATH (`brew install rtk`). Never `rtk init -g`: the run scopes RTK, so other sessions stay a control group. Telemetry is off in every call.
 
-- `--rtk` = **guarded** (default): `git diff`, `git show`, `cat`, `head`, `tail`, `grep`, `rg` never go through RTK — §1 still holds. `--rtk=full` sends everything; use it only as an experiment arm.
+- `--rtk` = **guarded** (default): `git diff`, `git show`, `cat`, `head`, `tail`, `grep`, `rg` never go through RTK — §1 still holds. `--rtk=full` sends everything; use it only as an experiment arm. Do not treat `full` as proven cheaper.
+- **Local Noul** (off by default): `--noul=shadow` scores a checkpoint and does not change rewrites. `--noul=action --checkpoint PATH` may *add* raw commands; it cannot compress a regex-floor match. Abstention, invalid checkpoint, inference error, and uncertainty stay raw. Rollback: activate without `--noul`. The toy fixture is not calibration. Record paired runs with `scripts/s1-ab.mjs` ([`references/ab.md`](references/ab.md)); fixture rows are not production evidence ([`references/noul.md`](references/noul.md)).
 - Commands RTK has no filter for (`npm test`, `node …`) run through §5's own filter.
 - The guard only swaps the command. It never approves one; your permission flow decides.
 
@@ -103,6 +104,7 @@ Show the report to the owner and ask:
 - [ ] Verbose commands ran through `shunt.mjs run -- <cmd>`.
 - [ ] RTK installed → activated with `--rtk`, or the reason for leaving it off stated.
 - [ ] With `--rtk`: no global `rtk init`; diffs, code and search stayed raw unless the owner chose `full`.
+- [ ] Local Noul stayed `rules` unless `--noul=shadow` or `--noul=action --checkpoint` was explicit; the regex floor was not overridden; A/B fields that were not observed were labelled unmeasured.
 - [ ] Grunt writes were spawned before drafting; results were not read back.
 - [ ] No subagent transcript ingested.
 - [ ] `deactivate` ran, report shown to owner with the (a)/(b) question.

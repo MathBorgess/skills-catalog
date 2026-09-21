@@ -542,6 +542,196 @@ esac
   setBackend(prev);
 }
 
+// ------------------------------------------------------------------ e3 noul (issue #36)
+{
+  const shuntMod = await import("./shunt.mjs");
+  const route = shuntMod.maybeRewrite;
+  const parseNoul = shuntMod.noulFromArgv;
+  const FIXTURE = join(here, "..", "..", "handoff", "scripts", "fixtures", "cua-s1-tinyx-toy", "checkpoint.json");
+
+  function backend(index, p, dist, name = "local") {
+    return { name, decide: () => ({ index, p, dist }) };
+  }
+  const forceRaw = backend(0, 0.99, [0.99, 0.01]);
+  const forceCompress = backend(1, 0.99, [0.01, 0.99]);
+  const abstain = { name: "local", decide: () => ({ abstain: true, index: 0, p: 0, dist: [0, 0] }) };
+  const boom = { name: "local", decide() { throw new Error("inference down"); } };
+  const uncertainNo = backend(1, 0.55, [0.45, 0.55]);
+
+  const bin = mkdtempSync(join(tmpdir(), "fake-rtk-e3-"));
+  const fake = join(bin, "rtk");
+  writeFileSync(
+    fake,
+    `#!/bin/sh
+case "$1" in
+  --version) echo "rtk 9.9.9" ;;
+  rewrite)
+    case "$2" in
+      "git status") echo "rtk git status"; exit 3 ;;
+      "cargo test") echo "rtk cargo test"; exit 0 ;;
+      "npm test") echo "rtk npm test"; exit 0 ;;
+      *) exit 1 ;;
+    esac ;;
+  *) echo "FILTERED $*" ;;
+esac
+`,
+  );
+  chmodSync(fake, 0o755);
+
+  assert("e3: maybeRewrite is exported", typeof route === "function");
+  assert("e3: noulFromArgv is exported", typeof parseNoul === "function");
+
+  if (typeof parseNoul === "function") {
+    assert("e3: default argv policy is rules", parseNoul(["node", "x", "activate"]).policy === "rules");
+    assert(
+      "e3: --noul=action needs a checkpoint",
+      parseNoul(["node", "x", "--noul=action", "--checkpoint", FIXTURE]).policy === "action" &&
+        parseNoul(["node", "x", "--noul=action", "--checkpoint", FIXTURE]).checkpoint === FIXTURE,
+    );
+    assert("e3: --noul=shadow is explicit", parseNoul(["node", "x", "--noul=shadow", "--checkpoint", "/p.json"]).policy === "shadow");
+    let threw = false;
+    try { parseNoul(["node", "x", "--noul"]); } catch { threw = true; }
+    assert("e3: bare --noul is refused (opt-in must name a policy)", threw);
+    threw = false;
+    try { parseNoul(["node", "x", "--noul=action"]); } catch { threw = true; }
+    assert("e3: action without --checkpoint is refused", threw);
+  }
+
+  const floorNo = mustReachWhole("git diff HEAD", { policy: "action", backend: forceCompress });
+  assert(
+    "e3: guard floor beats a local 'compress' vote",
+    floorNo.yes === true && (floorNo.source === "floor" || floorNo.p === 1),
+  );
+  const floorRules = mustReachWhole("git diff HEAD");
+  assert("e3: default policy remains rules/raw on a floor command", floorRules.yes === true);
+
+  const abs = mustReachWhole("cargo test", { policy: "action", backend: abstain });
+  assert("e3: abstention fails open to raw", abs.yes === true);
+  const err = mustReachWhole("cargo test", { policy: "action", backend: boom });
+  assert("e3: inference error fails open to raw", err.yes === true);
+  const low = mustReachWhole("cargo test", { policy: "action", backend: uncertainNo, threshold: 0.8 });
+  assert("e3: uncertainty fails open to raw", low.yes === true);
+  const badCkpt = mustReachWhole("cargo test", { policy: "action", checkpoint: join(bin, "missing.json") });
+  assert("e3: invalid checkpoint fails open to raw", badCkpt.yes === true);
+  const floorBad = mustReachWhole("git show HEAD", { policy: "action", checkpoint: join(bin, "missing.json") });
+  assert("e3: invalid checkpoint cannot compress a floor command", floorBad.yes === true);
+
+  const shadowLive = mustReachWhole("cargo test", { policy: "shadow", backend: forceRaw });
+  assert("e3: shadow does not add raw (live stays rules)", shadowLive.yes === false);
+  assert("e3: shadow still records the scorer opinion", shadowLive.shadow?.yes === true);
+
+  const actionAdd = mustReachWhole("cargo test", { policy: "action", backend: forceRaw });
+  assert("e3: action may add raw for a non-floor command", actionAdd.yes === true);
+  const actionCompress = mustReachWhole("cargo test", { policy: "action", backend: forceCompress });
+  assert("e3: action may send a confident non-floor command to rtk", actionCompress.yes === false);
+  assert("e3: rules remains default without explicit policy", mustReachWhole("cargo test").yes === false);
+
+  if (typeof route === "function") {
+    assert(
+      "e3: shadow rewrite matches rules (non-interference)",
+      route("cargo test", "guarded", { policy: "shadow", backend: forceRaw }, fake) === "rtk cargo test",
+    );
+    assert(
+      "e3: action skip rewrite when adding raw",
+      route("cargo test", "guarded", { policy: "action", backend: forceRaw }, fake) === null,
+    );
+    assert(
+      "e3: action still does not rewrite a floor command",
+      route("git diff", "guarded", { policy: "action", backend: forceCompress }, fake) === null,
+    );
+    assert(
+      "e3: full arm is unchanged experiment (floor not claimed cheaper)",
+      route("cargo test", "full", { policy: "rules" }, fake) === "rtk cargo test",
+    );
+  }
+
+  const env = { ...process.env, PATH: `${bin}:${process.env.PATH}` };
+  const d = mkdtempSync(join(tmpdir(), "shunt-e3-"));
+  const act = spawnSync(
+    process.execPath,
+    [cli, "activate", "--rtk", "--noul=action", "--checkpoint", FIXTURE],
+    { cwd: d, encoding: "utf8", env },
+  );
+  assert("e3: activate --noul=action stores the opt-in", act.status === 0);
+  const st = JSON.parse(readFileSync(join(runDir(d), "state.json"), "utf8"));
+  assert("e3: live state policy is action", st.noul?.policy === "action" && st.noul?.checkpoint === FIXTURE);
+
+  let inferCalled = false;
+  const { createLocalBackend } = await import("./s1.mjs");
+  const real = createLocalBackend(FIXTURE);
+  const spy = {
+    name: "local",
+    decide(req) {
+      inferCalled = true;
+      return real.decide(req);
+    },
+  };
+  const inferred = mustReachWhole("npm test", { policy: "action", backend: spy, threshold: 0.8 });
+  assert("e3: shunt action path runs real local inference", inferCalled === true);
+  assert("e3: real local returns a typed noul", typeof inferred.yes === "boolean" && typeof inferred.p === "number");
+  const realFloor = mustReachWhole("git diff HEAD", { policy: "action", backend: real, threshold: 0.51 });
+  assert("e3: real local cannot override the regex floor", realFloor.yes === true);
+
+  const rulesAgain = spawnSync(process.execPath, [cli, "activate"], { cwd: d, encoding: "utf8", env });
+  assert("e3: activate without --noul stays rules", rulesAgain.status === 0);
+  const stRules = JSON.parse(readFileSync(join(runDir(d), "state.json"), "utf8"));
+  assert("e3: default live policy is rules", !stRules.noul || stRules.noul.policy === "rules");
+  spawnSync(process.execPath, [cli, "clean"], { cwd: d, encoding: "utf8", env });
+
+  let ab = null;
+  try {
+    ab = await import("./s1-ab.mjs");
+  } catch {
+    ab = null;
+  }
+  assert("e3: s1-ab.mjs loads", ab != null);
+  if (ab) {
+    const pair = ab.startPair({
+      task_class: "build-test",
+      repo: "MathBorgess/skills-catalog",
+      commit: "deadbeef",
+      brief: "fix a failing test suite",
+      model: "cursor-grok-4.6-xhigh",
+      effort: "high",
+      first_arm: "off",
+    });
+    assert("e3: pair records same-repo/commit/brief/model provenance", pair.repo === "MathBorgess/skills-catalog" && pair.commit === "deadbeef" && pair.model === "cursor-grok-4.6-xhigh" && pair.brief === "fix a failing test suite" && pair.effort === "high");
+    assert("e3: build-test arms are off vs guarded", JSON.stringify(pair.arms) === JSON.stringify(["off", "guarded"]));
+    const off = ab.recordArm(pair, { arm: "off", policy: "rules", outcome: "done" });
+    assert("e3: missing outcome fields are unmeasured", off.input_tokens === ab.UNMEASURED && off.saved_tokens === ab.UNMEASURED && off.recalls === ab.UNMEASURED && off.turns === ab.UNMEASURED);
+    const guarded = ab.recordArm(pair, {
+      arm: "guarded",
+      policy: "action",
+      outcome: "done",
+      input_tokens: 1200,
+      turns: 8,
+      wall_time_s: 40,
+      tests_green: true,
+      recalls: 0,
+      saved_tokens: 90,
+    });
+    assert("e3: observed fields stay numeric", guarded.input_tokens === 1200 && guarded.recalls === 0);
+    const diffPair = ab.startPair({
+      task_class: "diff-edit",
+      repo: "MathBorgess/skills-catalog",
+      commit: "deadbeef",
+      brief: "refactor across files",
+      model: "cursor-grok-4.6-xhigh",
+      effort: "medium",
+      first_arm: "guarded",
+      evidence: "fixture",
+    });
+    assert("e3: diff-edit includes the full experiment arm", JSON.stringify(diffPair.arms) === JSON.stringify(["off", "guarded", "full"]));
+    const report = ab.formatReport([pair, diffPair]);
+    assert("e3: report labels unmeasured fields", report.includes("unmeasured"));
+    assert("e3: report does not claim calibration", !/calibrated|calibration claim/i.test(report) || /not calibrated|uncalibrated/i.test(report));
+    assert("e3: fixture rows are not production evidence", /fixture/i.test(report));
+    assert("e3: full arm is labelled experiment", /experiment/i.test(report));
+    const decision = ab.classDecision([pair]);
+    assert("e3: fewer than 3 pairs is unmeasured, not a default", decision === ab.UNMEASURED || decision === "unmeasured");
+  }
+}
+
 if (failed) {
   console.error(`\n${failed} failed`);
   process.exit(1);

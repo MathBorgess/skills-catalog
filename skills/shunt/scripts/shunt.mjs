@@ -22,13 +22,14 @@ import { tmpdir } from "node:os";
 import { basename, join, resolve } from "node:path";
 import { createHash } from "node:crypto";
 import { fileURLToPath } from "node:url";
-import { RTK_ENV, historyStats, modeFromArgv, rewrite, rtkVersion } from "./rtk.mjs";
+import { RTK_ENV, guardedSkip, historyStats, modeFromArgv, rewrite, rtkVersion } from "./rtk.mjs";
 import {
   BYTE_MAX,
   EDIT_BYTE_MAX,
   EDIT_LINE_MAX,
   LINE_MAX,
   READ_LEVELS,
+  createLocalBackend,
   isOver,
   noul,
   score,
@@ -48,6 +49,9 @@ export {
 export const OUTLINE_MAX = 80;
 const RTK_WHOLE = "must the output reach the model whole?";
 export const LIVE_MAX_AGE_S = 7200;
+export const NOUL_POLICIES = ["rules", "shadow", "action"];
+export const DEFAULT_NOUL_THRESHOLD = 0.8;
+const localBackendCache = new Map();
 
 const nowISO = () => new Date().toISOString();
 
@@ -278,9 +282,122 @@ export function isHandoffChildPath(p) {
   return n.includes("/handoff/") && (n.includes("/wt/") || n.includes("/logs/"));
 }
 
+export function argFrom(argv, name) {
+  const i = argv.indexOf(`--${name}`);
+  if (i === -1) return null;
+  const v = argv[i + 1];
+  return v && !String(v).startsWith("--") ? v : true;
+}
+
+export function noulFromArgv(argv = process.argv) {
+  const hit = argv.find((a) => a === "--noul" || a.startsWith("--noul="));
+  if (!hit) return { policy: "rules" };
+  if (hit === "--noul") {
+    throw new Error("--noul needs =shadow or =action (explicit opt-in)");
+  }
+  const policy = hit.slice("--noul=".length);
+  if (policy !== "shadow" && policy !== "action") {
+    throw new Error(`noul policy must be shadow or action, got ${JSON.stringify(policy)}`);
+  }
+  const checkpoint = argFrom(argv, "checkpoint");
+  if (!checkpoint || checkpoint === true) {
+    throw new Error(`--noul=${policy} needs --checkpoint PATH`);
+  }
+  const rawT = argFrom(argv, "noul-threshold");
+  const threshold = rawT != null && rawT !== true ? Number(rawT) : DEFAULT_NOUL_THRESHOLD;
+  if (!Number.isFinite(threshold) || threshold < 0.5 || threshold > 1) {
+    throw new Error("noul threshold must be a number in [0.5, 1]");
+  }
+  const goal = argFrom(argv, "noul-goal");
+  return {
+    policy,
+    checkpoint,
+    threshold,
+    goal: typeof goal === "string" ? goal : undefined,
+  };
+}
+
+export function localBackendFor(path) {
+  if (!localBackendCache.has(path)) localBackendCache.set(path, createLocalBackend(path));
+  return localBackendCache.get(path);
+}
+
+function pYesFrom(decision) {
+  if (Array.isArray(decision?.dist) && typeof decision.dist[0] === "number" && Number.isFinite(decision.dist[0])) {
+    return decision.dist[0];
+  }
+  if (decision?.index === 0) return decision.p;
+  if (decision?.index === 1) return typeof decision.p === "number" ? 1 - decision.p : 0;
+  return 0;
+}
+
+function probeLocal(command, extra) {
+  let backend = extra.backend;
+  if (!backend) {
+    if (!extra.checkpoint) return { error: true, yes: true, p: 0, message: "no local backend" };
+    try {
+      backend = localBackendFor(extra.checkpoint);
+    } catch (err) {
+      return { error: true, yes: true, p: 0, message: String(err.message ?? err) };
+    }
+  }
+  try {
+    const context = extra.goal ? `${String(extra.goal).slice(0, 500)}\n${command}` : command;
+    const decision = backend.decide({
+      kind: "noul",
+      context,
+      options: ["yes", "no"],
+      site: "rtk",
+      question: extra.question ?? RTK_WHOLE,
+    });
+    if (!decision || decision.abstain) return { abstain: true, yes: true, p: 0 };
+    const pYes = pYesFrom(decision);
+    if (typeof pYes !== "number" || !Number.isFinite(pYes) || pYes < 0 || pYes > 1) {
+      return { abstain: true, yes: true, p: 0 };
+    }
+    const threshold = extra.threshold ?? DEFAULT_NOUL_THRESHOLD;
+    if (pYes >= threshold) return { yes: true, p: pYes };
+    if (pYes <= 1 - threshold) return { yes: false, p: 1 - pYes };
+    return { uncertain: true, yes: true, p: pYes };
+  } catch (err) {
+    return { error: true, yes: true, p: 0, message: String(err.message ?? err) };
+  }
+}
+
+export function noulExtraFromState(state, extra = {}) {
+  return {
+    policy: extra.policy ?? state?.noul?.policy ?? "rules",
+    checkpoint: extra.checkpoint ?? state?.noul?.checkpoint,
+    threshold: extra.threshold ?? state?.noul?.threshold,
+    goal: extra.goal ?? state?.noul?.goal,
+    backend: extra.backend,
+  };
+}
+
 export function mustReachWhole(command, extra = {}) {
-  const { question = RTK_WHOLE, ...rest } = extra;
-  return noul(command, question, { site: "rtk", ...rest });
+  const { question = RTK_WHOLE, policy = "rules", ...rest } = extra;
+  const floor = guardedSkip(command);
+
+  if (policy === "shadow" || policy === "action") {
+    const local = probeLocal(command, { ...rest, question });
+    if (policy === "shadow") {
+      const live = noul(command, question, { site: "rtk", ...rest, backend: undefined });
+      return { ...live, source: floor ? "floor" : "rules", floor, shadow: local };
+    }
+    if (floor) return { yes: true, p: 1, source: "floor", floor: true, local };
+    if (local.error || local.abstain || local.uncertain) {
+      return { yes: true, p: local.p ?? 0, source: "fail-open", floor: false, local };
+    }
+    return { yes: local.yes, p: local.p, source: "local", floor: false, local };
+  }
+
+  return { ...noul(command, question, { site: "rtk", ...rest }), source: floor ? "floor" : "rules", floor };
+}
+
+export function maybeRewrite(cmd, mode, extra = {}, bin = "rtk") {
+  if (!cmd || !mode || mode === "off") return null;
+  if (mode !== "full" && mustReachWhole(cmd, extra).yes) return null;
+  return rewrite(cmd, mode, bin);
 }
 
 export function classifyRead(abs, offset, limit, state, counts, extra = {}) {
@@ -447,8 +564,7 @@ export async function cmdRun(cmdString, cwd = process.cwd()) {
   if (!isLive(state)) die("shunt is not active — run activate");
 
   const mode = state.rtk?.mode;
-  const rewritten =
-    mode === "guarded" && mustReachWhole(cmdString).yes ? null : rewrite(cmdString, mode);
+  const rewritten = maybeRewrite(cmdString, mode, noulExtraFromState(state));
   if (rewritten) {
     // RTK filters and keeps its own recall store; its output is the view.
     const { code, raw } = await runCommand(rewritten, cwd);
@@ -656,8 +772,10 @@ function cmdActivate() {
   const cwd = process.cwd();
   const state = emptyState(cwd);
   let mode;
+  let noulCfg;
   try {
     mode = modeFromArgv();
+    noulCfg = noulFromArgv();
   } catch (e) {
     die(e.message);
   }
@@ -666,6 +784,7 @@ function cmdActivate() {
     if (!version) die("--rtk needs the rtk binary on PATH (brew install rtk). Do not run `rtk init -g`: the run scopes it.");
     state.rtk = { mode, version };
   }
+  if (noulCfg.policy !== "rules") state.noul = noulCfg;
   // A new activation is a new run: events from the last one must not leak into this report.
   rmSync(eventsPath(cwd), { force: true });
   saveState(state, cwd);
@@ -674,6 +793,11 @@ function cmdActivate() {
   else {
     const found = rtkVersion();
     if (found) console.log(`tip     rtk ${found} is installed — re-run \`activate --rtk\` to filter build/test/git noise (recommended; A/B in skills-catalog#27)`);
+  }
+  if (state.noul) {
+    console.log(
+      `noul    ${state.noul.policy} · ${state.noul.checkpoint} · threshold ${state.noul.threshold} (uncalibrated; regex floor is immutable)`,
+    );
   }
   console.log(`caps    ${LINE_MAX} lines · ${BYTE_MAX} bytes · outline ≤ ${OUTLINE_MAX} lines`);
 }

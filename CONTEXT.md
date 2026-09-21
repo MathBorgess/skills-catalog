@@ -116,10 +116,20 @@ _Avoid_: modelling non-exclusive requirements as a Choice
 A scorer declining because no option cleared its threshold. A first-class outcome with a declared destination — the graph gate, the supervisor, or the permissive default — never a guess.
 
 **Floor**:
-The rule a scorer replaces, kept as the bound it cannot cross. The scorer may only widen the permissive side, so the worst case of adopting one is today's behaviour.
+The rule a scorer replaces, kept as the bound it cannot cross. For RTK that bound is the guarded regex: a match stays raw. The scorer may only add more raw commands, never compress one the regex protects, so the worst case of adopting one is today's behaviour.
+_Avoid_: fallback (the regex is a floor, not a backup the scorer may choose instead)
+
+**Shadow mode**:
+An explicit Noul policy that runs the local model and records its opinion while the live rewrite stays the rules floor. It cannot mutate command output.
+_Avoid_: dry run (the scorer does run); conflating this with the **shadow log**
+
+**Action mode**:
+An explicit opt-in Noul policy. The local model may add raw commands the floor does not already protect. Abstention, invalid checkpoint, inference error, and uncertainty fail open to raw. Default remains **rules**.
+_Avoid_: "enable noul" (name the policy); treating a toy checkpoint as a calibrated license to compress
 
 **Shadow log**:
 The append-only record of every scorer call — context, options, chosen, probability — opened at decision time and **resolved** with its outcome when the run closes. An unresolved record is unlabelled data, never a wrong label.
+_Avoid_: shadow mode (the log is the record; the mode is the live policy)
 
 **Free label**:
 An outcome that is itself the answer: a session that blocked on a socket required the `unix-socket` capability. Costs nothing and is mined before any teacher runs.

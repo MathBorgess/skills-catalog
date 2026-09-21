@@ -17,9 +17,11 @@ import {
   findLiveState,
   isHandoffChildPath,
   lineAndByteCount,
+  maybeRewrite,
+  noulExtraFromState,
   runDir,
 } from "./shunt.mjs";
-import { hookOutput, isRecall, rewrite } from "./rtk.mjs";
+import { hookOutput, isRecall } from "./rtk.mjs";
 
 const ALLOW = 0;
 
@@ -62,7 +64,7 @@ function main() {
       appendEvent({ event: "recover", reason: "rtk_recall", cmd }, cwd);
       process.exit(ALLOW);
     }
-    const rewritten = rewrite(cmd, rtkMode);
+    const rewritten = maybeRewrite(cmd, rtkMode, noulExtraFromState(state));
     if (rewritten) {
       appendEvent({ event: "rtk_rewrite", cmd, rewritten }, cwd);
       process.stdout.write(JSON.stringify(hookOutput(ti, rewritten)));

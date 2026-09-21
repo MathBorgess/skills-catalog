@@ -44,6 +44,8 @@ import {
   effectiveCapabilities,
   capabilityDisagreement,
   mineRecordedCapabilityExamples,
+  modelForReroute,
+  firstUsable,
 } from "./handoff.mjs";
 import { redactEvidence, evaluatePreToolUse } from "./guard.mjs";
 import { runAllGateTests } from "./gate.test.mjs";
@@ -1340,6 +1342,90 @@ esac
   const models = cliModels("codex", "codex");
   assert("cliModels('codex', 'codex') returns non-empty list", models.length > 0);
   assert("cliModels('codex', 'codex') does not contain 'default'", !models.includes("default"));
+}
+
+// ------------------------------------------- every session names a real model
+{
+  // The claude CLI lists no models, so a claude session used to route as
+  // "unpinned" and the child inherited whatever default the CLI carried.
+  const claudeOnly = {
+    ts: new Date().toISOString(),
+    slots: [
+      {
+        key: "claude",
+        provider: "claude",
+        account: "default",
+        installed: true,
+        bin: "claude",
+        remaining_pct: 90,
+        bucket: "ok",
+        windows: [{ name: "5h", remaining_pct: 90, resets_at: null, window_secs: 18000 }],
+        source: "claude-test",
+      },
+    ],
+  };
+  const planFor = (tier) => ({
+    mode: "fan-out",
+    horizon_s: 7200,
+    sessions: [{ id: "01", goal: "t", tier, size: "s", writes: ["a.txt"], deps: [] }],
+  });
+
+  const designDir = makeRouteRun({ plan: planFor("design"), quota: claudeOnly });
+  const rDesign = run("route", designDir);
+  const designModel = JSON.parse(readFileSync(join(designDir, "routing.json"), "utf8")).sessions[0].model;
+  assert("route names a model for a claude session", rDesign.status === 0 && designModel === "opus");
+  assert("route table never says 'unpinned'", !/unpinned/.test(rDesign.stdout));
+
+  const mechDir = makeRouteRun({ plan: planFor("mechanical"), quota: claudeOnly });
+  run("route", mechDir);
+  const mechModel = JSON.parse(readFileSync(join(mechDir, "routing.json"), "utf8")).sessions[0].model;
+  assert("mechanical claude session takes the cheaper roster model", mechModel === "sonnet");
+
+  // With the roster emptied nothing can name the model, and route refuses
+  // rather than letting the CLI's current default decide after approval.
+  const noRosterDir = makeRouteRun({ plan: planFor("design"), quota: claudeOnly });
+  const rNone = run("route", noRosterDir, [], { ...process.env, HANDOFF_CLAUDE_MODELS: "" });
+  assert("route refuses a session whose model nothing can name", rNone.status !== 0);
+  assert("refusal names the session and the fix", /session 01 routes to claude with no model named/.test(rNone.stderr) && /set "model" in plan\.json/.test(rNone.stderr));
+
+  const declaredDir = makeRouteRun({
+    plan: {
+      mode: "fan-out",
+      horizon_s: 7200,
+      sessions: [{ id: "01", goal: "t", tier: "design", size: "s", model: "opusplan", writes: ["a.txt"], deps: [] }],
+    },
+    quota: claudeOnly,
+  });
+  run("route", declaredDir, [], { ...process.env, HANDOFF_CLAUDE_MODELS: "" });
+  const declared = JSON.parse(readFileSync(join(declaredDir, "routing.json"), "utf8")).sessions[0].model;
+  assert("a declared model is kept even with no roster", declared === "opusplan");
+
+  // Rerouting after a quota death must land on a named model too.
+  const claudeSlot = { key: "claude", provider: "claude", bin: "claude", account: "default" };
+  assert(
+    "reroute onto the same provider keeps the named model",
+    modelForReroute(claudeSlot, null, { provider: "claude", model: "opusplan", tier: "design" }) === "opusplan",
+  );
+  assert(
+    "reroute onto another provider falls back to that provider's roster",
+    modelForReroute(claudeSlot, null, { provider: "cursor", model: "composer-1", tier: "mechanical" }) === "sonnet",
+  );
+}
+
+// ------------------------------- a stale credential beside a live one is fine
+{
+  // The trap this guards: Claude Code keeps the live token in the Keychain and
+  // leaves an expired .credentials.json behind, which used to blank the whole
+  // slot even though its usage windows read fine.
+  const sources = [
+    { label: "stale file", read: () => ({ exp: 1 }) },
+    { label: "keychain", read: () => ({ exp: 9 }) },
+  ];
+  const r = firstUsable(sources, (c) => c.exp < 5);
+  assert("firstUsable skips the expired source and returns the live one", r.creds?.exp === 9 && r.source === "keychain");
+  assert("firstUsable still reports that an expired copy was seen", r.expiredSeen === true);
+  // `auth_expired` is that pair, not expiredSeen alone.
+  assert("a slot with a usable credential is not auth-expired", !(r.expiredSeen && !r.creds));
 }
 
 // ----------------------------------------------------------- verifier gates & fixtures

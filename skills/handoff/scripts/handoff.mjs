@@ -173,7 +173,7 @@ function readKeychain(service) {
 // Three outcomes, not two. "The file is not there" and "the file is there and
 // holds no token" call for different fixes, and collapsing them into `missing`
 // throws away the more useful half.
-function firstUsable(sources, isExpired) {
+export function firstUsable(sources, isExpired) {
   const tried = [];
   let expiredSeen = false;
   for (const src of sources) {
@@ -656,6 +656,36 @@ export function cliModels(bin, provider) {
   modelListCache.set(bin, out);
   return out;
 }
+
+// Providers whose CLI lists no models still spend a specific one, so the table
+// cannot say "unpinned" and the child cannot inherit whatever default the CLI
+// happens to carry. The roster is written frontier-first and is overridable,
+// because model names outlive neither the CLI nor this file.
+const FALLBACK_MODELS = {
+  claude: (process.env.HANDOFF_CLAUDE_MODELS ?? "opus,sonnet,haiku")
+    .split(",")
+    .map((m) => m.trim())
+    .filter(Boolean),
+};
+
+// `wanted` is the lane the tier prefers, so a mechanical session takes the
+// cheaper model and everything else takes the frontier one.
+const fallbackModel = (provider, wanted) => {
+  const roster = FALLBACK_MODELS[provider];
+  if (!roster?.length) return null;
+  return wanted === "own" ? (roster[1] ?? roster[0]) : roster[0];
+};
+
+// The one place that answers "which model would this slot run?" for a session
+// being moved: a lane pins its own id, codex resolves its configured one, a
+// same-provider move keeps the model already named, and anything else falls to
+// the roster. A slot that still cannot name a model is not a recovery target.
+export const modelForReroute = (slot, lane, session) => {
+  if (lane) return pickModelForLane(slot.bin, slot.provider, lane);
+  if (slot.provider === "codex") return resolveCodexModel(slot.bin, slot.account);
+  if (slot.provider === session.provider && session.model) return session.model;
+  return fallbackModel(slot.provider, preferredLane(session.tier));
+};
 
 const pickModelForLane = (bin, provider, lane) => {
   if (!lane?.kind) return null;
@@ -1197,6 +1227,11 @@ async function probe() {
       p.credSources(),
       p.isExpired,
     );
+    // An expired copy is only bad news when nothing else answered. A CLI that
+    // keeps its live token in the Keychain routinely leaves a stale
+    // `.credentials.json` behind, and counting that as "auth expired" blanks a
+    // slot whose usage windows this probe just read successfully.
+    const authExpired = expiredSeen && !creds;
     if (!creds) {
       const tokenless = tried.filter((t) => t.state === "no token").map((t) => t.label);
       if (expiredSeen) {
@@ -1242,7 +1277,7 @@ async function probe() {
     // P1: A slot that fell back to transcripts *because* credentials expired is
     // unusable, so do not estimate quota from transcripts if auth expired.
     let estimated = false;
-    if (!result && p.local && !expiredSeen) {
+    if (!result && p.local && !authExpired) {
       const local = localSnapshot(p.local);
       const asWindow = (l) => ({
         windows: [
@@ -1277,7 +1312,7 @@ async function probe() {
         lanes: result?.lanes,
         source: source ?? "probe failed",
         estimated, note,
-        auth_expired: Boolean(expiredSeen),
+        auth_expired: authExpired,
         tried: arg("explain") ? tried : undefined,
       }),
     );
@@ -1944,6 +1979,7 @@ export function route(dir) {
     if (!model && slot.provider === "codex") {
       model = resolveCodexModel(slot.bin, slot.account);
     }
+    if (!model) model = fallbackModel(slot.provider, wanted);
     assigned.push({
       ...s,
       size,
@@ -1982,6 +2018,22 @@ export function route(dir) {
       capability_disagreement: caps.disagreement,
       s1_mode: caps.mode,
     });
+  }
+
+  // Every session spends a specific model, so every session names one. Where
+  // the CLI lists its models, route pins one above; where it does not, the
+  // plan has to say which model it is buying instead of letting the CLI's
+  // current default decide silently after approval.
+  for (const s of assigned) {
+    if (s.model && s.model !== "default") continue;
+    const listed = cliModels(s.bin, s.provider).filter((m) => m && m !== "default");
+    die(
+      `session ${s.id} routes to ${s.provider} with no model named. Every session must name the ` +
+        `model it spends — set "model" in plan.json. ` +
+        (listed.length
+          ? `Valid models: ${listed.join(", ")}`
+          : `\`${s.bin}\` lists no models and has no fallback roster, so name the exact id you want.`),
+    );
   }
 
   const routing = {
@@ -2702,7 +2754,13 @@ async function dispatch(dir) {
         const key = lane ? `${q.key}/${lane.name}` : q.key;
         if (dead.has(key)) continue;
         const supply = supplyFor(q, lane, horizon);
-        if (supply > 0) options.push({ q, lane, supply });
+        // Model ids do not travel across providers, and inside a lane the id is
+        // what holds the session to that pool — so it is re-pinned, never
+        // carried over. A slot whose model nothing can name is not a recovery
+        // target: rerouting there would launch a session that does not know
+        // which model it spends.
+        const model = modelForReroute(q, lane, s);
+        if (supply > 0 && model) options.push({ q, lane, supply, model });
       }
     }
     const best = options.sort((a, b) => b.supply - a.supply)[0];
@@ -2711,9 +2769,7 @@ async function dispatch(dir) {
     s.provider = best.q.provider;
     s.bin = best.q.bin;
     s.lane = best.lane?.name ?? undefined;
-    // Model ids do not travel across providers, and inside a lane the id is what
-    // holds the session to that pool — so it is re-pinned, never carried over.
-    s.model = best.lane ? pickModelForLane(best.q.bin, best.q.provider, best.lane) : null;
+    s.model = best.model;
     s.lane_pinned = best.lane ? Boolean(s.model) : undefined;
     return s;
   };

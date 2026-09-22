@@ -2,7 +2,7 @@
 
 A public catalog of agent skills by **[Matheus Borges](https://github.com/MathBorgess)**. Each skill is a folder of markdown a model reads to run a workflow: what to ask, what to write, where to write it, and what to check before it says it is done. The instructions are the product; the plugin, npm package, and link script are how those folders get onto a machine.
 
-**This file is the contract, for every agent working in this repository.** Claude Code, Codex, Cursor and anything else read the same rules from here. [`CLAUDE.md`](CLAUDE.md) is a pointer to this file and holds no rules of its own — there is one place to edit, and nothing to keep in sync.
+**This file is the contract, for every agent working in this repository.** Claude Code, Codex, Cursor and anything else read the same rules from here. [`CLAUDE.md`](CLAUDE.md) imports this file with `@AGENTS.md` and holds no rule of its own — there is one place to edit, and nothing to keep in sync.
 
 Packaging (plugin manifests, install scripts, version sync) and some skill patterns were inspired by [Matt Pocock's skills](https://github.com/mattpocock/skills).
 

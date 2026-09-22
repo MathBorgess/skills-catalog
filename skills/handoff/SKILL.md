@@ -4,7 +4,7 @@ description: Use when the user wants to compact work for a later agent, split it
 argument-hint: "compact | fan-out | provider or model constraints | rtk"
 metadata:
   author: Matheus Borges
-  version: 2.2.2
+  version: 3.0.0
 ---
 
 # Handoff
@@ -28,14 +28,14 @@ Write `$HANDOFF_RUN/plan.json`:
 
 ```json
 {"mode":"fan-out","horizon_s":7200,"rtk":"guarded","sessions":[
-  {"id":"01","goal":"…","tier":"design","size":"m","writes":["src/auth/**"],"reads":["**"],"deps":[],"needs":[]},
-  {"id":"02","goal":"…","tier":"mechanical","size":"s","writes":["docs/**"],"reads":["**"],"deps":[],"model":"…","effort":"low"}
+  {"id":"01","goal":"…","tier":"design","size":"m","writes":["src/auth/**"],"reads":["**"],"deps":[],"needs":["network"],"capability_answers":{"network":"yes","unix-socket":"no","git-write":"no","pty":"no","disk-write":"no","high-memory":"no"}},
+  {"id":"02","goal":"…","tier":"mechanical","size":"s","writes":["docs/**"],"reads":["**"],"deps":[],"needs":[],"capability_answers":{"network":"no","unix-socket":"no","git-write":"no","pty":"no","disk-write":"no","high-memory":"no"},"model":"…","effort":"low"}
 ]}
 ```
 
 **Recommended: if `rtk --version` works, set `"rtk": "guarded"` in the plan** and raise it in the graph gate; `route` prints a `tip` when RTK is installed and the plan leaves it out. Whether RTK lowers task cost is still being measured ([skills-catalog#27](https://github.com/MathBorgess/skills-catalog/issues/27)).
 
-`model` and `effort` are optional owner overrides. `rtk` (`off` | `guarded` | `full`, plan-wide or per session; absent = `off`) routes the children's shell output through [RTK](https://github.com/rtk-ai/rtk) — see §4. A dependency means B needs A's output; independent sessions run in parallel. Give independent sessions disjoint write-sets. Set `tier`, `size`, `needs`, and an honest `horizon_s`; see [`references/routing.md`](references/routing.md).
+`model` and `effort` are optional owner overrides. When `model` is unset, route still names a real model from the lane pin, the CLI's configured model, or a provider roster, and refuses the plan when nothing can name one. `tier`, `size`, `needs`, and `capability_answers` are required: reason them in [`references/reasoning.md`](references/reasoning.md). Route refuses an omission or a `needs` list that is not exactly the yeses. `rtk` (`off` | `guarded` | `full`, plan-wide or per session; absent = `off`) routes the children's shell output through [RTK](https://github.com/rtk-ai/rtk) — see §4. A dependency means B needs A's output; independent sessions run in parallel. Give independent sessions disjoint write-sets. Set an honest `horizon_s`; see [`references/routing.md`](references/routing.md).
 
 ## 2. Route and graph gate
 
@@ -59,7 +59,16 @@ Write every `NN.md` and `NN.prompt.md` after approval, using [`references/brief.
 node <skill>/scripts/handoff.mjs dispatch --run "$HANDOFF_RUN" --budget 540 --settle 30
 ```
 
-`--settle` is the adjustable settle window; its default is 30 seconds. Dispatch refuses a plan changed since approval. It launches eligible work, waits for dependencies, and reroutes recoverable provider failures without another approval.
+`--settle` is the adjustable settle window; its default is 30 seconds. Dispatch refuses a plan changed since approval. It launches eligible work, waits for dependencies, and reroutes recoverable provider failures without another approval. A later `dispatch` on the same run adopts still-live provider pids, treats a parseable `result.md` as a claim (`gated`) even if state was reset to pending, and does not abandon a dependent whose dependency is still `gated` or `reviewed`. `handoff mark` records a parent correction that survives the next dispatcher write.
+
+A `gated` claim is not acceptance. Reason the verdict and the risk in [`references/reasoning.md`](references/reasoning.md), then:
+
+```bash
+node <skill>/scripts/handoff.mjs accept --run "$HANDOFF_RUN" 01 --verdict approved --risk routine
+node <skill>/scripts/handoff.mjs confirm --run "$HANDOFF_RUN" 01 --agree yes
+```
+
+Only `accepted` unblocks a dependent. `notable` and `consequential` stay `reviewed` until `confirm`. A failed gate cannot be approved. Critical risk, a reject, or a second revise escalates.
 
 Read the dispatch digest. It includes each finished session's result block. Open `sessions/NN.result.md` only when action is required. Never open `logs/`, a child transcript, or `wt/`; relaunch a blocked child with a corrected brief instead of doing its work.
 
@@ -90,7 +99,9 @@ node <skill>/scripts/handoff.mjs clean --run "$HANDOFF_RUN" [--branches]
 ## Done-check
 
 - [ ] Probe ran before planning; plan has causal deps and disjoint concurrent writes.
-- [ ] Route accepted, graph gate completed, and `route --approve` locked the current hash before dispatch.
+- [ ] Every session has a reasoned tier, size, and a yes/no for every capability; `needs` is exactly the yeses.
+- [ ] Route accepted, every session names a real model, graph gate completed, and `route --approve` locked the current hash before dispatch.
+- [ ] Every `gated` session was accepted, revised, or escalated before score. No dependent ran before its dependency was `accepted`.
 - [ ] Every brief exists; no child was launched manually, implemented by the parent, or inspected through logs/worktrees.
 - [ ] Dispatch digest was used; changed plans were routed and approved again before dispatch.
 - [ ] RTK installed → `rtk` was proposed in the graph gate (on, or off with the owner's reason).

@@ -21,6 +21,8 @@ One paragraph. What done looks like. Written by the parent.
 ## Constraints
 - user-stated constraints, verbatim where they were specific
 - do not expand scope
+- for each file you will read, say outline, excerpt, or whole. Whole is only for a patch target under the shunt ceiling, or a file already under the read cap
+- for each command, say whether its output must arrive whole. Diffs, code, and search stay whole; that floor is not a judgment
 - write progress after each checklist item; write the result file last
 
 ## Done when

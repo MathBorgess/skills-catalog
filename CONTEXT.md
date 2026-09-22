@@ -62,8 +62,11 @@ _Avoid_: orchestrator, parent agent (one name per role)
 The agent running one **session** in its own worktree. It has no supervisor context and never reads another child's brief.
 
 **Capabilities**:
-The sandbox facilities a session declares it requires — `network`, `unix-socket`, `git-write`, `pty`, `disk-write`, `high-memory`. `route` excludes any provider whose sandbox blocks one of them, and refuses the plan when no provider satisfies all of them. A **requirement of the work**, never a permission granted to it: you grant a permission, you discover a requirement.
-_Avoid_: permissions; `needs` (the field is still spelled `needs` in `plan.json` — the rename rides the capability-prediction change, and until then the field name and the concept name differ on purpose)
+The sandbox facilities a session requires — `network`, `unix-socket`, `git-write`, `pty`, `disk-write`, `high-memory`. The supervisor answers each one yes or no in `capability_answers`. `needs` is exactly the yeses. `route` excludes any provider whose sandbox blocks one of them, and refuses the plan when an answer is missing or the two fields disagree. A **requirement of the work**, never a permission granted to it: you grant a permission, you discover a requirement.
+_Avoid_: permissions; a second, predicted list
+
+**Reasoned decision**:
+The typed answer a scorer would have returned, written by the supervisor or the child while no scorer is in the skill. `route` and `accept` check the shape. A later scorer may fill the same fields and may not cross the floor.
 
 **Gate run**:
 The `verify` commands executed **by the dispatcher** in the session's worktree after the child exits. A child's pasted output is a claim; the gate run is the evidence.

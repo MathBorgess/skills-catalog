@@ -2,16 +2,17 @@
 
 For whoever maintains the skill. How a handoff run actually behaves, end to end. Vocabulary is defined in [`CONTEXT.md`](../../CONTEXT.md); the roadmap these diagrams anticipate is [#31](https://github.com/MathBorgess/skills-catalog/issues/31).
 
-> **Read this first.** Phases 1–4, the digest and the scorecard are what the skill does **today**. The acceptance phase, the environment preflight, the escalation gate, the teacher and every scorer are **roadmap** — they are drawn because the diagram is the design. Do not follow a roadmap box while executing a run: if a command or a state below is not in [`SKILL.md`](../../skills/handoff/SKILL.md), it does not exist yet.
+> **Read this first.** What is marked **shipped** is what the skill does today. Roadmap boxes are the design, not a command. If a command or a state below is not in [`SKILL.md`](../../skills/handoff/SKILL.md), it does not exist yet.
 
 | Part | Status |
 | --- | --- |
 | Phases 1–4, digest, scorecard | **shipped** |
 | HITL-1 graph gate with hash lock | **shipped**, and mandatory |
-| Capability gate | **shipped** — the gate is code; the declaration is prose |
-| Phase 5 acceptance: gate run, verdict, risk, matrix | roadmap (#34, #38, #39, #40) |
+| Capability gate | **shipped** — the supervisor reasons every yes/no; the script checks the shape and excludes sandboxes |
+| Tier, size, read level, raw-vs-whole | **shipped as reasoning** — the model writes them; the shunt floor stays code |
+| Phase 5 acceptance: gate run, verdict, risk, matrix | **shipped as reasoning** — the supervisor writes the verdict and the risk; `accept` applies the matrix. Only `accepted` unblocks a dependent |
 | HITL-0 environment preflight | roadmap (#44) |
-| Scorers at any site | roadmap (#32, #35, #36, #37, #42, #43) |
+| Scorers at any site | not in the skill. A later scorer may fill the same fields and may not cross a floor. Trials live in [`docs/experiments/`](../experiments/README.md) |
 | Teacher | roadmap (#47) |
 
 ## The three human gates
@@ -20,7 +21,7 @@ For whoever maintains the skill. How a handoff run actually behaves, end to end.
 | --- | --- | --- |
 | **HITL-0 — admission** | `route` refuses: write-set collision, no provider satisfies the declared capabilities, environment precondition unmet | partial; the environment half is #44 |
 | **HITL-1 — graph gate** | after cutting and routing, **before any launch**. The owner grills the graph; `route --approve` locks the plan hash | **shipped and mandatory** |
-| **HITL-2 — escalation** | `critical` risk, `rejected` brief, `escalate` verdict, or a spent revise round | roadmap (#40) |
+| **HITL-2 — escalation** | `critical` risk, `rejected` verdict, `escalate`, or a spent revise round | **shipped** — `accept` sets `escalated`; the owner re-cuts |
 
 HITL-1 is the defence against the one failure no per-session check can catch: a wrong premise propagated into every brief at once. The recorded case is a supervisor that oriented itself on a tree 37 commits behind `origin`, so six documents described the wrong milestone.
 
@@ -32,7 +33,6 @@ sequenceDiagram
     actor H as Owner
     participant S as Supervisor
     participant HF as handoff.mjs
-    participant S1 as Scorer
     participant C as Child
     participant G as Gate run
     participant T as Teacher
@@ -47,10 +47,8 @@ sequenceDiagram
     Note over S,HF: PHASE 2 — probe, cut, route
     S->>HF: probe --run
     HF-->>S: supply per lane and per window
-    S->>S1: goal -> tier, size
-    S->>S1: goal -> capabilities, one per question
-    S1-->>S: typed decisions with p
-    Note over S1: below threshold it abstains;<br/>it never invents a value
+    S->>S: reason tier, size, and one yes/no per capability
+    Note over S: write them on the plan.<br/>An omission is a route refusal.<br/>No scorer answers these.
     S->>HF: write plan.json
     S->>HF: route --run
     HF->>HF: environment preflight and capability gate
@@ -64,7 +62,7 @@ sequenceDiagram
     HF-->>S: lanes, estimates, override warnings
 
     Note over S,H: PHASE 3 — graph gate, HITL-1, mandatory
-    S->>H: graph, concurrency, lanes,<br/>predicted vs declared capabilities
+    S->>H: graph, concurrency, lanes,<br/>reasoned needs
     H-->>S: grilling
     H->>S: approved
     S->>HF: route --approve, locks the plan hash
@@ -76,8 +74,7 @@ sequenceDiagram
     loop each session whose deps are accepted
         HF->>C: launch on the assigned lane
         activate C
-        C->>S1: must this command's output arrive whole?
-        C->>S1: this file — at which read level?
+        C->>C: reason read level and raw-vs-whole,<br/>above the shunt floor
         C->>C: work, append to progress.md
         C-->>HF: exit, write result.md
         deactivate C
@@ -86,23 +83,28 @@ sequenceDiagram
     Note over HF,G: PHASE 5 — acceptance: where done becomes accepted
     HF->>G: run the plan's verify commands in the worktree
     G-->>HF: evidence, not a conclusion
-    HF->>HF: deterministic features:<br/>diffstat, scope creep, gate disagreement
-    HF->>S1: result digest + Done when + features
-    S1-->>HF: verdict and risk level
+    HF->>S: digest and gate evidence
+    S->>S: reason verdict and risk
+    S->>HF: accept / confirm
     HF->>HF: attention matrix
 
-    alt approved, routine risk
-        HF->>HF: unblock dependents — no supervisor turn
-    else approved, high risk
-        HF->>S: digest, plus the diff when critical
-        S-->>HF: confirms
+    alt approved, routine, gate ok
+        HF->>HF: accepted — dependents may start
+    else approved, notable or consequential
+        HF->>S: reviewed
+        S->>HF: confirm --agree yes or no
+    else approved and critical
+        HF->>HF: escalated
+        S->>H: HITL-2
+    else approved and the gate failed
+        HF-->>S: refused — revise, reject, or escalate
     else revise, with a named defect
         HF->>C: fresh session, same worktree, new brief
         activate C
         C-->>HF: correction
         deactivate C
         HF->>G: re-run the gates
-        Note over HF: one round only.<br/>Failed again means escalate
+        Note over HF: one round only.<br/>The second revise escalates
     else rejected, escalate, or round spent
         HF->>S: escalate
         S->>H: HITL-2
@@ -110,16 +112,15 @@ sequenceDiagram
     end
 
     Note over HF,T: PHASE 6 — scorecard and learning
-    HF->>HF: score: resolve outcomes,<br/>write metrics.jsonl and decisions.jsonl
-    Note over T: after the run, batched,<br/>on the abundant lane
+    HF->>HF: score: write metrics.jsonl<br/>refuses pending, running, done, gated, reviewed
+    Note over T: after the run, batched,<br/>on the abundant lane — roadmap
     T->>T: mine free labels from outcomes
     T->>T: label only the silent half
-    T-->>S1: dataset — never an action
 ```
 
 ## A session node
 
-The change that matters is not the happy path: it is that **`done` stops being terminal**. Today `done` is the child asserting it finished, and dependents start behind that assertion.
+The change that matters is not the happy path: it is that **`done` stops being terminal**. `done` in the result file is the child's claim. Dispatch records it as `gated`. Only `accepted` unblocks a dependent.
 
 ```mermaid
 stateDiagram-v2
@@ -131,17 +132,13 @@ stateDiagram-v2
     dead --> pending: quota or auth — reroute,<br/>resume from progress.md
     dead --> escalated: real task failure,<br/>or three attempts
 
-    gated --> scored: dispatcher ran the gates
-    scored --> accepted: approved, low risk
-    scored --> reviewed: approved, high risk
-    scored --> revising: revise with a named defect
-    scored --> escalated: rejected, escalate,<br/>or critical risk
+    gated --> accepted: approved, routine, gate ok
+    gated --> reviewed: approved, notable or consequential
+    gated --> pending: revise, named defect, first round
+    gated --> escalated: rejected, escalate, critical,<br/>or a second revise
 
     reviewed --> accepted: supervisor confirms
     reviewed --> escalated: supervisor disagrees
-
-    revising --> gated: one round only
-    revising --> escalated: second failure
 
     escalated --> pending: owner re-cuts and re-approves
     escalated --> [*]: owner aborts
@@ -150,7 +147,6 @@ stateDiagram-v2
 
     note right of accepted
         Only accepted unblocks a dependent.
-        Today that is done.
     end note
 ```
 
@@ -171,7 +167,7 @@ Three properties follow:
 
 The design's answer to long-context degradation is not better retrieval. It is **shorter contexts and state on disk**. `plan.json`, `NN.md`, `progress.md`, `result.md`, `state.json` and `decisions.jsonl` are the memory; a model's context is a working set.
 
-**Child.** It starts near-empty — `references/brief.md` requires pointers, never pasted artefacts, and the child has no supervisor context. The scorers then govern what is allowed to enter: which commands return whole output, and at which level a file is read. `progress.md` is external memory, so a resumed session re-reads a short file instead of a transcript.
+**Child.** It starts near-empty — `references/brief.md` requires pointers, never pasted artefacts, and the child has no supervisor context. The child reasons, in the brief, which commands return whole output and at which level a file is read. The shunt floor is not part of that reasoning. `progress.md` is external memory, so a resumed session re-reads a short file instead of a transcript.
 
 **Supervisor.** It reads the digest and is forbidden from opening `logs/`, a child transcript, or `wt/`. The acceptance phase removes it from the routine path entirely — and that changes the scaling, not the constant. Today its context grows with the **number of sessions**, because it reads every digest and makes every call. With the matrix it grows with the **number of escalations**.
 

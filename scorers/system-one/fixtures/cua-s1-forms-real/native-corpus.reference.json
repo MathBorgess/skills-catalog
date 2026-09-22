@@ -1,0 +1,65 @@
+{
+  "revision": "f54adbf447f4ca6ec259f529ee3f2e3e09f8cc71",
+  "checkpoint_sha256": "05954c1caf51c2fb6c13ea4acbfc88a2e7653dea192252bb51dc89e76a356ddc",
+  "method": "numpy transliteration of libs/cua-s1/python/src/cua_s1/model.py (TinyTransformerScorer + AttentionHead), float32 throughout; NOT a literal torch execution (torch was not installed in this session). See docs/experiments/2026-09-21-cua-s1-forms-v1/README.md for the parity methodology caveat.",
+  "atol": 0.001,
+  "rtol": 0.001,
+  "cases": [
+    {
+      "name": "phone-field-empty",
+      "logits": [
+        31.47140884399414,
+        2.4796302318573,
+        -0.7853183150291443,
+        -2.50648832321167,
+        21.03974723815918
+      ],
+      "argmax": 0,
+      "argmax_option": "fill Tel: (503) 555-0142"
+    },
+    {
+      "name": "phone-field-already-filled",
+      "logits": [
+        -4.890120506286621,
+        0.6611489057540894,
+        4.2902350425720215,
+        0.1401873230934143,
+        27.361862182617188
+      ],
+      "argmax": 4,
+      "argmax_option": "skip"
+    },
+    {
+      "name": "consent-checkbox-unchecked",
+      "logits": [
+        10.20877456665039,
+        7.785733699798584,
+        20.849700927734375
+      ],
+      "argmax": 2,
+      "argmax_option": "skip"
+    },
+    {
+      "name": "submit-button",
+      "logits": [
+        4.709281921386719,
+        35.57157516479492,
+        18.857973098754883
+      ],
+      "argmax": 1,
+      "argmax_option": "click"
+    },
+    {
+      "name": "distractor-field-no-match",
+      "logits": [
+        -0.28725865483283997,
+        -5.606689453125,
+        -0.9692365527153015,
+        -9.511848449707031,
+        21.309785842895508
+      ],
+      "argmax": 4,
+      "argmax_option": "skip"
+    }
+  ]
+}

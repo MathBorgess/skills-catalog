@@ -1,0 +1,27 @@
+[
+  {
+    "name": "phone-field-empty",
+    "context": "TASK fill the form from the document, then submit\nFORM Northwind Clinic - New Patient Registration\nELEMENT Edit \"Phone number\" value=\"\"",
+    "options": ["fill Tel: (503) 555-0142", "fill DOB: 03/14/1987", "check", "click", "skip"]
+  },
+  {
+    "name": "phone-field-already-filled",
+    "context": "TASK fill the form from the document, then submit\nFORM Northwind Clinic - New Patient Registration\nELEMENT Edit \"Phone number\" value=\"(503) 555-0142\"",
+    "options": ["fill Tel: (503) 555-0142", "fill DOB: 03/14/1987", "check", "click", "skip"]
+  },
+  {
+    "name": "consent-checkbox-unchecked",
+    "context": "TASK fill the form from the document, then submit\nFORM Northwind Clinic - New Patient Registration\nELEMENT Checkbox \"I consent to treatment\" value=\"\"",
+    "options": ["check", "click", "skip"]
+  },
+  {
+    "name": "submit-button",
+    "context": "TASK fill the form from the document, then submit\nFORM Northwind Clinic - New Patient Registration\nELEMENT Button \"Submit\"",
+    "options": ["check", "click", "skip"]
+  },
+  {
+    "name": "distractor-field-no-match",
+    "context": "TASK fill the form from the document, then submit\nFORM Northwind Clinic - New Patient Registration\nELEMENT Edit \"Referring physician\" value=\"\"",
+    "options": ["fill Tel: (503) 555-0142", "fill DOB: 03/14/1987", "check", "click", "skip"]
+  }
+]

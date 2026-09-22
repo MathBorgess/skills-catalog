@@ -38,7 +38,9 @@
     "registry": "https://npm.pkg.github.com"
   },
   "scripts": {
-    "check": "node scripts/check-catalog.mjs && node skills/shunt/scripts/shunt.test.mjs && node skills/handoff/scripts/handoff.test.mjs && node skills/skills-evaluate/scripts/evaluate.test.mjs",
+    "check": "node scripts/check-catalog.mjs && node skills/shunt/scripts/shunt.test.mjs && node skills/handoff/scripts/handoff.test.mjs && node skills/skills-evaluate/scripts/evaluate.test.mjs && node scorers/system-one/s1-local.test.mjs && node scorers/system-one/propose.test.mjs",
+    "fetch:cua-s1": "node scorers/system-one/fetch-cua-s1.mjs",
+    "check:cua-s1-official": "node scorers/system-one/s1-official.test.mjs",
     "link": "bash scripts/link-skills.sh",
     "list": "bash scripts/list-skills.sh",
     "sync-plugin-version": "node scripts/sync-plugin-version.mjs",

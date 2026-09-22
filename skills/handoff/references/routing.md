@@ -2,7 +2,7 @@
 
 Use a dependency only when B needs A's output. Independent sessions run in parallel; their write-sets must not overlap. Read-only overlap is safe. Prefer separate useful jobs; merge only glue work. `route` refuses concurrent collisions and warns about dependencies that appear non-causal.
 
-Set `size` for cost (`s`: 1–2 local files; `m`: one established module; `l`: a subsystem or open design). Set `tier` for judgment: `mechanical` has a fixed shape, `design` leaves choices open, and `review` is read-only verification. Declare `needs` such as `network`, `unix-socket`, `git-write`, `pty`, or `disk-write`; route excludes incompatible sandboxes. Use the model taxonomy in [`prompts/model-routing.md`](../../../prompts/model-routing.md).
+Set `size` for cost (`s`: 1–2 local files; `m`: one established module; `l`: a subsystem or open design). Set `tier` for judgment: `mechanical` has a fixed shape, `design` leaves choices open, and `review` is read-only verification. Answer every capability in [`reasoning.md`](reasoning.md) and set `needs` to the yeses; route excludes incompatible sandboxes and refuses a missing or mismatched answer. Use the model taxonomy in [`prompts/model-routing.md`](../../../prompts/model-routing.md).
 
 ## Model and effort
 

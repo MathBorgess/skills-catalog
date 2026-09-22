@@ -79,4 +79,4 @@ It is a candidate for a **later** versioned trial, still outside the skill, stil
 
 `2026-09-21-cua-s1-forms-v2` only if someone reruns the same weights with a contract-faithful encoding (canonical `TASK`, `CheckBox`, the goal inside 224 bytes, options that include a `fill` pointer plus `check`/`click`/`skip`) and the probabilities leave 0/1. If that also sits at chance, stop transferring this checkpoint.
 
-A Qwen trial gets its own directory. It does not edit this one, and it does not land in `skills/` until a scorer trained on these decision sites beats the current rules with a calibrated probability. Until then the skill stays on `needs`, the regex floor, and no scorer call.
+A Qwen trial gets its own directory. It does not edit this one. The skill now reasons those decision sites itself (`capability_answers`, verdict, risk). A scorer lands in the skill only when it fills those same fields, stays behind the floors, and beats that reasoned record on a shuffled-context control. Until then it stays in a separate change, not in this trial and not on the default path.

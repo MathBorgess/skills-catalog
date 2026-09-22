@@ -30,6 +30,9 @@ import {
   reconcileFromResults,
   mergeStateFromDisk,
   markSession,
+  CAPABILITIES,
+  applyAcceptance,
+  applyConfirm,
 } from "./handoff.mjs";
 import { runAllGateTests } from "./gate.test.mjs";
 
@@ -140,12 +143,12 @@ function persistedStatus(dir, id = "01") {
   const r = run("status", dir);
   assert("status exits 0 on observed fixture", r.status === 0);
   assert(
-    "status reports done for running + ## Status Completed",
-    /\| 01 \| done \|/.test(r.stdout),
+    "status reports gated for running + ## Status Completed",
+    /\| 01 \| gated \|/.test(r.stdout),
   );
   assert(
-    "status persists done for observed fixture",
-    persistedStatus(dir) === "done",
+    "status persists gated for observed fixture",
+    persistedStatus(dir) === "gated",
   );
 }
 
@@ -154,7 +157,7 @@ function persistedStatus(dir, id = "01") {
   const r = run("status", dir);
   assert(
     "status reports done for contract - status: done",
-    r.status === 0 && /\| 01 \| done \|/.test(r.stdout) && persistedStatus(dir) === "done",
+    r.status === 0 && /\| 01 \| gated \|/.test(r.stdout) && persistedStatus(dir) === "gated",
   );
 }
 
@@ -202,16 +205,16 @@ function persistedStatus(dir, id = "01") {
   const r = run("dispatch", dir, ["--budget", "1"]);
   assert("dispatch exits 0 on observed fixture", r.status === 0);
   assert(
-    "dispatch reports done for running + terminal result",
-    /\| 01 \| done \|/.test(r.stdout),
+    "dispatch reports gated for running + terminal result",
+    /\| 01 \| gated \|/.test(r.stdout),
   );
   assert(
     "dispatch persists done for observed fixture",
-    persistedStatus(dir) === "done",
+    persistedStatus(dir) === "gated",
   );
   assert(
     "dispatch does not relaunch a reconciled session",
-    !/still running/.test(r.stdout) && /all sessions terminal/.test(r.stdout),
+    !/still running/.test(r.stdout) && /awaiting acceptance: 01 gated/.test(r.stdout),
   );
 }
 
@@ -254,6 +257,16 @@ function makeRouteRun({ plan, quota, state } = {}) {
       { id: "01", goal: "task 1", tier: "mechanical", size: "s", writes: ["a.txt"], deps: [] },
     ],
   };
+  const none = Object.fromEntries(CAPABILITIES.map((c) => [c, "no"]));
+  for (const s of p.sessions) {
+    s.tier ??= "mechanical";
+    s.size ??= "s";
+    if (!s.capability_answers) {
+      s.needs ??= [];
+      s.capability_answers = { ...none };
+      for (const n of s.needs) if (n in s.capability_answers) s.capability_answers[n] = "yes";
+    }
+  }
   writeFileSync(join(dir, "plan.json"), JSON.stringify(p, null, 2));
   if (state) {
     writeFileSync(join(dir, "state.json"), JSON.stringify(state, null, 2));
@@ -702,8 +715,8 @@ function makeRouteRun({ plan, quota, state } = {}) {
       parent_turns: 1,
       settle_s: 45,
       sessions: {
-        "01": { status: "done", attempts: 1, slot: "antigravity" },
-        "02": { status: "done", attempts: 1, slot: "antigravity" },
+        "01": { status: "accepted", attempts: 1, slot: "antigravity" },
+        "02": { status: "accepted", attempts: 1, slot: "antigravity" },
       },
       empty_slots: [],
       events: [],
@@ -732,6 +745,15 @@ function makeRouteRun({ plan, quota, state } = {}) {
     lastMetrics.sessions[1].id === "02" &&
       lastMetrics.sessions[1].effort === "low" &&
       lastMetrics.sessions[1].override === false,
+  );
+
+  const claimed = JSON.parse(readFileSync(join(dirScore, "state.json"), "utf8"));
+  claimed.sessions["01"].status = "done";
+  writeFileSync(join(dirScore, "state.json"), JSON.stringify(claimed));
+  const rClaim = run("score", dirScore);
+  assert(
+    "score refuses a done claim that was never accepted",
+    rClaim.status !== 0 && /01 is done/.test(rClaim.stderr),
   );
 
   rmSync(dirScore, { recursive: true, force: true });
@@ -1002,7 +1024,7 @@ esac
   const routing = JSON.parse(readFileSync(join(dir, "routing.json"), "utf8"));
   const state = JSON.parse(readFileSync(join(dir, "state.json"), "utf8"));
   reconcileFromResults(dir, routing, state);
-  assert("a parseable result wins over pending", state.sessions["01"].status === "done");
+  assert("a parseable result wins over pending", state.sessions["01"].status === "gated");
 }
 
 {
@@ -1015,6 +1037,99 @@ esac
     "a pending parent correction does not clobber a later running launch",
     mem.sessions["01"].status === "running" && mem.sessions["01"].parent_correction.status === "pending",
   );
+}
+
+{
+  const bare = mkdtempSync(join(tmpdir(), "handoff-reason-"));
+  mkdirSync(join(bare, "sessions"), { recursive: true });
+  writeFileSync(
+    join(bare, "quota.json"),
+    JSON.stringify({
+      ts: new Date().toISOString(),
+      slots: [
+        {
+          key: "claude",
+          provider: "claude",
+          account: "default",
+          installed: true,
+          bin: "claude",
+          remaining_pct: 90,
+          bucket: "ok",
+          windows: [{ name: "5h", remaining_pct: 90, resets_at: null, window_secs: 18000 }],
+        },
+      ],
+    }),
+  );
+  writeFileSync(
+    join(bare, "plan.json"),
+    JSON.stringify({
+      mode: "fan-out",
+      horizon_s: 7200,
+      sessions: [{ id: "01", goal: "t", tier: "design", size: "s", writes: ["a.txt"], deps: [] }],
+    }),
+  );
+  const refused = run("route", bare);
+  assert("route refuses a session with no capability answers", refused.status !== 0 && /capability_answers/.test(refused.stderr));
+}
+
+{
+  const gated = { status: "gated", gate_ok: true };
+  assert("approved routine accepts", applyAcceptance(gated, { verdict: "approved", risk: "routine" }).status === "accepted");
+  assert(
+    "approved notable waits for confirm",
+    applyAcceptance({ status: "gated", gate_ok: true }, { verdict: "approved", risk: "notable" }).status === "reviewed",
+  );
+  assert(
+    "critical escalates",
+    applyAcceptance({ status: "gated", gate_ok: true }, { verdict: "approved", risk: "critical" }).status === "escalated",
+  );
+  assert(
+    "a failed gate cannot be approved",
+    /gate failed/.test(applyAcceptance({ status: "gated", gate_ok: false }, { verdict: "approved", risk: "routine" }).error),
+  );
+  const revised = applyAcceptance({ status: "gated", gate_ok: false }, { verdict: "revise", defect: "gate: npm test exited 1" });
+  assert("revise with a named defect returns to pending", revised.status === "pending" && revised.revise_round === 1);
+  assert(
+    "a second revise escalates",
+    applyAcceptance({ status: "gated", gate_ok: false, revise_round: 1 }, { verdict: "revise", defect: "still red" }).status === "escalated",
+  );
+  assert(
+    "confirm agrees into accepted",
+    applyConfirm({ status: "reviewed" }, true).status === "accepted",
+  );
+  assert(
+    "confirm disagree escalates",
+    applyConfirm({ status: "reviewed" }, false).status === "escalated",
+  );
+}
+
+{
+  const dir = makeRun({ status: "running", resultBody: CONTRACT_RESULT });
+  const statePath = join(dir, "state.json");
+  const state = JSON.parse(readFileSync(statePath, "utf8"));
+  state.sessions["02"] = { status: "pending", attempts: 0 };
+  writeFileSync(statePath, JSON.stringify(state, null, 2));
+  const routing = JSON.parse(readFileSync(join(dir, "routing.json"), "utf8"));
+  routing.sessions.push({ id: "02", deps: ["01"], slot: "antigravity", lane: "third-party" });
+  writeFileSync(join(dir, "routing.json"), JSON.stringify(routing, null, 2));
+  const plan = {
+    mode: "fan-out",
+    sessions: [
+      { id: "01", deps: [] },
+      { id: "02", deps: ["01"] },
+    ],
+  };
+  writeFileSync(join(dir, "plan.json"), JSON.stringify(plan));
+  writeFileSync(
+    join(dir, "approved.json"),
+    JSON.stringify({ hash: hashPlan(plan), ts: "2026-09-21T00:00:00.000Z" }),
+  );
+  const r = run("dispatch", dir, ["--budget", "1"]);
+  const after = JSON.parse(readFileSync(statePath, "utf8"));
+  assert("a dependent stays pending while its dependency is only gated", r.status === 0 && after.sessions["01"].status === "gated" && after.sessions["02"].status === "pending");
+  const accepted = run("accept", dir, ["01", "--verdict", "approved", "--risk", "routine"]);
+  const acceptedState = JSON.parse(readFileSync(statePath, "utf8"));
+  assert("accept approved routine unblocks the claim", accepted.status === 0 && acceptedState.sessions["01"].status === "accepted");
 }
 
 {

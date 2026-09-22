@@ -87,6 +87,20 @@ function die(msg, code = 1) {
   process.exit(code);
 }
 
+function commandPositionals() {
+  const out = [];
+  for (let i = 3; i < process.argv.length; i++) {
+    const a = process.argv[i];
+    if (!a.startsWith("--")) {
+      out.push(a);
+      continue;
+    }
+    const next = process.argv[i + 1];
+    if (next && !next.startsWith("--")) i++;
+  }
+  return out;
+}
+
 function arg(name, fallback = null) {
   const i = process.argv.indexOf(`--${name}`);
   if (i === -1) return fallback;
@@ -1586,6 +1600,125 @@ function slotSatisfiesNeeds(provider, needs) {
   return needs.every((need) => caps.has(need));
 }
 
+export const CAPABILITIES = [
+  "network",
+  "unix-socket",
+  "git-write",
+  "pty",
+  "disk-write",
+  "high-memory",
+];
+const REASONED_TIERS = new Set(["mechanical", "design", "review"]);
+const REASONED_SIZES = new Set(["s", "m", "l"]);
+
+// The supervisor reasons every capability before route. The script checks the
+// shape and copies the yeses into `needs`. It does not answer a question.
+export function reasonedNeeds(session) {
+  const answers = session?.capability_answers;
+  if (!answers || typeof answers !== "object" || Array.isArray(answers)) {
+    return {
+      error:
+        'needs capability_answers, one "yes" or "no" per capability. Do not omit a question.',
+    };
+  }
+  const yes = [];
+  for (const cap of CAPABILITIES) {
+    const v = answers[cap];
+    if (v !== "yes" && v !== "no") {
+      return { error: `capability_answers.${cap} must be "yes" or "no".` };
+    }
+    if (v === "yes") yes.push(cap);
+  }
+  if (!Array.isArray(session.needs)) {
+    return { error: 'needs "needs" as an array of the capabilities answered yes ([] if none).' };
+  }
+  if (session.needs.length !== yes.length || session.needs.some((c) => !yes.includes(c))) {
+    return { error: `"needs" must be exactly the capabilities answered yes: [${yes.join(", ")}].` };
+  }
+  return { needs: yes };
+}
+
+export const VERDICTS = ["approved", "revise", "rejected", "escalate"];
+export const RISKS = ["routine", "notable", "consequential", "critical"];
+
+// The attention matrix. The supervisor supplies the verdict and the risk; this
+// only applies them. A failed gate cannot be approved. Critical always escalates.
+// A second revise escalates. Routine approved is the only path to accepted
+// with no further look.
+export function applyAcceptance(st, { verdict, risk, defect } = {}) {
+  if (st?.status !== "gated") {
+    return { error: `accept reasons about a gated claim, not ${st?.status ?? "missing"}` };
+  }
+  if (!VERDICTS.includes(verdict)) {
+    return { error: `verdict must be one of: ${VERDICTS.join(", ")}` };
+  }
+  if (verdict === "approved" && !RISKS.includes(risk)) {
+    return { error: `risk must be one of: ${RISKS.join(", ")}` };
+  }
+  if (verdict === "approved" && st.gate_ok === false) {
+    return {
+      error: "gate failed; approved is refused. Revise with the gate output, or reject, or escalate.",
+    };
+  }
+  if (verdict === "revise") {
+    if (!defect || !String(defect).trim()) {
+      return {
+        error: "revise requires a named defect — the gate output, a diff fact, or a missed Done when item.",
+      };
+    }
+    const round = (st.revise_round ?? 0) + 1;
+    if (round > 1) {
+      return {
+        status: "escalated",
+        verdict: "escalate",
+        revise_round: round,
+        reason: "revise round spent",
+        named_defect: String(defect),
+      };
+    }
+    return {
+      status: "pending",
+      verdict: "revise",
+      revise_round: round,
+      named_defect: String(defect),
+      reason: String(defect),
+    };
+  }
+  if (verdict === "rejected" || verdict === "escalate" || risk === "critical") {
+    return {
+      status: "escalated",
+      verdict: verdict === "approved" ? "escalate" : verdict,
+      risk: risk ?? null,
+      reason: risk === "critical" ? "critical risk" : verdict,
+    };
+  }
+  if (risk === "routine") return { status: "accepted", verdict, risk, reason: null };
+  return { status: "reviewed", verdict, risk, reason: null };
+}
+
+export function applyConfirm(st, agree) {
+  if (st?.status !== "reviewed") {
+    return { error: `confirm reasons about a reviewed session, not ${st?.status ?? "missing"}` };
+  }
+  if (agree === true) return { status: "accepted", reason: null };
+  if (agree === false) return { status: "escalated", verdict: "escalate", reason: "supervisor disagrees" };
+  return { error: "confirm requires agree true or false" };
+}
+
+function commitAcceptance(dir, id, next) {
+  const state = loadState(dir);
+  const st = state.sessions[id];
+  if (!st) die(`no session ${id} in state.json`);
+  const applied = next(st);
+  if (applied.error) die(applied.error);
+  if (applied.status === "pending") delete st.ended_at;
+  Object.assign(st, applied);
+  state.events.push(`${nowISO()} ${id} ${applied.status}${applied.reason ? `: ${applied.reason}` : ""}`);
+  writeJSON(join(dir, "state.json"), state);
+  console.log(`${id} ${applied.status}`);
+  return state;
+}
+
 export function route(dir) {
   const plan = readJSON(join(dir, "plan.json"));
   if (!plan?.sessions?.length) die("plan.json missing or has no sessions");
@@ -1709,7 +1842,20 @@ export function route(dir) {
       .sort((a, b) => a.score - b.score)[0].c;
   };
   for (const s of [...plan.sessions].sort((a, b) => a.id.localeCompare(b.id))) {
-    const size = s.size ?? "m";
+    if (!REASONED_TIERS.has(s.tier)) {
+      die(
+        `session ${s.id} has no tier. Reason it as mechanical, design, or review and set "tier" — route will not guess.`,
+      );
+    }
+    if (!REASONED_SIZES.has(s.size)) {
+      die(
+        `session ${s.id} has no size. Reason it as s, m, or l and set "size" — route will not guess.`,
+      );
+    }
+    const answered = reasonedNeeds(s);
+    if (answered.error) die(`session ${s.id} ${answered.error}`);
+    s.needs = answered.needs;
+    const size = s.size;
     const effort = s.effort ?? EFFORT_BY_TIER[s.tier] ?? DEFAULT_EFFORT;
     const hasModelOverride = Boolean(s.model);
     const hasEffortOverride = Boolean(s.effort);
@@ -1961,7 +2107,7 @@ export function renderModel(s) {
 function renderRouting(r) {
   const rows = r.sessions.map(
     (s) =>
-      `| ${s.id} | ${s.goal?.slice(0, 40) ?? ""} | ${s.provider} | ${renderModel(s)} | ${pct(s.lane_remaining_pct ?? s.remaining_pct)} | ~${s.est_cost_pct}% | ${s.isolation} | ${(s.deps ?? []).join(",") || "—"} | ${s.not_before ? `holds ${fmtDur(Math.round((Date.parse(s.not_before) - Date.now()) / 1000))}` : "now"} | ${s.rtk && s.rtk.mode !== "off" ? `${s.rtk.mode}/${s.rtk.via}` : "—"} |`,
+      `| ${s.id} | ${s.goal?.slice(0, 40) ?? ""} | ${s.provider} | ${renderModel(s)} | ${pct(s.lane_remaining_pct ?? s.remaining_pct)} | ~${s.est_cost_pct}% | ${s.isolation} | ${(s.deps ?? []).join(",") || "—"} | ${s.not_before ? `holds ${fmtDur(Math.round((Date.parse(s.not_before) - Date.now()) / 1000))}` : "now"} | ${(s.needs ?? []).join(",") || "—"} | ${s.rtk && s.rtk.mode !== "off" ? `${s.rtk.mode}/${s.rtk.via}` : "—"} |`,
   );
   const legend = [];
   if (r.sessions.some((s) => s.override)) {
@@ -1981,8 +2127,8 @@ function renderRouting(r) {
   const parallelNote = `> **Execution Graph:** ${r.sessions.length} sessions total · **${rootSessions.length} session(s) runnable immediately in parallel**.`;
   return [
     "",
-    "| Session | Goal | Provider | Model [lane] | Remaining | Est. cost | Isolation | Deps | Starts | RTK |",
-    "|---|---|---|---|---|---|---|---|---|---|",
+    "| Session | Goal | Provider | Model [lane] | Remaining | Est. cost | Isolation | Deps | Starts | Needs | RTK |",
+    "|---|---|---|---|---|---|---|---|---|---|---|",
     ...rows,
     parallelNote,
     ...legend,
@@ -2081,7 +2227,16 @@ const AUTH_DEATH =
 const QUOTA_DEATH =
   /rate.?limit|usage limit|quota|out of extra usage|session limit|too many requests|429|insufficient credits|resource.?exhausted/i;
 
-const TERMINAL_STATUS = new Set(["done", "blocked", "failed", "abandoned"]);
+const TERMINAL_STATUS = new Set([
+  "done",
+  "blocked",
+  "failed",
+  "abandoned",
+  "gated",
+  "reviewed",
+  "accepted",
+  "escalated",
+]);
 const isTerminal = (st) => TERMINAL_STATUS.has(st);
 
 // Result files are written last. A parseable terminal status is authoritative
@@ -2242,25 +2397,29 @@ export function evaluateSettle({ state, settleDeadline, settleS = DEFAULT_SETTLE
   };
 }
 
+function claimToStatus(parsed, s, dir, cwd) {
+  if (parsed !== "done") return { status: parsed, reason: null };
+  const verify = s?.verify;
+  const hasVerify = Array.isArray(verify) ? verify.length > 0 : Boolean(verify);
+  if (!hasVerify) return { status: "gated", gate_ok: true, reason: null };
+  const gateCwd = cwd || (existsSync(join(dir, "wt", s.id)) ? join(dir, "wt", s.id) : dir);
+  const gateRes = runSessionGates(verify, { cwd: gateCwd, env: RTK_ENV });
+  if (!gateRes.ok) {
+    return {
+      status: "gated",
+      gate_ok: false,
+      reason: `gate verification failed: ${gateRes.summary}`,
+      gate_results: gateRes.results,
+    };
+  }
+  return { status: "gated", gate_ok: true, reason: null, gate_results: gateRes.results };
+}
+
 export function classifyExit(dir, s, code, elapsedSec = 0, cwd = null) {
   const resultPath = join(dir, "sessions", `${s.id}.result.md`);
   if (existsSync(resultPath)) {
     const parsed = parseResultStatus(readFileSync(resultPath, "utf8"));
-    if (parsed) {
-      if (parsed === "done" && s?.verify && (Array.isArray(s.verify) ? s.verify.length : true)) {
-        const gateCwd = cwd || (existsSync(join(dir, "wt", s.id)) ? join(dir, "wt", s.id) : dir);
-        const gateRes = runSessionGates(s.verify, { cwd: gateCwd, env: RTK_ENV });
-        if (!gateRes.ok) {
-          return {
-            status: "failed",
-            reason: `gate verification failed: ${gateRes.summary}`,
-            gate_results: gateRes.results,
-          };
-        }
-        return { status: "done", reason: null, gate_results: gateRes.results };
-      }
-      return { status: parsed, reason: null };
-    }
+    if (parsed) return claimToStatus(parsed, s, dir, cwd);
   }
   const tail = tailOf(join(dir, "logs", `${s.id}.log`));
   // P2: Auth failure or immediate launch crash (< 15s)
@@ -2275,7 +2434,15 @@ export function classifyExit(dir, s, code, elapsedSec = 0, cwd = null) {
   return { status: "failed", reason: `exit ${code}` };
 }
 
-const PARENT_TERMINAL = new Set(["done", "failed", "blocked"]);
+const PARENT_TERMINAL = new Set([
+  "done",
+  "failed",
+  "blocked",
+  "gated",
+  "reviewed",
+  "accepted",
+  "escalated",
+]);
 const isParentTerminal = (st) => PARENT_TERMINAL.has(st);
 
 export function isPidAlive(pid) {
@@ -2317,9 +2484,10 @@ function sessionInflight(id, st, live, isAlive = isPidAlive) {
 
 // A later `status`/`dispatch` has no child `exit` listener — the previous
 // dispatch process is gone, and the provider may still be alive. A parseable
-// terminal result is durable: it wins over pending, running, and abandoned so
-// dependents unlock from the file, not from in-memory status. Already-applied
-// done/failed/blocked is left alone, including when the file disagrees.
+// terminal result is durable: it wins over pending, running, and abandoned and
+// lands as gated (or failed/blocked). Dependents stay pending until accept
+// moves the claim to accepted. Already-applied parent-terminal statuses are
+// left alone, including when the file disagrees.
 export function reconcileFromResults(dir, routing, state) {
   let changed = false;
   for (const s of routing?.sessions ?? []) {
@@ -2329,19 +2497,11 @@ export function reconcileFromResults(dir, routing, state) {
     if (!existsSync(resultPath)) continue;
     const parsed = parseResultStatus(readFileSync(resultPath, "utf8"));
     if (!parsed) continue;
-    let finalStatus = parsed;
-    let reason = null;
-    let gateResults = null;
-    if (parsed === "done" && s?.verify && (Array.isArray(s.verify) ? s.verify.length : true)) {
-      const gateCwd = st.cwd || (existsSync(join(dir, "wt", s.id)) ? join(dir, "wt", s.id) : dir);
-      const gateRes = runSessionGates(s.verify, { cwd: gateCwd, env: RTK_ENV });
-      if (!gateRes.ok) {
-        finalStatus = "failed";
-        reason = `gate verification failed: ${gateRes.summary}`;
-      }
-      gateResults = gateRes.results;
-      st.gate_results = gateResults;
-    }
+    const claimed = claimToStatus(parsed, s, dir, st.cwd || null);
+    const finalStatus = claimed.status;
+    const reason = claimed.reason;
+    if (claimed.gate_results) st.gate_results = claimed.gate_results;
+    if (claimed.gate_ok !== undefined) st.gate_ok = claimed.gate_ok;
     st.status = finalStatus;
     if (reason) st.reason = reason;
     st.ended_at ??= nowISO();
@@ -2505,7 +2665,7 @@ async function dispatch(dir) {
   const live = new Map(); // id -> child process
 
   const depsDone = (s) =>
-    (s.deps ?? []).every((d) => state.sessions[d]?.status === "done");
+    (s.deps ?? []).every((d) => state.sessions[d]?.status === "accepted");
 
   const reassign = (s) => {
     // The lane died — which is not the same as the slot dying. A Cursor session
@@ -2612,9 +2772,8 @@ async function dispatch(dir) {
             return;
           }
           st.ended_at = nowISO();
-          if (verdict.gate_results) {
-            st.gate_results = verdict.gate_results;
-          }
+          if (verdict.gate_results) st.gate_results = verdict.gate_results;
+          if (verdict.gate_ok !== undefined) st.gate_ok = verdict.gate_ok;
           if (
             verdict.status === "quota" ||
             verdict.status === "auth_death" ||
@@ -2689,7 +2848,11 @@ async function dispatch(dir) {
         !isPidAlive(state.sessions[s.id].pid),
     );
     if (!inflight && !launchable) {
-      const stuck = routing.sessions.filter((s) => state.sessions[s.id].status === "pending");
+      const waiting = new Set(["gated", "reviewed"]);
+      const stuck = routing.sessions.filter((s) => {
+        if (state.sessions[s.id].status !== "pending") return false;
+        return !(s.deps ?? []).some((d) => waiting.has(state.sessions[d]?.status));
+      });
       if (stuck.length) {
         for (const s of stuck) {
           state.sessions[s.id].status = "abandoned";
@@ -2713,13 +2876,22 @@ async function dispatch(dir) {
 
   saveState(dir, state);
   console.log(renderStatus(dir, routing, state));
-  const pending = routing.sessions.filter((s) => !isTerminal(state.sessions[s.id].status));
+  const pending = routing.sessions.filter((s) =>
+    ["pending", "running"].includes(state.sessions[s.id].status),
+  );
+  const awaiting = routing.sessions.filter((s) =>
+    ["gated", "reviewed"].includes(state.sessions[s.id].status),
+  );
   if (pending.length) {
     console.log(
       `\nstill running: ${pending.map((s) => s.id).join(", ")} — call \`handoff dispatch --run ${dir}\` again.`,
     );
+  } else if (awaiting.length) {
+    console.log(
+      `\nawaiting acceptance: ${awaiting.map((s) => `${s.id} ${state.sessions[s.id].status}`).join(", ")} — reason a verdict with \`handoff accept\`.`,
+    );
   } else {
-    console.log(`\nall sessions terminal — run \`handoff score --run ${dir}\`.`);
+    console.log(`\nall sessions settled — run \`handoff score --run ${dir}\`.`);
   }
 }
 
@@ -2810,7 +2982,15 @@ export async function score(dir) {
   }
 
   const st = (id) => state.sessions[id] ?? {};
-  const done = routing.sessions.filter((s) => st(s.id).status === "done");
+  const unfinished = routing.sessions.filter((s) =>
+    ["pending", "running", "done", "gated", "reviewed"].includes(st(s.id).status),
+  );
+  if (unfinished.length) {
+    die(
+      `score refused: ${unfinished.map((s) => `${s.id} is ${st(s.id).status}`).join(", ")}. Accept or escalate them first.`,
+    );
+  }
+  const done = routing.sessions.filter((s) => st(s.id).status === "accepted");
   const providersUsed = [...new Set(routing.sessions.map((s) => st(s.id).slot).filter(Boolean))];
   const providersAvail = before.slots.filter((s) => s.installed).map((s) => s.key);
   const wall = Math.round(secsSince(state.started_at));
@@ -3003,6 +3183,23 @@ if (isCLI) {
       die("usage: handoff mark [--run DIR] <session-id> <status> [--note NOTE]");
     }
     markSession(dir, id, status, { note });
+  } else if (cmd === "accept") {
+    const dir = runDir();
+    const id = commandPositionals()[0];
+    if (!id || !arg("verdict")) {
+      die("usage: handoff accept --run DIR <id> --verdict approved|revise|rejected|escalate [--risk routine|notable|consequential|critical] [--defect TEXT]");
+    }
+    commitAcceptance(dir, id, (st) =>
+      applyAcceptance(st, { verdict: arg("verdict"), risk: arg("risk"), defect: arg("defect") }),
+    );
+  } else if (cmd === "confirm") {
+    const dir = runDir();
+    const id = commandPositionals()[0];
+    const agree = arg("agree");
+    if (!id || (agree !== "yes" && agree !== "no")) {
+      die("usage: handoff confirm --run DIR <id> --agree yes|no");
+    }
+    commitAcceptance(dir, id, (st) => applyConfirm(st, agree === "yes"));
   } else if (cmd === "score") {
     await score(runDir());
   } else if (cmd === "clean") {
@@ -3020,6 +3217,10 @@ if (isCLI) {
   status   --run DIR                one line per session + result digest blocks
   mark     [--run DIR] <id> <status> [--note NOTE]
                                     durable parent correction; records event and unblocks dependents
+  accept   --run DIR <id> --verdict V [--risk R] [--defect TEXT]
+                                    apply the supervisor's reasoned verdict
+  confirm  --run DIR <id> --agree yes|no
+                                    confirm or reject a reviewed (non-routine) acceptance
   score    --run DIR                cost + defect scorecard, appends metrics.jsonl
   clean    --run DIR [--branches]   remove clean worktrees and run dir; --branches also
                                    deletes this run's session branches merged into HEAD

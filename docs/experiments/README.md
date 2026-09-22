@@ -1,6 +1,6 @@
 # Experiments
 
-Versioned trials that are **not** part of any skill. A model loading `skills/` must not find a scorer, a checkpoint, or an instruction to call one here. These pages are for people deciding whether a later trial is worth running.
+Versioned trials that are **not** part of any skill. Not to be confused with an **experiment skill**, which does ship in `skills/` and is run like any other — the distinction, and what an experiment skill owes, is in [`AGENTS.md`](../../AGENTS.md). A model loading `skills/` must not find a scorer, a checkpoint, or an instruction to call one here. These pages are for people deciding whether a later trial is worth running.
 
 The baseline a scorer has to beat is the reasoned record the skill already writes: `tier`, `size`, `capability_answers`, `needs`, and the verdict and risk stored by `accept`. Trials do not replace that record.
 

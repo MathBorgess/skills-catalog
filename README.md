@@ -80,19 +80,22 @@ Two things it deliberately does not cover: a pull on a branch other than `main`,
 
 ## Catalog
 
-| Skill | Version | What it does |
-|---|---|---|
-| [`handoff`](skills/handoff/) | 3.0.0 | Compacts a conversation into a session brief, or cuts remaining work into a dependency graph of parallel Cursor, Claude, Codex, and Antigravity sessions: it probes each provider\'s remaining plan quota (every window, and every lane a provider bills separately), refuses a cut whose sessions collide, assigns slots by refill rate rather than raw balance, closes the graph, model and effort per session with you in one hash-locked gate, dispatches and reroutes around a provider or lane that runs out, returns each finished session's result in the digest, can route every child's shell output through RTK (chosen in the plan, scoped to the run), and scores what the run cost in quota. Ships a guard hook that blocks reading a live run's child logs and worktrees. |
-| [`study-wiki`](skills/study-wiki/) | 1.0.0 | Interviews you about the certifications you are chasing, then builds and operates a personal study repository: a knowledge graph of notes, a question bank, an error log, and a daily study loop that injects questions, grades your answers, and records where you are weak. |
-| [`teach-me`](skills/teach-me/) | 1.1.0 | Runs one study session against a wiki that already exists: a phone-sized HTML lesson plus a session note and error log. Not for bootstrapping an empty wiki — that is study-wiki. |
-| [`shunt`](skills/shunt/) | 1.1.0 | Keeps a large model off heavy I/O: activate a guard that refuses full-file reads over a line/byte threshold and points the parent at an outline script or a small/fast subagent; boilerplate, config, and mechanical tests are spawned the same way and not read back. Patch targets can be read whole up to a ceiling, noisy commands run through a wrapper that keeps the raw log, and every run ends with a report of what compression cost in recoveries. `activate --rtk` routes Bash through [RTK](https://github.com/rtk-ai/rtk) for that run only, keeping diffs, code and search raw. |
-| [`skills-evaluate`](skills/skills-evaluate/) | 0.2.0 | Reads the metrics the other skills leave in the OS temp dir, the maintainer sketchpad and open issues; compares the last run with the recent median, diagnoses root causes, checks each skill against its own scope, and proposes improvements to the skill or to its observability. |
+Two kinds of thing live here. An **operator** skill is one you run to get work done, on work that keeps arriving. An **experiment** skill is one built to test an idea and come back with a measurement — about orchestration, judgment, cost or taste — and it may be fixed to one subject, because the subject is what is being held still. An experiment leaves the catalog when its question is answered. The rule for both is in [`AGENTS.md`](AGENTS.md).
+
+| Skill | Version | Kind | What it does |
+|---|---|---|---|
+| [`handoff`](skills/handoff/) | 3.0.0 | operator | Compacts a conversation into a session brief, or cuts remaining work into a dependency graph of parallel Cursor, Claude, Codex, and Antigravity sessions: it probes each provider\'s remaining plan quota (every window, and every lane a provider bills separately), refuses a cut whose sessions collide, assigns slots by refill rate rather than raw balance, closes the graph, model and effort per session with you in one hash-locked gate, dispatches and reroutes around a provider or lane that runs out, returns each finished session's result in the digest, can route every child's shell output through RTK (chosen in the plan, scoped to the run), and scores what the run cost in quota. Ships a guard hook that blocks reading a live run's child logs and worktrees. |
+| [`study-wiki`](skills/study-wiki/) | 1.0.0 | operator | Interviews you about the certifications you are chasing, then builds and operates a personal study repository: a knowledge graph of notes, a question bank, an error log, and a daily study loop that injects questions, grades your answers, and records where you are weak. |
+| [`teach-me`](skills/teach-me/) | 1.1.0 | operator | Runs one study session against a wiki that already exists: a phone-sized HTML lesson plus a session note and error log. Not for bootstrapping an empty wiki — that is study-wiki. |
+| [`shunt`](skills/shunt/) | 1.1.0 | operator | Keeps a large model off heavy I/O: activate a guard that refuses full-file reads over a line/byte threshold and points the parent at an outline script or a small/fast subagent; boilerplate, config, and mechanical tests are spawned the same way and not read back. Patch targets can be read whole up to a ceiling, noisy commands run through a wrapper that keeps the raw log, and every run ends with a report of what compression cost in recoveries. `activate --rtk` routes Bash through [RTK](https://github.com/rtk-ai/rtk) for that run only, keeping diffs, code and search raw. |
+| [`skills-evaluate`](skills/skills-evaluate/) | 0.2.0 | operator | Reads the metrics the other skills leave in the OS temp dir, the maintainer sketchpad and open issues; compares the last run with the recent median, diagnoses root causes, checks each skill against its own scope, and proposes improvements to the skill or to its observability. |
+| [`still-cursor-living-day`](skills/still-cursor-living-day/) | 0.0.0 | experiment | Runs one image collection end to end under a fixed axis: twelve frames of a black, non-emitting display used as a mirror, the cursor frozen at one coordinate while a day passes in the room reflected in the glass. It refuses a plan that breaks the restriction or that holds a frame nobody would miss, gates the twelve briefs with you in one hash-locked approval, dispatches the generations in parallel (GPT-Image, Gemini, a CLI child, or a manual drop), proves twelve real images of one geometry actually landed, and runs a two-pass LLM-as-judge — blind first, which scores each frame and reorders the day into a Kendall tau — that proposes and never regenerates. Ships a guard hook that seals the plan while the blind pass is open. |
 
 ## Using a skill
 
 How a skill works under the hood, for whoever maintains it, is in [`docs/`](docs/) — written for people, never loaded by a model.
 
-After install, start a session and type `/handoff`, `/study-wiki`, `/teach-me`, `/shunt`, or `/skills-evaluate`, or just say what you want — the skill's `description` is what makes the model reach for it on its own.
+After install, start a session and type `/handoff`, `/study-wiki`, `/teach-me`, `/shunt`, `/skills-evaluate`, or `/still-cursor-living-day`, or just say what you want — the skill's `description` is what makes the model reach for it on its own.
 
 **Recommended: run shunt and handoff with RTK**
 
@@ -149,13 +152,13 @@ metadata:
 
 All changes land through **pull requests** against `main`. Direct pushes to `main` are blocked, including for admins. Branch, open a PR, wait for the **Catalog** check, merge.
 
-Issues and suggestions are welcome. A new skill has to meet [`CLAUDE.md`](CLAUDE.md) (same rules in [`AGENTS.md`](AGENTS.md)). Short version: one job per skill, a description written for the moment of triggering, `metadata.author` and `metadata.version` in the frontmatter, an `agents/openai.yaml`, no dead scaffolding, and every instruction concrete enough that two different models produce the same shape of output.
+Issues and suggestions are welcome. A new skill has to meet [`AGENTS.md`](AGENTS.md), the one contract every agent in this repo works from. Short version: one job per skill, a description written for the moment of triggering, `metadata.author` and `metadata.version` in the frontmatter, an `agents/openai.yaml`, no dead scaffolding, and every instruction concrete enough that two different models produce the same shape of output.
 
 Skills contributed by other people keep their own author in `metadata.author`; authorship travels with the skill, not with the repository.
 
 ### Add a skill
 
-1. Read `CLAUDE.md` and one existing skill end to end.
+1. Read `AGENTS.md` and one existing skill end to end.
 2. Create `skills/<name>/SKILL.md` and `skills/<name>/agents/openai.yaml`.
 3. Add a row to the catalog table above at version `0.0.0`.
 4. Append `"./skills/<name>"` to `.claude-plugin/plugin.json` → `skills`.

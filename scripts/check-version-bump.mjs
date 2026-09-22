@@ -59,7 +59,7 @@ if (baseVersion === headVersion) {
   console.error(
     `check-version-bump: skills/ changed but package.json is still ${headVersion}, same as ` +
       `${baseRef}. Bump it — \`npm version patch|minor|major\` (syncs plugin.json) — or this ` +
-      `merges but never publishes. See CLAUDE.md § Release.`,
+      `merges but never publishes. See AGENTS.md § Release.`,
   );
   process.exit(1);
 }

@@ -49,9 +49,11 @@ import { fileURLToPath } from "node:url";
 import { RTK_ENV, RTK_PROMPT, historyStats, normalizeMode, rtkVersion } from "./rtk.mjs";
 import {
   claudeConfigDirs,
+  codexHomes,
   localSearchPaths,
   localSnapshot,
 } from "./local-usage.mjs";
+import { runSessionGates } from "./gate.mjs";
 
 const LOW_PCT = Number(process.env.HANDOFF_LOW_PCT ?? 20);
 const PROBE_TTL_S = 300;
@@ -155,7 +157,7 @@ function readKeychain(service) {
 // Three outcomes, not two. "The file is not there" and "the file is there and
 // holds no token" call for different fixes, and collapsing them into `missing`
 // throws away the more useful half.
-function firstUsable(sources, isExpired) {
+export function firstUsable(sources, isExpired) {
   const tried = [];
   let expiredSeen = false;
   for (const src of sources) {
@@ -561,6 +563,42 @@ function cursorLanes(plan, payload) {
   ];
 }
 
+export function resolveCodexModel(bin = "codex", account = null) {
+  if (process.env.CODEX_MODEL) return process.env.CODEX_MODEL;
+  for (const dir of codexHomes()) {
+    if (account && account !== "default") {
+      const profCfg = join(dir, `${account}.config.toml`);
+      if (existsSync(profCfg)) {
+        try {
+          const text = readFileSync(profCfg, "utf8");
+          const m = text.match(/^\s*model\s*=\s*["']?([^"'\s#]+)["']?/m);
+          if (m && m[1] && m[1].toLowerCase() !== "default") return m[1];
+        } catch {}
+      }
+    }
+    const cfg = join(dir, "config.toml");
+    if (existsSync(cfg)) {
+      try {
+        const text = readFileSync(cfg, "utf8");
+        const m = text.match(/^\s*model\s*=\s*["']?([^"'\s#]+)["']?/m);
+        if (m && m[1] && m[1].toLowerCase() !== "default") return m[1];
+      } catch {}
+    }
+    const cache = join(dir, "models_cache.json");
+    if (existsSync(cache)) {
+      try {
+        const j = JSON.parse(readFileSync(cache, "utf8"));
+        if (j.default_model && j.default_model.toLowerCase() !== "default") return j.default_model;
+        if (Array.isArray(j.models) && j.models.length > 0) {
+          const slug = j.models[0]?.slug || j.models[0]?.id;
+          if (slug && slug.toLowerCase() !== "default") return slug;
+        }
+      } catch {}
+    }
+  }
+  return "gpt-5.6-sol";
+}
+
 // The CLI's own model list, so a lane can be pinned to a real id instead of an
 // invented one. Each CLI publishes it differently — `cursor-agent
 // --list-models`, `agy models` — and a CLI with no such command exits non-zero,
@@ -569,6 +607,21 @@ function cursorLanes(plan, payload) {
 const MODEL_LIST_ARGS = { cursor: ["--list-models"], antigravity: ["models"] };
 const modelListCache = new Map();
 export function cliModels(bin, provider) {
+  if (provider === "codex") {
+    for (const dir of codexHomes()) {
+      const cachePath = join(dir, "models_cache.json");
+      if (existsSync(cachePath)) {
+        try {
+          const j = JSON.parse(readFileSync(cachePath, "utf8"));
+          if (Array.isArray(j.models)) {
+            const list = j.models.map((m) => m.slug || m.id).filter(Boolean);
+            if (list.length) return list;
+          }
+        } catch {}
+      }
+    }
+    return [resolveCodexModel(bin)];
+  }
   const listArgs = MODEL_LIST_ARGS[provider];
   if (!listArgs) return [];
   if (modelListCache.has(bin)) return modelListCache.get(bin);
@@ -1128,6 +1181,11 @@ async function probe() {
       p.credSources(),
       p.isExpired,
     );
+    // An expired copy is only bad news when nothing else answered. A CLI that
+    // keeps its live token in the Keychain routinely leaves a stale
+    // `.credentials.json` behind, and counting that as "auth expired" blanks a
+    // slot whose usage windows this probe just read successfully.
+    const authExpired = expiredSeen && !creds;
     if (!creds) {
       const tokenless = tried.filter((t) => t.state === "no token").map((t) => t.label);
       if (expiredSeen) {
@@ -1173,7 +1231,7 @@ async function probe() {
     // P1: A slot that fell back to transcripts *because* credentials expired is
     // unusable, so do not estimate quota from transcripts if auth expired.
     let estimated = false;
-    if (!result && p.local && !expiredSeen) {
+    if (!result && p.local && !authExpired) {
       const local = localSnapshot(p.local);
       const asWindow = (l) => ({
         windows: [
@@ -1208,7 +1266,7 @@ async function probe() {
         lanes: result?.lanes,
         source: source ?? "probe failed",
         estimated, note,
-        auth_expired: Boolean(expiredSeen),
+        auth_expired: authExpired,
         tried: arg("explain") ? tried : undefined,
       }),
     );
@@ -1482,6 +1540,36 @@ const LANE_PENALTY = 3;
 // and a frontier one, whatever it calls them.
 const preferredLane = (tier) => (tier === "mechanical" ? "own" : "frontier");
 
+// Providers whose CLI lists no models still spend a specific one, so the table
+// cannot say "unpinned" and the child cannot inherit whatever default the CLI
+// happens to carry. The roster is written frontier-first and is overridable,
+// because model names outlive neither the CLI nor this file.
+const FALLBACK_MODELS = {
+  claude: (process.env.HANDOFF_CLAUDE_MODELS ?? "opus,sonnet,haiku")
+    .split(",")
+    .map((m) => m.trim())
+    .filter(Boolean),
+};
+
+// `wanted` is the lane the tier prefers, so a mechanical session takes the
+// cheaper model and everything else takes the frontier one.
+const fallbackModel = (provider, wanted) => {
+  const roster = FALLBACK_MODELS[provider];
+  if (!roster?.length) return null;
+  return wanted === "own" ? (roster[1] ?? roster[0]) : roster[0];
+};
+
+// The one place that answers "which model would this slot run?" for a session
+// being moved: a lane pins its own id, codex resolves its configured one, a
+// same-provider move keeps the model already named, and anything else falls to
+// the roster. A slot that still cannot name a model is not a recovery target.
+export const modelForReroute = (slot, lane, session) => {
+  if (lane) return pickModelForLane(slot.bin, slot.provider, lane);
+  if (slot.provider === "codex") return resolveCodexModel(slot.bin, slot.account);
+  if (slot.provider === session.provider && session.model) return session.model;
+  return fallbackModel(slot.provider, preferredLane(session.tier));
+};
+
 // P4: Provider sandbox capabilities. A session that declares `needs` cannot be
 // routed to a sandbox that blocks any of those requirements.
 const PROVIDER_CAPABILITIES = {
@@ -1695,7 +1783,11 @@ export function route(dir) {
     // Pin the lane to a model id the CLI actually lists. Without a pin the lane
     // is only a preference and the CLI's default model decides the pool, so the
     // table says so rather than claiming a routing decision it did not make.
-    const model = s.model ?? (cand.lane ? pickModelForLane(slot.bin, slot.provider, cand.lane) : null);
+    let model = s.model ?? (cand.lane ? pickModelForLane(slot.bin, slot.provider, cand.lane) : null);
+    if (!model && slot.provider === "codex") {
+      model = resolveCodexModel(slot.bin, slot.account);
+    }
+    if (!model) model = fallbackModel(slot.provider, wanted);
     assigned.push({
       ...s,
       size,
@@ -1728,6 +1820,22 @@ export function route(dir) {
       rtk: rtkFor(plan, s, slot.provider),
       rtk_events: join(dir, "sessions", `${s.id}.rtk.jsonl`),
     });
+  }
+
+  // Every session spends a specific model, so every session names one. Where
+  // the CLI lists its models, route pins one above; where it does not, the
+  // plan has to say which model it is buying instead of letting the CLI's
+  // current default decide silently after approval.
+  for (const s of assigned) {
+    if (s.model && s.model !== "default") continue;
+    const listed = cliModels(s.bin, s.provider).filter((m) => m && m !== "default");
+    die(
+      `session ${s.id} routes to ${s.provider} with no model named. Every session must name the ` +
+        `model it spends — set "model" in plan.json. ` +
+        (listed.length
+          ? `Valid models: ${listed.join(", ")}`
+          : `\`${s.bin}\` lists no models and has no fallback roster, so name the exact id you want.`),
+    );
   }
 
   const routing = {
@@ -1835,7 +1943,12 @@ function renderQuota(quota) {
 // The model and the lane are one decision, so they share a cell: the model id is
 // what actually decides which pool the session spends.
 export function renderModel(s) {
-  const model = s.model ?? "default";
+  let model = s.model ?? (s.provider === "codex" ? resolveCodexModel(s.bin, s.account) : null);
+  if (!model || model === "default") {
+    const listed = cliModels(s.bin, s.provider).filter((m) => m && m !== "default");
+    model = listed[0] || null;
+  }
+  if (!model || model === "default") model = "unpinned";
   const effort = s.effort ? ` ${s.effort}` : "";
   const mark = s.override ? " \u270e" : "";
   if (!s.lane) return `${model}${effort}${mark}`;
@@ -2129,11 +2242,25 @@ export function evaluateSettle({ state, settleDeadline, settleS = DEFAULT_SETTLE
   };
 }
 
-function classifyExit(dir, s, code, elapsedSec = 0) {
+export function classifyExit(dir, s, code, elapsedSec = 0, cwd = null) {
   const resultPath = join(dir, "sessions", `${s.id}.result.md`);
   if (existsSync(resultPath)) {
     const parsed = parseResultStatus(readFileSync(resultPath, "utf8"));
-    if (parsed) return { status: parsed, reason: null };
+    if (parsed) {
+      if (parsed === "done" && s?.verify && (Array.isArray(s.verify) ? s.verify.length : true)) {
+        const gateCwd = cwd || (existsSync(join(dir, "wt", s.id)) ? join(dir, "wt", s.id) : dir);
+        const gateRes = runSessionGates(s.verify, { cwd: gateCwd, env: RTK_ENV });
+        if (!gateRes.ok) {
+          return {
+            status: "failed",
+            reason: `gate verification failed: ${gateRes.summary}`,
+            gate_results: gateRes.results,
+          };
+        }
+        return { status: "done", reason: null, gate_results: gateRes.results };
+      }
+      return { status: parsed, reason: null };
+    }
   }
   const tail = tailOf(join(dir, "logs", `${s.id}.log`));
   // P2: Auth failure or immediate launch crash (< 15s)
@@ -2148,29 +2275,85 @@ function classifyExit(dir, s, code, elapsedSec = 0) {
   return { status: "failed", reason: `exit ${code}` };
 }
 
-// A later `status`/`dispatch` has no child `exit` listener — the previous
-// dispatch process is gone, and the provider may still be alive. If a running
-// session already wrote a terminal result, that file wins. Already-terminal
-// failed/blocked/done/abandoned is left alone, including when the file is
-// ambiguous or even clearly done.
-function reconcileFromResults(dir, routing, state) {
+const PARENT_TERMINAL = new Set(["done", "failed", "blocked"]);
+const isParentTerminal = (st) => PARENT_TERMINAL.has(st);
+
+export function isPidAlive(pid) {
+  if (!Number.isInteger(pid) || pid <= 0) return false;
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+// Resume path: the previous dispatcher exited, but the provider may still be
+// alive. A live pid is adopted as running so dependents are not abandoned and
+// the child is not spawned twice.
+export function adoptLiveSessions(routing, state, { isAlive = isPidAlive } = {}) {
   let changed = false;
   for (const s of routing?.sessions ?? []) {
     const st = state.sessions[s.id];
-    if (!st || st.status !== "running") continue;
+    if (!st || isParentTerminal(st.status)) continue;
+    if (!isAlive(st.pid)) continue;
+    if (st.status !== "running") {
+      st.status = "running";
+      st.reason = undefined;
+      state.events.push(`${nowISO()} ${s.id} adopted live pid ${st.pid}`);
+      changed = true;
+    }
+  }
+  return changed;
+}
+
+function sessionInflight(id, st, live, isAlive = isPidAlive) {
+  if (live.has(id)) return true;
+  if (!st) return false;
+  if (st.status === "running") return true;
+  if (!isTerminal(st.status) && isAlive(st.pid)) return true;
+  return false;
+}
+
+// A later `status`/`dispatch` has no child `exit` listener — the previous
+// dispatch process is gone, and the provider may still be alive. A parseable
+// terminal result is durable: it wins over pending, running, and abandoned so
+// dependents unlock from the file, not from in-memory status. Already-applied
+// done/failed/blocked is left alone, including when the file disagrees.
+export function reconcileFromResults(dir, routing, state) {
+  let changed = false;
+  for (const s of routing?.sessions ?? []) {
+    const st = state.sessions[s.id];
+    if (!st || isParentTerminal(st.status)) continue;
     const resultPath = join(dir, "sessions", `${s.id}.result.md`);
     if (!existsSync(resultPath)) continue;
     const parsed = parseResultStatus(readFileSync(resultPath, "utf8"));
     if (!parsed) continue;
-    st.status = parsed;
+    let finalStatus = parsed;
+    let reason = null;
+    let gateResults = null;
+    if (parsed === "done" && s?.verify && (Array.isArray(s.verify) ? s.verify.length : true)) {
+      const gateCwd = st.cwd || (existsSync(join(dir, "wt", s.id)) ? join(dir, "wt", s.id) : dir);
+      const gateRes = runSessionGates(s.verify, { cwd: gateCwd, env: RTK_ENV });
+      if (!gateRes.ok) {
+        finalStatus = "failed";
+        reason = `gate verification failed: ${gateRes.summary}`;
+      }
+      gateResults = gateRes.results;
+      st.gate_results = gateResults;
+    }
+    st.status = finalStatus;
+    if (reason) st.reason = reason;
     st.ended_at ??= nowISO();
-    state.events.push(`${nowISO()} ${s.id} ${parsed} (result file)`);
+    state.events.push(
+      `${nowISO()} ${s.id} ${finalStatus}${reason ? `: ${reason}` : ""} (result file)`,
+    );
     changed = true;
   }
   return changed;
 }
 
-function loadState(dir) {
+export function loadState(dir) {
   return (
     readJSON(join(dir, "state.json")) ?? {
       started_at: nowISO(),
@@ -2180,6 +2363,106 @@ function loadState(dir) {
       events: [],
     }
   );
+}
+
+// Supported parent correction that survives subsequent dispatcher writes.
+export function markSession(dir, id, status, { note = null } = {}) {
+  const validStatuses = ["done", "failed", "blocked", "pending"];
+  if (!validStatuses.includes(status)) {
+    die(`invalid status '${status}'. Must be one of: ${validStatuses.join(", ")}`);
+  }
+  const statePath = join(dir, "state.json");
+  const state = loadState(dir);
+  state.sessions[id] ??= {};
+  const prevStatus = state.sessions[id].status ?? "unknown";
+
+  state.sessions[id].status = status;
+  state.sessions[id].parent_correction = {
+    previous_status: prevStatus,
+    status,
+    note: note || null,
+    ts: nowISO(),
+  };
+  if (note) state.sessions[id].note = note;
+  if (status === "done" && !state.sessions[id].ended_at) {
+    state.sessions[id].ended_at = nowISO();
+  }
+
+  const notePart = note ? `: ${note}` : "";
+  const eventMsg = `${nowISO()} ${id} marked ${status} by parent (was ${prevStatus})${notePart}`;
+  state.events.push(eventMsg);
+
+  writeJSON(statePath, state);
+  console.log(`marked session ${id} as ${status}${note ? ` (${note})` : ""}`);
+  return state;
+}
+
+// Merge state from disk before dispatcher writes so parent corrections persist.
+export function mergeStateFromDisk(dir, state) {
+  const onDisk = readJSON(join(dir, "state.json"));
+  if (!onDisk) return state;
+
+  if (Array.isArray(onDisk.events)) {
+    const existing = new Set(state.events);
+    for (const ev of onDisk.events) {
+      if (!existing.has(ev)) {
+        state.events.push(ev);
+        existing.add(ev);
+      }
+    }
+  }
+
+  if (Array.isArray(onDisk.empty_slots)) {
+    for (const slot of onDisk.empty_slots) {
+      if (!state.empty_slots.includes(slot)) state.empty_slots.push(slot);
+    }
+  }
+
+  if (onDisk.sessions && typeof onDisk.sessions === "object") {
+    for (const [id, diskSess] of Object.entries(onDisk.sessions)) {
+      const memSess = state.sessions[id];
+      if (!memSess) {
+        state.sessions[id] = diskSess;
+        continue;
+      }
+
+      // A correction to pending must not clobber a later launch or a durable
+      // terminal status — that reset is what made a resumed dispatcher
+      // relaunch a still-live child.
+      if (diskSess.parent_correction) {
+        memSess.parent_correction = diskSess.parent_correction;
+        if (diskSess.note) memSess.note = diskSess.note;
+        const diskTerminal = isParentTerminal(diskSess.status);
+        const memProgressed =
+          memSess.status === "running" || isParentTerminal(memSess.status);
+        if (diskTerminal || !memProgressed) {
+          memSess.status = diskSess.status;
+          if (diskSess.ended_at) memSess.ended_at = diskSess.ended_at;
+        }
+        continue;
+      }
+
+      if (diskSess.status !== memSess.status) {
+        const wasTerminal = isTerminal(diskSess.status);
+        if (wasTerminal || memSess.status === "running" || memSess.status === "pending") {
+          memSess.status = diskSess.status;
+          if (diskSess.note) memSess.note = diskSess.note;
+          if (diskSess.ended_at) memSess.ended_at = diskSess.ended_at;
+          const correctionEv = `${nowISO()} ${id} corrected to ${diskSess.status} from disk${diskSess.note ? `: ${diskSess.note}` : ""}`;
+          if (!state.events.some((e) => e.includes(`${id} corrected to ${diskSess.status}`))) {
+            state.events.push(correctionEv);
+          }
+        }
+      }
+    }
+  }
+
+  return state;
+}
+
+export function saveState(dir, state) {
+  mergeStateFromDisk(dir, state);
+  writeJSON(join(dir, "state.json"), state);
 }
 
 async function dispatch(dir) {
@@ -2246,7 +2529,13 @@ async function dispatch(dir) {
         const key = lane ? `${q.key}/${lane.name}` : q.key;
         if (dead.has(key)) continue;
         const supply = supplyFor(q, lane, horizon);
-        if (supply > 0) options.push({ q, lane, supply });
+        // Model ids do not travel across providers, and inside a lane the id is
+        // what holds the session to that pool — so it is re-pinned, never
+        // carried over. A slot whose model nothing can name is not a recovery
+        // target: rerouting there would launch a session that does not know
+        // which model it spends.
+        const model = modelForReroute(q, lane, s);
+        if (supply > 0 && model) options.push({ q, lane, supply, model });
       }
     }
     const best = options.sort((a, b) => b.supply - a.supply)[0];
@@ -2255,20 +2544,20 @@ async function dispatch(dir) {
     s.provider = best.q.provider;
     s.bin = best.q.bin;
     s.lane = best.lane?.name ?? undefined;
-    // Model ids do not travel across providers, and inside a lane the id is what
-    // holds the session to that pool — so it is re-pinned, never carried over.
-    s.model = best.lane ? pickModelForLane(best.q.bin, best.q.provider, best.lane) : null;
+    s.model = best.model;
     s.lane_pinned = best.lane ? Boolean(s.model) : undefined;
     return s;
   };
 
   while (Date.now() < deadline) {
+    mergeStateFromDisk(dir, state);
     reconcileFromResults(dir, routing, state);
+    adoptLiveSessions(routing, state);
 
     // 1. launch everything whose dependencies are satisfied
     for (const s of routing.sessions) {
       const st = state.sessions[s.id];
-      if (st.status !== "pending" || live.has(s.id) || !depsDone(s)) continue;
+      if (st.status !== "pending" || live.has(s.id) || isPidAlive(st.pid) || !depsDone(s)) continue;
       if (s.not_before && Date.parse(s.not_before) > Date.now()) {
         st.held_until = s.not_before; // slot refills before this is worth starting
         continue;
@@ -2314,11 +2603,18 @@ async function dispatch(dir) {
           live.delete(s.id);
           if (settled) return;
           settled = true;
+          if (st.parent_correction && isParentTerminal(st.parent_correction.status)) {
+            saveState(dir, state);
+            return;
+          }
           if (isTerminal(st.status)) {
-            writeJSON(join(dir, "state.json"), state);
+            saveState(dir, state);
             return;
           }
           st.ended_at = nowISO();
+          if (verdict.gate_results) {
+            st.gate_results = verdict.gate_results;
+          }
           if (
             verdict.status === "quota" ||
             verdict.status === "auth_death" ||
@@ -2347,9 +2643,11 @@ async function dispatch(dir) {
           } else {
             st.status = verdict.status;
             st.reason = verdict.reason ?? undefined;
-            state.events.push(`${nowISO()} ${s.id} ${verdict.status}`);
+            state.events.push(
+              `${nowISO()} ${s.id} ${verdict.status}${verdict.reason ? `: ${verdict.reason}` : ""}`,
+            );
           }
-          writeJSON(join(dir, "state.json"), state);
+          saveState(dir, state);
         };
         // Both can fire for one failed spawn, in either order; `settle` is
         // idempotent so whichever arrives first decides.
@@ -2365,7 +2663,7 @@ async function dispatch(dir) {
           const elapsedSec = st.started_at
             ? Math.max(0, Math.round((Date.now() - Date.parse(st.started_at)) / 1000))
             : 0;
-          settle(classifyExit(dir, s, code ?? -1, elapsedSec));
+          settle(classifyExit(dir, s, code ?? -1, elapsedSec, cwd));
         });
       } catch (e) {
         st.status = "failed";
@@ -2374,12 +2672,23 @@ async function dispatch(dir) {
       }
     }
 
-    writeJSON(join(dir, "state.json"), state);
+    saveState(dir, state);
 
     const all = routing.sessions.map((s) => state.sessions[s.id]);
     if (all.every((st) => isTerminal(st.status))) break;
-    // Nothing running and nothing launchable: the DAG is stuck on a blocked dep.
-    if (!live.size && !routing.sessions.some((s) => state.sessions[s.id].status === "pending" && depsDone(s))) {
+    // Nothing inflight and nothing launchable: the DAG is stuck on a blocked
+    // dep. A previous dispatch's live children are inflight even though this
+    // process's `live` map is empty — do not abandon their dependents.
+    const inflight = routing.sessions.some((s) =>
+      sessionInflight(s.id, state.sessions[s.id], live),
+    );
+    const launchable = routing.sessions.some(
+      (s) =>
+        state.sessions[s.id].status === "pending" &&
+        depsDone(s) &&
+        !isPidAlive(state.sessions[s.id].pid),
+    );
+    if (!inflight && !launchable) {
       const stuck = routing.sessions.filter((s) => state.sessions[s.id].status === "pending");
       if (stuck.length) {
         for (const s of stuck) {
@@ -2402,7 +2711,7 @@ async function dispatch(dir) {
     await new Promise((r) => setTimeout(r, POLL_MS));
   }
 
-  writeJSON(join(dir, "state.json"), state);
+  saveState(dir, state);
   console.log(renderStatus(dir, routing, state));
   const pending = routing.sessions.filter((s) => !isTerminal(state.sessions[s.id].status));
   if (pending.length) {
@@ -2672,8 +2981,28 @@ if (isCLI) {
     const dir = runDir();
     const routing = readJSON(join(dir, "routing.json"));
     const state = loadState(dir);
-    if (reconcileFromResults(dir, routing, state)) writeJSON(join(dir, "state.json"), state);
+    if (reconcileFromResults(dir, routing, state)) saveState(dir, state);
     console.log(renderStatus(dir, routing, state));
+  } else if (cmd === "mark") {
+    const dir = runDir();
+    const positionals = [];
+    for (let i = 3; i < process.argv.length; i++) {
+      const a = process.argv[i];
+      if (a.startsWith("--")) {
+        if ((a === "--run" || a === "--note") && i + 1 < process.argv.length && !process.argv[i + 1].startsWith("--")) {
+          i++;
+        }
+      } else {
+        positionals.push(a);
+      }
+    }
+    const id = positionals[0];
+    const status = positionals[1];
+    const note = arg("note");
+    if (!id || !status) {
+      die("usage: handoff mark [--run DIR] <session-id> <status> [--note NOTE]");
+    }
+    markSession(dir, id, status, { note });
   } else if (cmd === "score") {
     await score(runDir());
   } else if (cmd === "clean") {
@@ -2689,6 +3018,8 @@ if (isCLI) {
   dispatch --run DIR [--budget S] [--settle S]
                                     launch ready sessions, wait, reroute on quota death
   status   --run DIR                one line per session + result digest blocks
+  mark     [--run DIR] <id> <status> [--note NOTE]
+                                    durable parent correction; records event and unblocks dependents
   score    --run DIR                cost + defect scorecard, appends metrics.jsonl
   clean    --run DIR [--branches]   remove clean worktrees and run dir; --branches also
                                    deletes this run's session branches merged into HEAD

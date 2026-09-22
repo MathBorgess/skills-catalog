@@ -35,7 +35,7 @@ Write `$HANDOFF_RUN/plan.json`:
 
 **Recommended: if `rtk --version` works, set `"rtk": "guarded"` in the plan** and raise it in the graph gate; `route` prints a `tip` when RTK is installed and the plan leaves it out. Whether RTK lowers task cost is still being measured ([skills-catalog#27](https://github.com/MathBorgess/skills-catalog/issues/27)).
 
-`model` and `effort` are optional owner overrides. `rtk` (`off` | `guarded` | `full`, plan-wide or per session; absent = `off`) routes the children's shell output through [RTK](https://github.com/rtk-ai/rtk) — see §4. A dependency means B needs A's output; independent sessions run in parallel. Give independent sessions disjoint write-sets. Set `tier`, `size`, `needs`, and an honest `horizon_s`; see [`references/routing.md`](references/routing.md).
+`model` and `effort` are optional owner overrides. When `model` is unset, route still names a real model from the lane pin, the CLI's configured model, or a provider roster, and refuses the plan when nothing can name one. `rtk` (`off` | `guarded` | `full`, plan-wide or per session; absent = `off`) routes the children's shell output through [RTK](https://github.com/rtk-ai/rtk) — see §4. A dependency means B needs A's output; independent sessions run in parallel. Give independent sessions disjoint write-sets. Set `tier`, `size`, `needs`, and an honest `horizon_s`; see [`references/routing.md`](references/routing.md).
 
 ## 2. Route and graph gate
 
@@ -59,7 +59,7 @@ Write every `NN.md` and `NN.prompt.md` after approval, using [`references/brief.
 node <skill>/scripts/handoff.mjs dispatch --run "$HANDOFF_RUN" --budget 540 --settle 30
 ```
 
-`--settle` is the adjustable settle window; its default is 30 seconds. Dispatch refuses a plan changed since approval. It launches eligible work, waits for dependencies, and reroutes recoverable provider failures without another approval.
+`--settle` is the adjustable settle window; its default is 30 seconds. Dispatch refuses a plan changed since approval. It launches eligible work, waits for dependencies, and reroutes recoverable provider failures without another approval. A later `dispatch` on the same run adopts still-live provider pids, treats a parseable `result.md` as durable even if state was reset to pending, and does not abandon dependents just because the previous dispatcher exited. `handoff mark` records a parent correction that survives the next dispatcher write.
 
 Read the dispatch digest. It includes each finished session's result block. Open `sessions/NN.result.md` only when action is required. Never open `logs/`, a child transcript, or `wt/`; relaunch a blocked child with a corrected brief instead of doing its work.
 
@@ -90,7 +90,7 @@ node <skill>/scripts/handoff.mjs clean --run "$HANDOFF_RUN" [--branches]
 ## Done-check
 
 - [ ] Probe ran before planning; plan has causal deps and disjoint concurrent writes.
-- [ ] Route accepted, graph gate completed, and `route --approve` locked the current hash before dispatch.
+- [ ] Route accepted, every session names a real model, graph gate completed, and `route --approve` locked the current hash before dispatch.
 - [ ] Every brief exists; no child was launched manually, implemented by the parent, or inspected through logs/worktrees.
 - [ ] Dispatch digest was used; changed plans were routed and approved again before dispatch.
 - [ ] RTK installed → `rtk` was proposed in the graph gate (on, or off with the owner's reason).

@@ -80,7 +80,7 @@ Two things it deliberately does not cover: a pull on a branch other than `main`,
 
 ## Catalog
 
-Two kinds of thing live here. An **operator** skill is one you run to get work done, on work that keeps arriving. An **experiment** skill is one built to test an idea and come back with a measurement — about orchestration, judgment, cost or taste — and it may be fixed to one subject, because the subject is what is being held still. An experiment leaves the catalog when its question is answered. The rule for both is in [`CLAUDE.md`](CLAUDE.md).
+Two kinds of thing live here. An **operator** skill is one you run to get work done, on work that keeps arriving. An **experiment** skill is one built to test an idea and come back with a measurement — about orchestration, judgment, cost or taste — and it may be fixed to one subject, because the subject is what is being held still. An experiment leaves the catalog when its question is answered. The rule for both is in [`AGENTS.md`](AGENTS.md).
 
 | Skill | Version | Kind | What it does |
 |---|---|---|---|
@@ -152,13 +152,13 @@ metadata:
 
 All changes land through **pull requests** against `main`. Direct pushes to `main` are blocked, including for admins. Branch, open a PR, wait for the **Catalog** check, merge.
 
-Issues and suggestions are welcome. A new skill has to meet [`CLAUDE.md`](CLAUDE.md) (same rules in [`AGENTS.md`](AGENTS.md)). Short version: one job per skill, a description written for the moment of triggering, `metadata.author` and `metadata.version` in the frontmatter, an `agents/openai.yaml`, no dead scaffolding, and every instruction concrete enough that two different models produce the same shape of output.
+Issues and suggestions are welcome. A new skill has to meet [`AGENTS.md`](AGENTS.md), the one contract every agent in this repo works from. Short version: one job per skill, a description written for the moment of triggering, `metadata.author` and `metadata.version` in the frontmatter, an `agents/openai.yaml`, no dead scaffolding, and every instruction concrete enough that two different models produce the same shape of output.
 
 Skills contributed by other people keep their own author in `metadata.author`; authorship travels with the skill, not with the repository.
 
 ### Add a skill
 
-1. Read `CLAUDE.md` and one existing skill end to end.
+1. Read `AGENTS.md` and one existing skill end to end.
 2. Create `skills/<name>/SKILL.md` and `skills/<name>/agents/openai.yaml`.
 3. Add a row to the catalog table above at version `0.0.0`.
 4. Append `"./skills/<name>"` to `.claude-plugin/plugin.json` → `skills`.

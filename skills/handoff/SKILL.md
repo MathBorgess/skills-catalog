@@ -4,7 +4,7 @@ description: Use when the user wants to compact work for a later agent, split it
 argument-hint: "compact | fan-out | provider or model constraints | rtk"
 metadata:
   author: Matheus Borges
-  version: 2.2.2
+  version: 3.0.0
 ---
 
 # Handoff

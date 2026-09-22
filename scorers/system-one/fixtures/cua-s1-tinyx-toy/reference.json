@@ -1,0 +1,48 @@
+{
+  "atol": 1e-05,
+  "context": "city",
+  "context_ids": [
+    100,
+    106,
+    117,
+    122
+  ],
+  "logits": [
+    -5.96166355535388e-05,
+    -5.2717485232278705e-05,
+    0.0009599016048014164
+  ],
+  "option_ids": [
+    [
+      103,
+      106,
+      109,
+      109,
+      33,
+      100,
+      106,
+      117
+    ],
+    [
+      116,
+      108,
+      106,
+      113
+    ],
+    [
+      100,
+      109,
+      106,
+      100,
+      108
+    ]
+  ],
+  "options": [
+    "fill city",
+    "skip",
+    "click"
+  ],
+  "recorder": "stdlib Python TinyTransformerScorer (float32, PyTorch norm_first=True + ReLU + AttentionHead equations)",
+  "rtol": 1e-05,
+  "source_commit": "9bbfa7dd3e27ca7f1861ede70aaca390174493f9"
+}

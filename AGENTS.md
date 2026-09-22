@@ -42,6 +42,10 @@ That symlinks `skills/*` into `~/.claude/skills`, `~/.cursor/skills`, `~/.codex/
 
 Canonical wording: [`.agents/install-block.md`](.agents/install-block.md). Changes reach `main` only through pull requests. Do not push to `main`.
 
+## Two kinds of skill
+
+An **operator** skill is a workflow you run to get work done on work that keeps arriving; it is generic by construction. An **experiment** skill is built to test an idea and come back with a measurement — it must name what it measures and leave the number behind, it may be fixed to one subject because the subject is the controlled variable, and it leaves the catalog when its question is answered. Both obey every other rule, and neither is a **trial** — a trial lives in `docs/experiments/`, ships nothing, and stays unreachable from `skills/`. Mark the kind in the `README.md` catalog table. Full definition: [`CLAUDE.md`](CLAUDE.md).
+
 ## Layout
 
 ```

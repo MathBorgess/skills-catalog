@@ -188,5 +188,6 @@ A skill doing work its `description` does not claim, or another skill's work.
 - "Recovery" meant both expected excerpts and failed compression — resolved: only failures are **recover events**.
 - "Done" meant both "the child finished" and "the work is good" — resolved: `done` is the child's claim, **accepted** is the system's conclusion.
 - "Review" named both a session tier and the correction loop — resolved: a **review** session verifies and never edits; a **revise round** edits and never judges its own result.
+- "Experiment" named both a **trial** under `docs/experiments/` and a shipped skill whose purpose is to measure — resolved: a **trial** ships nothing and stays unreachable from `skills/`; an **experiment skill** is installed and triggered like any other and earns its place with a number from real runs.
 - "Judge" collided with **teacher**, which must never write verdicts — resolved: a **judge** grades artefacts against a declared axis and decides nothing about what runs next; a **teacher** labels past decisions from their outcomes and grades no work. Neither may act inside the run it observes.
 - "Teacher" and **supervisor** were briefly the same role — resolved: they must not be. A supervisor labelling its own decisions trains a scorer to reproduce the supervisor's bias.

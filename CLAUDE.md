@@ -25,6 +25,22 @@ A rule the model is asked to *follow* is guidance; a rule a hook can *refuse* is
 
 Install commands for consumers live in [`.agents/install-block.md`](.agents/install-block.md). Change that file first, then `README.md`.
 
+## Two kinds of skill
+
+A skill here is either an **operator** or an **experiment**. The difference is what it is for, never how well it is written, and both obey every other rule in this file.
+
+**Operator.** A workflow you run to get work done, on work that keeps arriving. It earns its place by being reached for again, and it is generic by construction: it has to transfer to someone whose job is not yours.
+
+**Experiment.** A workflow built to test an idea and come back with a measurement — about orchestration, judgment, compression, cost, taste. The finding is as much the deliverable as the artefact. It earns its place by answering something. Exactly three things differ:
+
+1. **It names what it measures and leaves the number behind.** A metrics line, a score, a rank correlation — something a later run can be compared against. An experiment with no measurement is an operator skill with a hobby.
+2. **It may be fixed to one subject.** An operator skill that only works for one axis, one exam, one repository is broken. An experiment may be exactly that narrow, because the subject is the controlled variable. The scope narrows; the privacy rule does not move. Still public, still no personal data, still nothing that only makes sense with its author's biography.
+3. **It has an exit.** When the question is answered, the skill graduates into an operator skill, is folded into one, or leaves the catalog. An experiment nobody has run in months is not a finding, it is debris, and `skills-evaluate` is where that call gets made.
+
+Mark the kind in the `README.md` catalog table. If you cannot tell which one you are writing, you are writing an operator skill: make it generic.
+
+**An experiment skill is not a trial.** A **trial** lives in [`docs/experiments/`](docs/experiments/README.md), ships nothing, and is deliberately unreachable from `skills/` — a model must not find a checkpoint or an instruction to call one there. An **experiment skill** ships: it is installed, triggered and run like any other, and its measurement comes out of real runs rather than out of a bench. A trial decides whether something is worth building; an experiment skill is the thing built, kept honest by a number. One can become the other in either direction.
+
 ## SKILL.md
 
 Required frontmatter:
@@ -60,7 +76,7 @@ Invocation rules: [`.agents/invocation.md`](.agents/invocation.md). Default is m
 - **One job per skill.** If the description needs an "and also", it is two skills.
 - **Concrete over clever.** Every instruction should produce the same shape of output across two different models on two different days. File paths, section names and frontmatter fields are spelled out, never implied.
 - **No dead scaffolding.** Do not create a directory holding only a README that explains it is empty, a `.gitkeep`, or a "for later" placeholder. If it has no content, it does not exist yet.
-- **No personal data.** Skills are public and generic. No employer names, client names, account identifiers, absolute paths from someone's machine, or real cost figures. A skill that only makes sense with its author's biography is a case study, not a skill.
+- **No personal data.** Skills are public and generic. No employer names, client names, account identifiers, absolute paths from someone's machine, or real cost figures. A skill that only makes sense with its author's biography is a case study, not a skill. An **experiment** may be fixed to one subject (above); it may never be fixed to one person.
 - **English.** Skills in this catalog are written in English, including file and section names, even when the workflow they describe produces notes in another language.
 
 ## Adding a skill
@@ -68,7 +84,7 @@ Invocation rules: [`.agents/invocation.md`](.agents/invocation.md). Default is m
 1. Read this file and one existing skill end to end before writing.
 2. Create `skills/<name>/SKILL.md` against the rules above.
 3. Add `skills/<name>/agents/openai.yaml` (`interface.display_name`, `interface.short_description`).
-4. Add a row to the catalog table in `README.md` at version `0.0.0`. A skill missing from that table is a skill nobody will find. Leave the number at `0.0.0` until the commit that publishes it to `main`.
+4. Add a row to the catalog table in `README.md` at version `0.0.0`, naming its kind — `operator` or `experiment`. A skill missing from that table is a skill nobody will find. Leave the number at `0.0.0` until the commit that publishes it to `main`.
 5. Append `"./skills/<name>"` to the `skills` array in `.claude-plugin/plugin.json`.
 6. Keep reference files to one concern each, named by what they answer (`question-loop.md`, not `part-3.md`).
 7. Run `npm run check`. It must pass before you report the skill added.
@@ -99,6 +115,7 @@ So this is not left to a contributor remembering it. `scripts/check-version-bump
 ## Do not
 
 - Do not add a second catalog index. `README.md` is the catalog; `plugin.json` is the ship list and must match it (`npm run check`).
+- Do not leave an experiment in the catalog after its question is answered. Graduate it, fold it in, or delete it.
 - Do not append "Update YYYY-MM" sections to a skill. Rewrite the instruction; git holds the history.
 - Do not bump `metadata.version` or the README catalog version except in the commit that publishes that skill to `main`.
 - Do not document install commands anywhere except by copying [`.agents/install-block.md`](.agents/install-block.md).

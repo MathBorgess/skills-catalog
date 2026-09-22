@@ -11,6 +11,8 @@ metadata:
 
 One axis, twelve frames, three phases: you write the briefs, the owner gates them, generators produce the images, and a judge that never saw the briefs grades what came out. `scripts/collection.mjs` owns the arithmetic — validation, dispatch, file evidence, the shuffle, the tau, the scorecard. Do not redo it by hand, and do not judge your own briefs from this context.
 
+This is an **experiment** skill: the question it answers every run is whether a day still reads from the artefacts once the prompts are taken away, and the blind pass's ordering tau is the number it leaves behind.
+
 Read [`references/axis.md`](references/axis.md) before anything else. It is the contract: The Restriction, The Constant, The Variable, The Discard, and the seven attacks the finished collection has to survive.
 
 ## 1. Open the run and probe

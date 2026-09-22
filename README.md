@@ -87,12 +87,13 @@ Two things it deliberately does not cover: a pull on a branch other than `main`,
 | [`teach-me`](skills/teach-me/) | 1.1.0 | Runs one study session against a wiki that already exists: a phone-sized HTML lesson plus a session note and error log. Not for bootstrapping an empty wiki — that is study-wiki. |
 | [`shunt`](skills/shunt/) | 1.1.0 | Keeps a large model off heavy I/O: activate a guard that refuses full-file reads over a line/byte threshold and points the parent at an outline script or a small/fast subagent; boilerplate, config, and mechanical tests are spawned the same way and not read back. Patch targets can be read whole up to a ceiling, noisy commands run through a wrapper that keeps the raw log, and every run ends with a report of what compression cost in recoveries. `activate --rtk` routes Bash through [RTK](https://github.com/rtk-ai/rtk) for that run only, keeping diffs, code and search raw. |
 | [`skills-evaluate`](skills/skills-evaluate/) | 0.2.0 | Reads the metrics the other skills leave in the OS temp dir, the maintainer sketchpad and open issues; compares the last run with the recent median, diagnoses root causes, checks each skill against its own scope, and proposes improvements to the skill or to its observability. |
+| [`still-cursor-living-day`](skills/still-cursor-living-day/) | 0.0.0 | Runs one image collection end to end under a fixed axis: twelve frames of a black, non-emitting display used as a mirror, the cursor frozen at one coordinate while a day passes in the room reflected in the glass. It refuses a plan that breaks the restriction or that holds a frame nobody would miss, gates the twelve briefs with you in one hash-locked approval, dispatches the generations in parallel (GPT-Image, Gemini, a CLI child, or a manual drop), proves twelve real images of one geometry actually landed, and runs a two-pass LLM-as-judge — blind first, which scores each frame and reorders the day into a Kendall tau — that proposes and never regenerates. Ships a guard hook that seals the plan while the blind pass is open. |
 
 ## Using a skill
 
 How a skill works under the hood, for whoever maintains it, is in [`docs/`](docs/) — written for people, never loaded by a model.
 
-After install, start a session and type `/handoff`, `/study-wiki`, `/teach-me`, `/shunt`, or `/skills-evaluate`, or just say what you want — the skill's `description` is what makes the model reach for it on its own.
+After install, start a session and type `/handoff`, `/study-wiki`, `/teach-me`, `/shunt`, `/skills-evaluate`, or `/still-cursor-living-day`, or just say what you want — the skill's `description` is what makes the model reach for it on its own.
 
 **Recommended: run shunt and handoff with RTK**
 

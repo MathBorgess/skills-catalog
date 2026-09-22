@@ -99,6 +99,36 @@ Work handed back up because no automatic path is safe: a `critical` risk, a reje
 The offline batch process that labels past decisions from their outcomes, after a run closes. Never the supervisor, never a child, never inside a live run.
 _Avoid_: judge, reviewer (a teacher writes labels, never verdicts)
 
+### Still cursor, living day
+
+**Frame**:
+One of the twelve images and the brief that produced it. Its id is its position in the day; positions are not reshuffled.
+_Avoid_: photo, shot (a frame is a brief and an artefact, and the collection is judged on both)
+
+**Invariant clause**:
+The two sentences — the cursor's coordinate, the black non-emitting panel — carried verbatim by every prompt. Plan-level by construction: a frame that writes its own has already broken The Constant.
+
+**Trace**:
+A physical object in the room and its state at one hour. **Transition**: that state changing between frames. The collection is made of transitions; the frames are where they are observed.
+_Avoid_: counting frames as continuity
+
+**Breakage**:
+How many transitions the removal of a frame would destroy. A frame at zero is a **batch member** — deletable without loss, which is the difference between a collection and twelve files in a folder.
+
+**Route capability**:
+Whether a generation route can produce an image here: `probed` (proved on this machine), `declared` (a CLI asked to reach an image model it may not hold), `absent` (refused). A requirement discovered of the work, never a permission granted to it.
+
+**Blind pass**:
+The judging pass that sees twelve shuffled, unlabelled images and no prompts, rates each against the pillars, and orders the day. **Informed pass** is the second, which sees the chronology and the trace chain and answers the collection questions.
+_Avoid_: running them in one pass (an informed judge cannot un-know the order)
+
+**Tau**:
+The rank correlation between the blind pass's ordering and the true chronology. It measures whether The Variable survived generation, not whether any frame is good.
+
+**Proposal**:
+The judge's named defect plus a suggested action. It is never an action: nothing is regenerated, discarded or reordered without the owner.
+_Avoid_: auto-discard
+
 ### System One
 
 **Scorer**:
@@ -149,6 +179,7 @@ A skill doing work its `description` does not claim, or another skill's work.
 - **Shunt** produces **recover events** and **excerpts**; the ratio of the first to compressed reads is its failure rate.
 - **Handoff** turns a plan into **sessions** on **slots**, gated once by the **graph gate**, reported through the **digest**.
 - Every skill writes **metrics lines**; `skills-evaluate` reads them and never the other way round.
+- **Still cursor, living day** locks its plan with a hash at one owner gate, the way **handoff** locks a graph; **breakage** is to a collection what a causal **dep** is to a graph.
 - A **gate run** produces evidence; a **verdict** and a **risk level** read it; the **attention matrix** turns the pair into a **revise round**, an **escalation**, or an **accepted** session.
 - **Scorers** write the **shadow log**; the **teacher** resolves what the outcome left silent; neither ever acts inside a run.
 
@@ -157,4 +188,5 @@ A skill doing work its `description` does not claim, or another skill's work.
 - "Recovery" meant both expected excerpts and failed compression — resolved: only failures are **recover events**.
 - "Done" meant both "the child finished" and "the work is good" — resolved: `done` is the child's claim, **accepted** is the system's conclusion.
 - "Review" named both a session tier and the correction loop — resolved: a **review** session verifies and never edits; a **revise round** edits and never judges its own result.
+- "Judge" collided with **teacher**, which must never write verdicts — resolved: a **judge** grades artefacts against a declared axis and decides nothing about what runs next; a **teacher** labels past decisions from their outcomes and grades no work. Neither may act inside the run it observes.
 - "Teacher" and **supervisor** were briefly the same role — resolved: they must not be. A supervisor labelling its own decisions trains a scorer to reproduce the supervisor's bias.

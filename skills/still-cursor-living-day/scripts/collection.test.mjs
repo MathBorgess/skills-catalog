@@ -11,7 +11,8 @@ import { fileURLToPath } from "node:url";
 
 import {
   validate, transitions, breakage, kendallTau, inspectImage, lexicon,
-  shuffled, planHash, clockMinutes, CURSOR_CLAUSE, SURFACE_CLAUSE, IDS,
+  shuffled, planHash, clockMinutes, CURSOR_CLAUSE, SURFACE_CLAUSE, OPTICS_CLAUSE,
+  SCALES, VIEWS, IDS,
 } from "./collection.mjs";
 
 const SCRIPT = join(dirname(fileURLToPath(import.meta.url)), "collection.mjs");
@@ -63,27 +64,37 @@ function png(width, height, seed) {
   ]);
 }
 
-// A plan that obeys the axis: twelve frames, a clock that advances, and at least
-// one object changing state at every frame.
+// A plan that obeys the axis: twelve frames, a clock that advances, a laptop
+// that travels, framing that changes, and at least one object changing state at
+// every frame.
+const PLACES = ["kitchen table", "bus seat", "cafe counter", "park bench", "bedroom floor", "shared office desk"];
+
 function goodPlan(route = "manual") {
-  const objects = ["mug", "jacket", "keys", "curtain", "notebook", "plate"];
+  const objects = ["mug", "jacket", "keys", "charger", "notebook", "plate"];
   const frames = IDS.map((id, i) => {
     const object = objects[i % objects.length];
     return {
       id,
       clock: `${String(6 + i).padStart(2, "0")}:${i % 2 ? "40" : "10"}`,
+      place: PLACES[i % PLACES.length],
       room: `the room at hour ${i}`,
       light: `light state ${i}`,
       human: `a reflected shoulder, ${i} hours in`,
+      framing: { scale: SCALES[i % SCALES.length], view: VIEWS[i % VIEWS.length] },
       traces: [
         { object, state: `state-${i}` },
         { object: objects[(i + 1) % objects.length], state: `carry-${i}` },
       ],
       route,
-      prompt: `${SURFACE_CLAUSE}. ${CURSOR_CLAUSE}. The room at hour ${i}, seen only as a reflection.`,
+      prompt: `${SURFACE_CLAUSE}. ${CURSOR_CLAUSE}. ${OPTICS_CLAUSE}. The room at hour ${i}, seen only as a reflection.`,
     };
   });
-  return { axis: "still-cursor-living-day", frame_count: 12, invariants: { cursor_clause: CURSOR_CLAUSE, surface_clause: SURFACE_CLAUSE }, frames };
+  return {
+    axis: "still-cursor-living-day",
+    frame_count: 12,
+    invariants: { cursor_clause: CURSOR_CLAUSE, surface_clause: SURFACE_CLAUSE, optics_clause: OPTICS_CLAUSE },
+    frames,
+  };
 }
 
 const ROUTES = [
@@ -157,6 +168,66 @@ const perFrameCursor = goodPlan();
 perFrameCursor.frames[0].cursor_clause = "somewhere else";
 assert("validate: a per-frame cursor clause is refused", validate(perFrameCursor, ROUTES).errors.some((e) => e.includes("plan-level")));
 
+const noOptics = goodPlan();
+delete noOptics.invariants.optics_clause;
+assert("validate: a plan with no optics clause is refused", validate(noOptics, ROUTES).errors.some((e) => e.includes("optics_clause is missing")));
+
+const opticsDropped = goodPlan();
+opticsDropped.frames[8].prompt = `${SURFACE_CLAUSE}. ${CURSOR_CLAUSE}. a bus at dusk`;
+assert("validate: a prompt missing the optics clause is refused", validate(opticsDropped, ROUTES).errors.some((e) => e.includes("optics_clause verbatim")));
+
+const perFrameOptics = goodPlan();
+perFrameOptics.frames[1].optics_clause = "a bit shinier here";
+assert("validate: a per-frame optics clause is refused", validate(perFrameOptics, ROUTES).errors.some((e) => e.includes("plan-level")));
+
+const mirrored = goodPlan();
+mirrored.frames[2].prompt += " the panel has a mirror finish and a crystal clear reflection";
+const mirroredErrors = validate(mirrored, ROUTES).errors;
+assert("validate: asking for a mirror finish is refused", mirroredErrors.some((e) => e.includes("mirror finish")));
+assert("validate: asking for a crystal clear reflection is refused", mirroredErrors.some((e) => e.includes("crystal clear reflection")));
+
+const matte = goodPlan();
+matte.frames[3].prompt += " a matte black screen filling the middle";
+assert("validate: asking for a matte black screen is refused", validate(matte, ROUTES).errors.some((e) => e.includes("matte black screen")));
+
+assert(
+  "validate: the optics clause may name both failure modes it forbids",
+  validate(goodPlan(), ROUTES).errors.length === 0,
+);
+
+const noPlace = goodPlan();
+noPlace.frames[4].place = "TODO";
+assert("validate: a frame with no place is refused", validate(noPlace, ROUTES).errors.some((e) => e.includes("place is empty or still TODO")));
+
+const oneRoom = goodPlan();
+oneRoom.frames.forEach((f) => { f.place = "the same desk"; });
+const oneRoomErrors = validate(oneRoom, ROUTES).errors;
+assert("validate: twelve frames in one place are refused", oneRoomErrors.some((e) => e.includes("distinct place")));
+assert("validate: and the same place four times running is refused", oneRoomErrors.some((e) => e.includes("consecutive frames may share a place")));
+
+const camping = goodPlan();
+["02", "03", "04", "05"].forEach((id) => {
+  camping.frames.find((f) => f.id === id).place = "kitchen table";
+});
+assert("validate: four consecutive frames in one place are refused", validate(camping, ROUTES).errors.some((e) => e.includes("4 times in a row")));
+
+const oneCrop = goodPlan();
+oneCrop.frames.forEach((f) => { f.framing = { scale: "dominant", view: "frontal" }; });
+const oneCropErrors = validate(oneCrop, ROUTES).errors;
+assert("validate: a single scale across the series is refused", oneCropErrors.some((e) => e.includes("framing.scale value")));
+assert("validate: a single view across the series is refused", oneCropErrors.some((e) => e.includes("framing.view value")));
+assert("validate: three identical framings in a row are refused", oneCropErrors.some((e) => e.includes("same scale and view")));
+
+const badScale = goodPlan();
+badScale.frames[5].framing = { scale: "huge", view: "frontal" };
+assert("validate: an off-vocabulary scale is refused", validate(badScale, ROUTES).errors.some((e) => e.includes("framing.scale must be one of")));
+const badView = goodPlan();
+badView.frames[5].framing = { scale: "small", view: "dutch" };
+assert("validate: an off-vocabulary view is refused", validate(badView, ROUTES).errors.some((e) => e.includes("framing.view must be one of")));
+
+assert("lexicon: finds a mirror-finish request", lexicon("a mirror finish on the lid").forbidden.includes("mirror finish"));
+assert("lexicon: warns on a bare mirror", lexicon("beside the bathroom mirror").ambiguous.includes("mirror"));
+
 // --------------------------------------------------------------- continuity
 
 const links = transitions(goodPlan());
@@ -216,7 +287,9 @@ function runFails(...argv) {
 const RUN = join(sandbox, "run");
 run("init", "--run", RUN);
 assert("init: writes a twelve-frame skeleton", JSON.parse(readFileSync(join(RUN, "plan.json"), "utf8")).frames.length === 12);
-assert("init: pre-writes both invariant clauses", JSON.parse(readFileSync(join(RUN, "plan.json"), "utf8")).invariants.cursor_clause === CURSOR_CLAUSE);
+const skeleton = JSON.parse(readFileSync(join(RUN, "plan.json"), "utf8"));
+assert("init: pre-writes all three invariant clauses", skeleton.invariants.cursor_clause === CURSOR_CLAUSE && skeleton.invariants.surface_clause === SURFACE_CLAUSE && skeleton.invariants.optics_clause === OPTICS_CLAUSE);
+assert("init: every frame gets a place and a framing to fill", skeleton.frames.every((f) => "place" in f && SCALES.includes(f.framing.scale) && VIEWS.includes(f.framing.view)));
 assert("route: refuses a skeleton still full of TODO", (runFails("route", "--run", RUN) ?? "").includes("still TODO"));
 
 run("probe", "--run", RUN);
@@ -257,23 +330,46 @@ const labelsInTruth = key.pairs.slice().sort((a, b) => a.id.localeCompare(b.id))
 const blindFile = join(sandbox, "blind.json");
 writeFileSync(blindFile, JSON.stringify({
   order: labelsInTruth,
-  frames: key.pairs.map((p) => ({ label: p.label, restriction: "clean", constant: "anchored", presence: "traced", evidence: "black glass, one arrow, a mug left on the desk" })),
+  frames: key.pairs.map((p) => ({ label: p.label, restriction: "clean", opacity: "in-band", constant: "anchored", presence: "traced", evidence: "dim room readable in the panel, one arrow, a mug left beside it" })),
 }));
 assert("judge: a perfect blind order scores tau 1", run("judge", "submit", "--phase", "blind", "--run", RUN, "--file", blindFile).includes("tau = 1"));
 
 const badFile = join(sandbox, "bad.json");
 writeFileSync(badFile, JSON.stringify({
   order: labelsInTruth,
-  frames: key.pairs.map((p) => ({ label: p.label, restriction: "fine", constant: "anchored", presence: "traced", evidence: "x" })),
+  frames: key.pairs.map((p) => ({ label: p.label, restriction: "fine", opacity: "in-band", constant: "anchored", presence: "traced", evidence: "x" })),
 }));
 assert("judge: an off-enum verdict is refused", (runFails("judge", "submit", "--phase", "blind", "--run", RUN, "--file", badFile) ?? "").includes("restriction must be one of"));
 
 const noEvidence = join(sandbox, "noev.json");
 writeFileSync(noEvidence, JSON.stringify({
   order: labelsInTruth,
-  frames: key.pairs.map((p) => ({ label: p.label, restriction: "clean", constant: "anchored", presence: "traced", evidence: "" })),
+  frames: key.pairs.map((p) => ({ label: p.label, restriction: "clean", opacity: "in-band", constant: "anchored", presence: "traced", evidence: "" })),
 }));
 assert("judge: a level with no evidence is refused", (runFails("judge", "submit", "--phase", "blind", "--run", RUN, "--file", noEvidence) ?? "").includes("no evidence"));
+
+const noOpacity = join(sandbox, "noop.json");
+writeFileSync(noOpacity, JSON.stringify({
+  order: labelsInTruth,
+  frames: key.pairs.map((p) => ({ label: p.label, restriction: "clean", constant: "anchored", presence: "traced", evidence: "a dim room in the panel" })),
+}));
+assert("judge: a blind verdict with no opacity level is refused", (runFails("judge", "submit", "--phase", "blind", "--run", RUN, "--file", noOpacity) ?? "").includes("opacity must be one of"));
+
+// One frame outside the reflectivity band, so score has to propose it.
+const mirroredLabel = key.pairs.find((p) => p.id === "02").label;
+const withMirror = join(sandbox, "mirror.json");
+writeFileSync(withMirror, JSON.stringify({
+  order: labelsInTruth,
+  frames: key.pairs.map((p) => ({
+    label: p.label,
+    restriction: "clean",
+    opacity: p.label === mirroredLabel ? "too-mirrored" : "in-band",
+    constant: "anchored",
+    presence: "traced",
+    evidence: p.label === mirroredLabel ? "the window frame reads crisply in the panel, as in a mirror" : "a dim room in the panel",
+  })),
+}));
+run("judge", "submit", "--phase", "blind", "--run", RUN, "--file", withMirror);
 
 run("judge", "open", "--phase", "informed", "--run", RUN);
 const infFile = join(sandbox, "informed.json");
@@ -302,7 +398,12 @@ assert("score: proposes without acting", scored.includes("Nothing was regenerate
 const verdicts = JSON.parse(readFileSync(join(RUN, "verdicts.json"), "utf8"));
 assert("score: the judge's own proposal survives into the verdicts", verdicts.proposals.some((p) => p.id === "07" && p.proposal === "regenerate"));
 assert("score: an out-of-line frame becomes a proposal", verdicts.proposals.some((p) => p.id === "07" && p.reason.includes("hour it claims")));
-assert("score: appends one metrics line", readFileSync(join(sandbox, "root", "metrics.jsonl"), "utf8").trim().split("\n").length >= 1);
+assert("score: a panel outside the band becomes a proposal", verdicts.proposals.some((p) => p.id === "02" && p.reason.includes("clean mirror")));
+assert("score: the tally counts the out-of-band panel", verdicts.tally.opacity_too_mirrored === 1 && verdicts.tally.opacity_too_matte === 0);
+const metricsLines = readFileSync(join(sandbox, "root", "metrics.jsonl"), "utf8").trim().split("\n");
+assert("score: appends one metrics line", metricsLines.length >= 1);
+const metrics = JSON.parse(metricsLines[metricsLines.length - 1]);
+assert("score: the metrics line records how far the laptop travelled", metrics.places === 6 && metrics.scales === 4 && metrics.views === 5);
 
 const OUT = join(sandbox, "delivery");
 run("export", "--run", RUN, "--to", OUT);

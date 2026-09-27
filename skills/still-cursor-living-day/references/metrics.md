@@ -10,11 +10,15 @@
   "routes": { "api:openai": 8, "manual": 4 },
   "transitions": 27,
   "weakest_window": 6,
+  "places": 6,
+  "scales": 4,
+  "views": 5,
   "tau": 0.88,
   "shape": "collection",
-  "tally": { "restriction_violated": 1, "restriction_suspect": 2, "constant_absent": 0,
-             "constant_drifted": 1, "presence_sterile": 0, "chronology_out": 1,
-             "chronology_ambiguous": 2, "continuity_broken": 0 },
+  "tally": { "restriction_violated": 1, "restriction_suspect": 2,
+             "opacity_too_mirrored": 1, "opacity_too_matte": 0,
+             "constant_absent": 0, "constant_drifted": 1, "presence_sterile": 0,
+             "chronology_out": 1, "chronology_ambiguous": 2, "continuity_broken": 0 },
   "proposals": 4,
   "dispatch_failures": 2,
   "wall_clock_s": 903
@@ -25,6 +29,7 @@ What each number is for:
 
 - **`tau`** — the ordering fidelity of the blind pass. The one number that says whether The Variable survived generation. Compare it across runs of the same plan on different routes: that comparison is the actual experiment.
 - **`transitions` and `weakest_window`** — the density of the trace chain, and the cost of deleting the four most deletable frames. They are properties of the plan, not of the images, so they change only when the plan changes.
+- **`places`, `scales`, `views`** — how far the plan actually travelled and how much the framing moved. They are the plan's variation, recorded because a series can pass every pillar and still be twelve photographs of one desk. Read them beside `tau`: variation that does not raise the ordering fidelity is variation that is not telling the day.
 - **`tally`** — where the collection fails, by pillar. `restriction_violated` concentrated on one route says that route cannot hold the restriction; spread evenly it says the shared clause is weak.
 - **`dispatch_failures`** — frames that needed a second attempt. Rising failures on a route with a flat tally means the route got slower, not worse.
 - **`routes`** — which generator produced how many frames. Without it, a tau difference between two runs has no attributable cause.

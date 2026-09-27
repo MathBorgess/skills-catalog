@@ -46,19 +46,33 @@ const FORBIDDEN = [
   "browser window", "studio light", "softbox", "ring light", "key light",
   "three-point lighting", "selfie", "posing", "posed smile", "looking into the camera",
   "looking at the camera", "smiling at the camera",
+  "mirror finish", "mirror-like", "perfect mirror", "crystal clear reflection",
+  "crystal-clear reflection", "sharp reflection", "high gloss", "glossy mirror",
+  "matte black screen", "flat black rectangle", "pure black screen",
 ];
 
 // Ambiguous by nature: a room has windows and lamps, and the axis lives or dies
 // on which kind you meant. Never refused, always raised at the gate.
-const AMBIGUOUS = ["window", "lamp", "bulb", "led", "neon", "phone", "tablet", "television", "tv "];
+const AMBIGUOUS = ["window", "lamp", "bulb", "led", "neon", "phone", "tablet", "television", "tv ", "mirror", "gloss", "shine"];
 
 const VERDICT_ENUMS = {
   restriction: ["clean", "suspect", "violated"],
+  opacity: ["in-band", "too-mirrored", "too-matte"],
   constant: ["anchored", "drifted", "absent"],
   chronology: ["in-line", "ambiguous", "out-of-line"],
   presence: ["traced", "sterile"],
 };
 const INFORMED_ENUMS = { continuity: ["consistent", "broken"] };
+const SCALES = ["distant", "small", "medium", "dominant"];
+const VIEWS = ["frontal", "oblique", "steep", "over-shoulder", "low"];
+// Variation floors. Twelve frames of the same desk at the same size is the
+// failure the first real runs produced, so the plan is refused for it rather
+// than discovered after twelve generations.
+const MIN_PLACES = 5;
+const MAX_SAME_PLACE_RUN = 3;
+const MIN_SCALES = 3;
+const MIN_VIEWS = 3;
+const MAX_SAME_FRAMING_RUN = 2;
 const COLLECTION_ENUMS = { shape: ["collection", "batch"] };
 
 // ---------------------------------------------------------------- utilities
@@ -338,16 +352,18 @@ function validate(plan, routes) {
 
   const cursor = String(plan.invariants?.cursor_clause ?? "");
   const surface = String(plan.invariants?.surface_clause ?? "");
+  const optics = String(plan.invariants?.optics_clause ?? "");
   if (cursor.trim().length < 30) errors.push("invariants.cursor_clause is missing or too short to pin a coordinate — that clause is The Constant.");
   if (surface.trim().length < 30) errors.push("invariants.surface_clause is missing or too short — that clause is The Restriction.");
+  if (optics.trim().length < 30) errors.push("invariants.optics_clause is missing or too short — without a stated reflectivity band the panel drifts between a mirror and a matte rectangle across the series.");
 
   let previous = null;
   plan.frames.forEach((frame, i) => {
     const id = frame.id ?? `#${i + 1}`;
     const at = `frame ${id}`;
     if (frame.id !== IDS[i]) errors.push(`${at}: id must be "${IDS[i]}" (frames are ordered and ids are positions).`);
-    if (frame.cursor_clause || frame.surface_clause) {
-      errors.push(`${at}: carries its own cursor/surface clause. The Constant is plan-level and identical in all ${FRAME_COUNT} frames.`);
+    if (frame.cursor_clause || frame.surface_clause || frame.optics_clause) {
+      errors.push(`${at}: carries its own cursor, surface or optics clause. Those three are plan-level and byte-identical in all ${FRAME_COUNT} frames — they are what does not vary.`);
     }
 
     const minutes = clockMinutes(frame.clock);
@@ -356,7 +372,7 @@ function validate(plan, routes) {
       errors.push(`${at}: clock ${frame.clock} does not advance past the previous frame. The Variable is one day moving forward.`);
     } else if (minutes !== null) previous = minutes;
 
-    for (const field of ["room", "light", "human", "prompt"]) {
+    for (const field of ["place", "room", "light", "human", "prompt"]) {
       const value = String(frame[field] ?? "").trim();
       if (!value || value === "TODO") errors.push(`${at}: ${field} is empty or still TODO.`);
     }
@@ -368,10 +384,13 @@ function validate(plan, routes) {
     if (surface.length >= 30 && !prompt.includes(surface)) {
       errors.push(`${at}: prompt does not carry invariants.surface_clause verbatim.`);
     }
+    if (optics.length >= 30 && !prompt.includes(optics)) {
+      errors.push(`${at}: prompt does not carry invariants.optics_clause verbatim.`);
+    }
     // The invariant clauses name the forbidden things in order to negate them,
     // so they are stripped before the lexicon runs. Per-frame text must not
     // repeat the negations: a frame that says "no glowing screen" is scanned.
-    const body = prompt.split(cursor).join(" ").split(surface).join(" ");
+    const body = prompt.split(cursor).join(" ").split(surface).join(" ").split(optics).join(" ");
     const hits = lexicon(body);
     for (const token of hits.forbidden) {
       errors.push(`${at}: prompt says "${token}" outside the invariant clause. The Restriction forbids any lit pixel outside the cursor and any staged light — and its negations belong in invariants.surface_clause, not repeated per frame.`);
@@ -386,6 +405,11 @@ function validate(plan, routes) {
       errors.push(`${at}: every trace is "absent" — nothing in the room says a person was recently here.`);
     }
 
+    const scale = String(frame.framing?.scale ?? "");
+    const view = String(frame.framing?.view ?? "");
+    if (!SCALES.includes(scale)) errors.push(`${at}: framing.scale must be one of ${SCALES.join(" | ")}, got ${JSON.stringify(scale)}.`);
+    if (!VIEWS.includes(view)) errors.push(`${at}: framing.view must be one of ${VIEWS.join(" | ")}, got ${JSON.stringify(view)}.`);
+
     const routeId = String(frame.route ?? "");
     const route = byRoute.get(routeId);
     if (!routes) errors.push(`${at}: routes.json is missing. Run \`probe\` before \`route\`.`);
@@ -396,6 +420,42 @@ function validate(plan, routes) {
       warnings.push(`${at}: route ${routeId} is declared, not probed — ${route.note}. collect will prove it.`);
     }
   });
+
+  // The first real runs came back coherent and monotonous: one desk, one
+  // distance, twelve times. The laptop travels now, and these floors are what
+  // stop a plan from quietly not travelling.
+  const places = plan.frames.map((f) => String(f.place ?? "").trim().toLowerCase()).filter(Boolean);
+  const distinctPlaces = new Set(places);
+  if (places.length === FRAME_COUNT && distinctPlaces.size < MIN_PLACES) {
+    errors.push(`only ${distinctPlaces.size} distinct place(s) across ${FRAME_COUNT} frames; at least ${MIN_PLACES} are required. The room is a variable now, not part of the constant.`);
+  }
+  let placeRun = 1;
+  for (let i = 1; i < places.length; i += 1) {
+    placeRun = places[i] === places[i - 1] ? placeRun + 1 : 1;
+    if (placeRun > MAX_SAME_PLACE_RUN) {
+      errors.push(`frames up to ${plan.frames[i].id} sit in "${places[i]}" ${placeRun} times in a row; at most ${MAX_SAME_PLACE_RUN} consecutive frames may share a place.`);
+      break;
+    }
+  }
+
+  const scales = new Set(plan.frames.map((f) => f.framing?.scale).filter((v) => SCALES.includes(v)));
+  const views = new Set(plan.frames.map((f) => f.framing?.view).filter((v) => VIEWS.includes(v)));
+  if (scales.size && scales.size < MIN_SCALES) {
+    errors.push(`only ${scales.size} distinct framing.scale value(s); at least ${MIN_SCALES} are required. The panel does not have to own the frame, and twelve identical crops read as one photograph repeated.`);
+  }
+  if (views.size && views.size < MIN_VIEWS) {
+    errors.push(`only ${views.size} distinct framing.view value(s); at least ${MIN_VIEWS} are required.`);
+  }
+  let framingRun = 1;
+  for (let i = 1; i < plan.frames.length; i += 1) {
+    const a = plan.frames[i].framing ?? {};
+    const b = plan.frames[i - 1].framing ?? {};
+    framingRun = a.scale === b.scale && a.view === b.view ? framingRun + 1 : 1;
+    if (framingRun > MAX_SAME_FRAMING_RUN) {
+      errors.push(`frames up to ${plan.frames[i].id} repeat the same scale and view ${framingRun} times in a row; at most ${MAX_SAME_FRAMING_RUN} may.`);
+      break;
+    }
+  }
 
   const breaks = breakage(plan);
   breaks.per.forEach((count, i) => {
@@ -414,9 +474,11 @@ function validate(plan, routes) {
 // ------------------------------------------------------------- init / probe
 
 const CURSOR_CLAUSE =
-  "a single standard white arrow mouse cursor, monochrome, its tip anchored at exactly 61.5% of the frame width and 43.0% of the frame height, identical in size, angle and position in every image of the series";
+  "a single standard white arrow mouse cursor, monochrome, drawn at exactly the same size and the same angle in every image of the series, its tip landing on exactly 61.5% of the frame width and 43.0% of the frame height, whatever part of the frame the laptop occupies and however large or small it appears";
 const SURFACE_CLAUSE =
-  "the computer display is a completely black, non-emitting reflective glass panel: no windows, icons, wallpaper, notifications or interface of any kind, no light leaving the panel, and what is seen on the glass is only the room reflected in it";
+  "an open MacBook whose display is off: a dark grey-black panel emitting no light at all, carrying no windows, icons, wallpaper, notifications, menu bar or interface of any kind, and showing nothing except what the room around it puts on its surface";
+const OPTICS_CLAUSE =
+  "the panel is semi-gloss, about thirty percent reflective: the room is legible in it but two or three stops darker than the room itself, reflected edges slightly softened and never crisp, no specular highlight sharp enough to read detail in, and the panel stays the darkest value in the whole frame — neither a clean mirror nor a flat matte black rectangle";
 
 function cmdInit(args) {
   const id = args.id ? String(args.id) : new Date().toISOString().replace(/[-:]/g, "").replace(/\..+/, "Z");
@@ -427,9 +489,11 @@ function cmdInit(args) {
   const frames = IDS.map((frameId) => ({
     id: frameId,
     clock: "TODO",
+    place: "TODO",
     room: "TODO",
     light: "TODO",
     human: "TODO",
+    framing: { scale: SCALES[1], view: VIEWS[1] },
     traces: [{ object: "TODO", state: "TODO" }],
     route: "manual",
     prompt: "TODO",
@@ -437,13 +501,18 @@ function cmdInit(args) {
   writeJson(P(dir).plan, {
     axis: AXIS,
     frame_count: FRAME_COUNT,
-    invariants: { cursor_clause: CURSOR_CLAUSE, surface_clause: SURFACE_CLAUSE },
+    invariants: {
+      cursor_clause: CURSOR_CLAUSE,
+      surface_clause: SURFACE_CLAUSE,
+      optics_clause: OPTICS_CLAUSE,
+    },
     frames,
   });
   saveState(dir, { phase: "planning", frames: {}, started: new Date().toISOString() });
   console.log(`run: ${dir}`);
   console.log(`plan: ${P(dir).plan} — ${FRAME_COUNT} frames, every field TODO.`);
-  console.log("The two invariant clauses are already written and are the same in all twelve; every prompt must carry them verbatim.");
+  console.log("The three invariant clauses are already written and are the same in all twelve; every prompt must carry them verbatim.");
+  console.log(`Vary place, framing.scale (${SCALES.join("/")}) and framing.view (${VIEWS.join("/")}): at least ${MIN_PLACES} places, ${MIN_SCALES} scales and ${MIN_VIEWS} views, or route refuses the plan.`);
   console.log(`next: node ${join(SKILL_DIR, "scripts", "collection.mjs")} probe --run ${dir}`);
 }
 
@@ -467,14 +536,18 @@ function cmdRoute(args) {
   const { errors, warnings, breaks } = validate(plan, routesFile?.routes);
 
   if (breaks) {
-    console.log("| Frame | Clock | Route | Moves | Breaks if removed |");
-    console.log("|---|---|---|---|---|");
+    console.log("| Frame | Clock | Place | Scale / view | Route | Moves | Breaks if removed |");
+    console.log("|---|---|---|---|---|---|---|");
     plan.frames.forEach((f, i) => {
       const moved = (f.traces ?? []).map((t) => t.object).join(", ");
-      console.log(`| ${f.id} | ${f.clock} | ${f.route} | ${moved} | ${breaks.per[i]} |`);
+      const framing = `${f.framing?.scale ?? "—"} / ${f.framing?.view ?? "—"}`;
+      console.log(`| ${f.id} | ${f.clock} | ${f.place ?? "—"} | ${framing} | ${f.route} | ${moved} | ${breaks.per[i]} |`);
     });
     const worst = breaks.windows.reduce((a, b) => (b.destroyed < a.destroyed ? b : a), breaks.windows[0]);
-    console.log(`\n${breaks.links.length} object transitions across the series.`);
+    const placeCount = new Set(plan.frames.map((f) => String(f.place ?? "").trim().toLowerCase()).filter(Boolean)).size;
+    const scaleCount = new Set(plan.frames.map((f) => f.framing?.scale).filter(Boolean)).size;
+    const viewCount = new Set(plan.frames.map((f) => f.framing?.view).filter(Boolean)).size;
+    console.log(`\n${placeCount} place(s), ${scaleCount} scale(s), ${viewCount} view(s), ${breaks.links.length} object transitions across the series.`);
     if (worst) {
       console.log(`Weakest four-frame window: ${plan.frames[worst.start].id}–${plan.frames[worst.start + 3].id} destroys ${worst.destroyed} transitions.`);
     }
@@ -765,8 +838,9 @@ function cmdJudgeOpen(args) {
       "",
       `- **The Restriction**: ${plan.invariants.surface_clause}`,
       `- **The Constant**: ${plan.invariants.cursor_clause}`,
-      "- **The Variable**: one day passing, read from ambient light, from the room, and from the traces a person left behind.",
-      "- **The Discard**: any lit pixel outside the cursor; any posed or selfie-like reflection; any room with no trace of recent human presence.",
+      `- **The Optics**: ${plan.invariants.optics_clause}`,
+      "- **The Variable**: one day passing, read from ambient light, from where the laptop has been carried, from how close the frame sits to it, and from the traces a person left behind.",
+      "- **The Discard**: any lit pixel outside the cursor; a panel that reads as a clean mirror or as flat matte black; any posed or selfie-like reflection; any place with no trace of recent human presence.",
       "",
       `Full rubric, with what counts as evidence for each level: \`${judging}\``,
       "",
@@ -777,12 +851,14 @@ function cmdJudgeOpen(args) {
       "```json",
       JSON.stringify({
         order: ["<label earliest in the day>", "…", "<label latest in the day>"],
-        frames: [{ label: "A", restriction: "clean", constant: "anchored", presence: "traced", evidence: "what you actually saw, naming the thing you saw" }],
+        frames: [{ label: "A", restriction: "clean", opacity: "in-band", constant: "anchored", presence: "traced", evidence: "what you actually saw, naming the thing you saw" }],
       }, null, 2),
       "```",
       "",
       `\`order\` is all twelve labels, earliest to latest. Ordering them is the test: if the day does not read from the images alone, the Variable is not working, and the run's tau will say so.`,
       "Every frame needs an `evidence` sentence naming what you saw. A level without evidence is an opinion.",
+      "",
+      "Two things are deliberately free and are not defects: the laptop may sit anywhere in the frame, at any size, seen from any angle, and it may be in a different place in every image. What is not free is the cursor's tip, which must land on the same point of the frame in all twelve, at the same drawn size — compare the images against each other, not against a description.",
     ].join("\n");
     writeFileSync(join(blindDir, "task.md"), task + "\n");
     state.phase = "judging-blind";
@@ -800,15 +876,15 @@ function cmdJudgeOpen(args) {
     const links = transitions(plan);
     const table = plan.frames.map((f, i) => {
       const moved = links.filter((l) => l.to === i).map((l) => `${l.object} → ${l.state}`).join("; ") || "—";
-      return `| ${f.id} | ${f.clock} | ${framePath(dir, f.id)} | ${moved} |`;
+      return `| ${f.id} | ${f.clock} | ${f.place} | ${f.framing?.scale}/${f.framing?.view} | ${framePath(dir, f.id)} | ${moved} |`;
     });
     const task = [
       "# Informed pass",
       "",
-      "You now see the intended chronology and the trace chain. Two questions only, and both are about the series rather than any single image.",
+      "You now see the intended chronology, where the laptop was carried, and the trace chain. Two questions only, and both are about the series rather than any single image. A change of place is not a break in continuity — the chain is meant to travel; what breaks it is an object arriving in a state the earlier frames did not leave it in.",
       "",
-      "| Frame | Clock | File | Objects that change state here |",
-      "|---|---|---|---|",
+      "| Frame | Clock | Place | Scale/view | File | Objects that change state here |",
+      "|---|---|---|---|---|---|",
       ...table,
       "",
       `Rubric: \`${judging}\``,
@@ -871,7 +947,12 @@ function cmdJudgeSubmit(args) {
     for (const label of labels) {
       const entry = byLabel.get(label);
       if (!entry) { errors.push(`frames: label ${label} is missing.`); continue; }
-      checkEnums(entry, { restriction: VERDICT_ENUMS.restriction, constant: VERDICT_ENUMS.constant, presence: VERDICT_ENUMS.presence }, `label ${label}`, errors);
+      checkEnums(entry, {
+        restriction: VERDICT_ENUMS.restriction,
+        opacity: VERDICT_ENUMS.opacity,
+        constant: VERDICT_ENUMS.constant,
+        presence: VERDICT_ENUMS.presence,
+      }, `label ${label}`, errors);
     }
     if (errors.length) { console.error("refused:\n" + errors.map((e) => `  ✗ ${e}`).join("\n")); process.exit(1); }
 
@@ -934,6 +1015,8 @@ function cmdScore(args) {
   const tally = {
     restriction_violated: count((id) => b(id).restriction, "violated"),
     restriction_suspect: count((id) => b(id).restriction, "suspect"),
+    opacity_too_mirrored: count((id) => b(id).opacity, "too-mirrored"),
+    opacity_too_matte: count((id) => b(id).opacity, "too-matte"),
     constant_absent: count((id) => b(id).constant, "absent"),
     constant_drifted: count((id) => b(id).constant, "drifted"),
     presence_sterile: count((id) => b(id).presence, "sterile"),
@@ -948,6 +1031,8 @@ function cmdScore(args) {
     const id = frame.id;
     if (b(id).restriction === "violated") add(id, "a lit pixel or interface element outside the cursor", "regenerate");
     else if (b(id).restriction === "suspect") add(id, "the judge could not rule out emitted light", "owner looks");
+    if (b(id).opacity === "too-mirrored") add(id, "the panel reads as a clean mirror, outside the reflectivity band", "regenerate");
+    if (b(id).opacity === "too-matte") add(id, "the panel reads as flat matte black, outside the reflectivity band", "regenerate");
     if (b(id).constant === "absent") add(id, "no cursor on the glass", "regenerate");
     else if (b(id).constant === "drifted") add(id, "the cursor moved off the series coordinate", "regenerate");
     if (b(id).presence === "sterile") add(id, "no trace of a person having been there", "regenerate");
@@ -962,12 +1047,13 @@ function cmdScore(args) {
   const report = [
     `# ${AXIS} — run ${basename(dir)}`,
     "",
-    `Twelve frames, ${breaks.links.length} object transitions, generated through ${[...new Set(plan.frames.map((f) => f.route))].join(", ")}.`,
+    `Twelve frames across ${new Set(plan.frames.map((f) => String(f.place ?? "").trim().toLowerCase()).filter(Boolean)).size} places, ${breaks.links.length} object transitions, generated through ${[...new Set(plan.frames.map((f) => f.route))].join(", ")}.`,
     "",
     "## The axis",
     "",
     `- **Restriction**: ${plan.invariants.surface_clause}`,
     `- **Constant**: ${plan.invariants.cursor_clause}`,
+    `- **Optics**: ${plan.invariants.optics_clause}`,
     "",
     "## Judge",
     "",
@@ -988,9 +1074,9 @@ function cmdScore(args) {
     "",
     "## Per-frame",
     "",
-    "| Frame | Clock | Route | Restriction | Constant | Presence | Chronology | Continuity |",
-    "|---|---|---|---|---|---|---|---|",
-    ...plan.frames.map((f) => `| ${f.id} | ${f.clock} | ${f.route} | ${b(f.id).restriction ?? "—"} | ${b(f.id).constant ?? "—"} | ${b(f.id).presence ?? "—"} | ${inf(f.id).chronology ?? "—"} | ${inf(f.id).continuity ?? "—"} |`),
+    "| Frame | Clock | Place | Scale/view | Restriction | Optics | Constant | Presence | Chronology | Continuity |",
+    "|---|---|---|---|---|---|---|---|---|---|",
+    ...plan.frames.map((f) => `| ${f.id} | ${f.clock} | ${f.place ?? "—"} | ${f.framing?.scale ?? "—"}/${f.framing?.view ?? "—"} | ${b(f.id).restriction ?? "—"} | ${b(f.id).opacity ?? "—"} | ${b(f.id).constant ?? "—"} | ${b(f.id).presence ?? "—"} | ${inf(f.id).chronology ?? "—"} | ${inf(f.id).continuity ?? "—"} |`),
     "",
   ].join("\n");
   writeFileSync(P(dir).report, report);
@@ -1010,6 +1096,9 @@ function cmdScore(args) {
     frames: FRAME_COUNT,
     routes: plan.frames.reduce((acc, f) => ({ ...acc, [f.route]: (acc[f.route] ?? 0) + 1 }), {}),
     transitions: breaks.links.length,
+    places: new Set(plan.frames.map((f) => String(f.place ?? "").trim().toLowerCase()).filter(Boolean)).size,
+    scales: new Set(plan.frames.map((f) => f.framing?.scale).filter(Boolean)).size,
+    views: new Set(plan.frames.map((f) => f.framing?.view).filter(Boolean)).size,
     weakest_window: breaks.windows.reduce((a, b2) => (b2.destroyed < a.destroyed ? b2 : a), breaks.windows[0])?.destroyed ?? null,
     tau: blind.tau,
     shape: informed.collection?.shape ?? null,
@@ -1118,4 +1207,8 @@ if (process.argv[1] && resolve(process.argv[1]) === resolve(fileURLToPath(import
   main();
 }
 
-export { validate, transitions, breakage, kendallTau, inspectImage, lexicon, shuffled, planHash, clockMinutes, CURSOR_CLAUSE, SURFACE_CLAUSE, FRAME_COUNT, IDS };
+export {
+  validate, transitions, breakage, kendallTau, inspectImage, lexicon, shuffled,
+  planHash, clockMinutes, CURSOR_CLAUSE, SURFACE_CLAUSE, OPTICS_CLAUSE,
+  SCALES, VIEWS, MIN_PLACES, FRAME_COUNT, IDS,
+};

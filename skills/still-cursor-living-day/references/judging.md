@@ -11,10 +11,13 @@ The agent gets twelve images labelled `A`–`L` in a shuffled order, and nothing
 | Field | Levels | What separates them |
 |---|---|---|
 | `restriction` | `clean` / `suspect` / `violated` | `violated` is any lit pixel outside the cursor, any interface element, any light that reads as emitted by the panel, any studio-lit reflection. `suspect` is a brightness the judge cannot attribute to the room. |
-| `constant` | `anchored` / `drifted` / `absent` | Compare the cursor tip's position against the other eleven images, not against a description. `drifted` is any visible displacement, resize or rotation. |
+| `opacity` | `in-band` / `too-mirrored` / `too-matte` | The panel is semi-gloss, about thirty percent. `too-mirrored` is a reflection crisp enough to read detail in, or a specular highlight that behaves like a mirror. `too-matte` is a panel with no room in it at all — a black rectangle. Judge it against the other eleven as much as against the description: the failure this level exists to catch is drift across the series. |
+| `constant` | `anchored` / `drifted` / `absent` | Compare the cursor tip's position against the other eleven images, not against a description. `drifted` is any visible displacement, resize or rotation of the arrow itself. |
 | `presence` | `traced` / `sterile` | `traced` requires a nameable object that says someone was recently here. A beautiful empty room is `sterile`. |
 
 `evidence` is required on every frame and is a sentence naming what was actually seen — "a cup ring and a jacket on the chair back", not "looks lived in". A level without evidence is an opinion, and `judge submit` refuses it.
+
+Three things are deliberately free and are **not** defects, however much they vary: which place the laptop is in, how much of the frame it occupies, and the angle onto it. The laptop moving is the series working. Only the arrow is pinned.
 
 `order` is all twelve labels, earliest to latest. This is the measurement the whole axis rests on: the run's **Kendall tau** compares that guess with the true chronology. Tau near 1 means the day reads from the images alone. Tau near 0 means The Variable is in the briefs and not in the artefacts — the images are not carrying the day, whatever their individual verdicts say.
 
@@ -38,5 +41,6 @@ Two reasons this line is hard. A judge that can regenerate what it dislikes opti
 ## Reading the numbers honestly
 
 - A high tau with several `suspect` restrictions is a series that reads well and may not be clean. Look at the images.
+- `opacity` split across `too-mirrored` and `too-matte` in the same series is the worst reading on that level: the panel is not drifting in one direction, it is being reinvented per frame, and the shared clause is not holding. One-directional drift is usually one route or one place; fix the prompt. Mixed drift means the clause needs rewriting for every frame at the gate.
 - A low tau with twelve `clean` frames is a series that obeys the restriction and is not telling a day. That is the worse failure, and it is not fixed by regenerating one frame.
 - `violated` on one frame is a regeneration. `violated` on four is a prompt problem in the shared clause, and the fix is upstream, in the plan, at the gate.

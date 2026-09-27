@@ -9,7 +9,7 @@ metadata:
 
 # Still cursor, living day
 
-One axis, twelve frames, three phases: you write the briefs, the owner gates them, generators produce the images, and a judge that never saw the briefs grades what came out. `scripts/collection.mjs` owns the arithmetic — validation, dispatch, file evidence, the shuffle, the tau, the scorecard. Do not redo it by hand, and do not judge your own briefs from this context.
+One axis, twelve frames, three phases: you write the briefs, the owner gates them, generators produce the images, and a judge that never saw the briefs grades what came out. An open MacBook with its display off, carried through a day: the laptop travels between places and sits anywhere in the frame at any size, and the only things that never move are the cursor's tip and the panel's reflectivity. `scripts/collection.mjs` owns the arithmetic — validation, dispatch, file evidence, the shuffle, the tau, the scorecard. Do not redo it by hand, and do not judge your own briefs from this context.
 
 This is an **experiment** skill: the question it answers every run is whether a day still reads from the artefacts once the prompts are taken away, and the blind pass's ordering tau is the number it leaves behind.
 
@@ -26,9 +26,11 @@ node <skill>/scripts/collection.mjs probe --run "$SCLD_RUN"
 
 ## 2. Write the twelve briefs
 
-Fill `plan.json` following [`references/briefs.md`](references/briefs.md). Every frame needs a clock, the room, the light, what the person is doing in the reflection, the objects it leaves changed, its route, and the full prompt. The two invariant clauses go into every prompt verbatim — that is The Constant, and the script refuses a prompt missing either one.
+Fill `plan.json` following [`references/briefs.md`](references/briefs.md), after reading the worked prompts in [`references/examples.md`](references/examples.md) — positives for range, negatives for the traps. Every frame needs a clock, a `place`, the room, the light, what the person is doing in the reflection, a `framing` (`scale` and `view`), the objects it leaves changed, its route, and the full prompt.
 
-The trace chain is the part that decides whether this is a collection or twelve files in a folder. Each frame must change the state of at least one physical object, so that deleting it breaks something nameable. `route` proves this arithmetically and refuses any frame that moves nothing.
+The three invariant clauses — surface, cursor, optics — go into every prompt verbatim, identical in all twelve, and are the whole of what does not vary. Everything else must move, and `route` refuses a plan where it does not: five or more distinct places, at most three consecutive frames sharing one, three or more scales and views, at most two consecutive frames repeating a pair. A series can obey every clause and still be one photograph taken twelve times.
+
+The trace chain decides whether this is a collection or twelve files in a folder. Every frame must change at least one object's state — delete it and something nameable breaks — with one chain travelling with the laptop and one left behind. `route` proves that arithmetically and refuses a frame that moves nothing.
 
 ## 3. Route and gate
 
@@ -62,7 +64,7 @@ node <skill>/scripts/collection.mjs judge open   --phase informed --run "$SCLD_R
 node <skill>/scripts/collection.mjs judge submit --phase informed --run "$SCLD_RUN" --file <verdicts.json>
 ```
 
-**Hand each `task.md` to a fresh agent.** A judge holding the briefs grades the intention instead of the artefact, and a judge that is also the author grades itself. The blind pass sees twelve shuffled, unlabelled images and no prompts: it rates The Restriction, The Constant and human presence, and orders the day. That ordering is the measurement — the run's Kendall tau says whether The Variable reads from the images alone. The informed pass then sees the chronology and the trace chain and answers the two collection questions. Rubric and the typed levels: [`references/judging.md`](references/judging.md).
+**Hand each `task.md` to a fresh agent.** A judge holding the briefs grades the intention instead of the artefact, and a judge that is also the author grades itself. The blind pass sees twelve shuffled, unlabelled images and no prompts: it rates The Restriction, The Optics, The Constant and human presence, and orders the day. That ordering is the measurement — the run's Kendall tau says whether The Variable reads from the images alone. The informed pass then sees the chronology and the trace chain and answers the two collection questions. Rubric and the typed levels: [`references/judging.md`](references/judging.md).
 
 While the blind pass is open, a guard hook refuses reads of `plan.json`, `prompts/`, `frames/` and the answer key, and refuses hand-edits of any recorded verdict. If it fires, close the pass — do not work around it.
 
@@ -78,8 +80,9 @@ node <skill>/scripts/collection.mjs export --run "$SCLD_RUN" --to <path>
 ## Done-check
 
 - [ ] `probe` ran before the plan was routed, and every frame's route can generate an image.
-- [ ] Every prompt carries both invariant clauses verbatim; no frame declares its own.
+- [ ] Every prompt carries all three invariant clauses verbatim; no frame declares its own.
 - [ ] The clock advances across all twelve frames and every frame changes at least one object's state.
+- [ ] The laptop travelled: five or more places, three or more scales and views, and no run of identical framing.
 - [ ] `route --approve` locked the exact plan that was dispatched; no post-approval edit was dispatched.
 - [ ] `collect` reported 12/12 — real images, one geometry, no twins.
 - [ ] The blind pass ran before the informed pass, in a fresh agent, and the run's tau is in the report.

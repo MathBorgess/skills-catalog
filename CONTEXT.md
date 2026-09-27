@@ -108,6 +108,16 @@ _Avoid_: photo, shot (a frame is a brief and an artefact, and the collection is 
 **Invariant clause**:
 The two sentences — the cursor's coordinate, the black non-emitting panel — carried verbatim by every prompt. Plan-level by construction: a frame that writes its own has already broken The Constant.
 
+**Place**:
+Where the laptop was carried and opened for one frame. A variable, floored: at least five distinct places across the twelve, at most three consecutive frames sharing one. **Framing** (`scale` and `view`) is the second variable, floored the same way.
+_Avoid_: treating the room as part of the constant
+
+**Anchor**:
+The image coordinate the cursor's tip lands on in all twelve frames, at one drawn size. The composition is built around it and the laptop goes wherever that leaves it — so the anchor constrains the frame, not the machine.
+
+**Opacity band**:
+The one reflectivity the panel holds across the series, stated in `optics_clause`. It fails in two directions: **too-mirrored** (a reflection crisp enough to read) and **too-matte** (no room in the panel at all). Drift in one direction is a prompt; drift in both is a clause that is not holding.
+
 **Trace**:
 A physical object in the room and its state at one hour. **Transition**: that state changing between frames. The collection is made of transitions; the frames are where they are observed.
 _Avoid_: counting frames as continuity

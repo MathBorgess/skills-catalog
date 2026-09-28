@@ -113,7 +113,12 @@ Where the laptop was carried and opened for one frame. A variable, floored: at l
 _Avoid_: treating the room as part of the constant
 
 **Anchor**:
-The image coordinate the cursor's tip lands on in all twelve frames, at one drawn size. The composition is built around it and the laptop goes wherever that leaves it — so the anchor constrains the frame, not the machine.
+The screen pixel of the MacBook the cursor's tip sits on in all twelve frames, set once in `plan.cursor`. It is a point of the panel, never of the image: the arrow moves through the frame only because the laptop does, and it is scaled and foreshortened with the screen.
+_Avoid_: an image coordinate (it misses the screen as soon as the laptop moves — the first real runs landed on it in ten of twelve)
+
+**Composite**:
+The step that draws the cursor after generation, projecting the anchor through the homography of the panel's four marked **corners**. The generator is never asked for a cursor; a panel it drew on is re-dispatched, not composited over.
+_Avoid_: asking a prompt for a position (generators put the arrow mid-screen at a size of their choosing)
 
 **Opacity band**:
 The one reflectivity the panel holds across the series, stated in `optics_clause`. It fails in two directions: **too-mirrored** (a reflection crisp enough to read) and **too-matte** (no room in the panel at all). Drift in one direction is a prompt; drift in both is a clause that is not holding.

@@ -27,6 +27,8 @@ import { tmpdir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { decodePng, drawCursor, encodePng, homography, projectGlyph, quadProblems, ARROW } from "./cursor.mjs";
+
 const AXIS = "still-cursor-living-day";
 const FRAME_COUNT = 12;
 const SKILL_DIR = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -49,15 +51,17 @@ const FORBIDDEN = [
   "mirror finish", "mirror-like", "perfect mirror", "crystal clear reflection",
   "crystal-clear reflection", "sharp reflection", "high gloss", "glossy mirror",
   "matte black screen", "flat black rectangle", "pure black screen",
+  "cursor", "mouse pointer", "pointer", "arrow",
 ];
 
 // Ambiguous by nature: a room has windows and lamps, and the axis lives or dies
 // on which kind you meant. Never refused, always raised at the gate.
-const AMBIGUOUS = ["window", "lamp", "bulb", "led", "neon", "phone", "tablet", "television", "tv ", "mirror", "gloss", "shine"];
+const AMBIGUOUS = ["window", "lamp", "bulb", "led", "neon", "phone", "tablet", "television", "tv", "mirror", "gloss", "shine"];
 
 const VERDICT_ENUMS = {
   restriction: ["clean", "suspect", "violated"],
   opacity: ["in-band", "too-mirrored", "too-matte"],
+  object: ["same", "changed"],
   constant: ["anchored", "drifted", "absent"],
   chronology: ["in-line", "ambiguous", "out-of-line"],
   presence: ["traced", "sterile"],
@@ -73,6 +77,20 @@ const MAX_SAME_PLACE_RUN = 3;
 const MIN_SCALES = 3;
 const MIN_VIEWS = 3;
 const MAX_SAME_FRAMING_RUN = 2;
+
+// The cursor. Never asked of a generator — composited by cursor.mjs at one
+// fixed point of the panel, through the perspective of four marked corners.
+const DEFAULT_CURSOR = {
+  glyph: "macos-arrow",
+  panel: { model: "14-inch MacBook Pro", points: [1512, 982] },
+  anchor: [1080, 410],
+  pointer_size: 2,
+};
+const POINTER_SIZE_RANGE = [1, 4];
+const MIN_CURSOR_PX = 6;
+// Rough share of the image height a panel takes at each scale, used only to
+// warn before generation that a framing will make the cursor unreadable.
+const SCALE_PANEL_SHARE = { distant: 0.1, small: 0.2, medium: 0.38, dominant: 0.7 };
 const COLLECTION_ENUMS = { shape: ["collection", "batch"] };
 
 // ---------------------------------------------------------------- utilities
@@ -130,6 +148,10 @@ const P = (dir) => ({
   state: join(dir, "state.json"),
   prompts: join(dir, "prompts"),
   frames: join(dir, "frames"),
+  panels: join(dir, "panels"),
+  panelsJson: join(dir, "panels", "panels.json"),
+  composited: join(dir, "composited"),
+  manifest: join(dir, "composited", "manifest.json"),
   logs: join(dir, "logs"),
   judge: join(dir, "judge"),
   key: join(dir, "judge", "key.json"),
@@ -331,12 +353,50 @@ function breakage(plan) {
   return { links, per, windows };
 }
 
+function hasToken(low, token) {
+  const escaped = token.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return new RegExp(`(^|[^a-z0-9])${escaped}($|[^a-z0-9])`).test(low);
+}
+
 function lexicon(text) {
   const low = String(text).toLowerCase();
   return {
-    forbidden: FORBIDDEN.filter((t) => low.includes(t)),
-    ambiguous: AMBIGUOUS.filter((t) => low.includes(t)),
+    forbidden: FORBIDDEN.filter((t) => hasToken(low, t)),
+    ambiguous: AMBIGUOUS.filter((t) => hasToken(low, t)),
   };
+}
+
+function cursorHash(cursor) {
+  return sha256(Buffer.from(JSON.stringify(cursor ?? null))).slice(0, 16);
+}
+
+// The plan-level cursor block: what gets drawn, where on the panel, how large.
+function cursorProblems(cursor) {
+  const problems = [];
+  if (!cursor || typeof cursor !== "object") return ["plan.cursor is missing. The cursor is composited from this block — it is never written into a prompt."];
+  if (cursor.glyph !== "macos-arrow") problems.push(`cursor.glyph must be "macos-arrow", got ${JSON.stringify(cursor.glyph)}.`);
+  const pts = cursor.panel?.points;
+  if (!Array.isArray(pts) || pts.length !== 2 || !pts.every((v) => Number.isFinite(v) && v > 0)) {
+    problems.push("cursor.panel.points must be [width, height] of the panel in screen points, e.g. [1512, 982].");
+    return problems;
+  }
+  const size = cursor.pointer_size;
+  if (!Number.isFinite(size) || size < POINTER_SIZE_RANGE[0] || size > POINTER_SIZE_RANGE[1]) {
+    problems.push(`cursor.pointer_size must be between ${POINTER_SIZE_RANGE[0]} and ${POINTER_SIZE_RANGE[1]} — the range macOS itself allows.`);
+  }
+  const a = cursor.anchor;
+  if (!Array.isArray(a) || a.length !== 2 || !a.every(Number.isFinite)) {
+    problems.push("cursor.anchor must be [x, y] in the panel's screen points.");
+    return problems;
+  }
+  const [w, h] = pts;
+  const s = Number.isFinite(size) ? size : 1;
+  const glyphW = Math.max(...ARROW.map((p) => p[0])) * s;
+  const glyphH = Math.max(...ARROW.map((p) => p[1])) * s;
+  if (a[0] < w * 0.05 || a[1] < h * 0.08 || a[0] + glyphW > w * 0.95 || a[1] + glyphH > h * 0.95) {
+    problems.push(`cursor.anchor [${a}] puts the arrow too close to the panel edge; keep it inside the central 90% (and clear of the notch at the top).`);
+  }
+  return problems;
 }
 
 function validate(plan, routes) {
@@ -350,11 +410,18 @@ function validate(plan, routes) {
     return { errors, warnings, breaks: null };
   }
 
-  const cursor = String(plan.invariants?.cursor_clause ?? "");
+  // The cursor used to be a prompt clause. Generators ignored it — they drew
+  // the arrow wherever they liked, at whatever size — so it is not a clause
+  // any more, and a plan that still carries one is refused rather than
+  // half-honoured.
+  if (plan.invariants?.cursor_clause) {
+    errors.push("invariants.cursor_clause is obsolete: the cursor is composited from plan.cursor after generation, never asked of the generator. Remove the clause and every mention of a cursor from the prompts.");
+  }
+  for (const problem of cursorProblems(plan.cursor)) errors.push(problem);
+
   const surface = String(plan.invariants?.surface_clause ?? "");
   const optics = String(plan.invariants?.optics_clause ?? "");
-  if (cursor.trim().length < 30) errors.push("invariants.cursor_clause is missing or too short to pin a coordinate — that clause is The Constant.");
-  if (surface.trim().length < 30) errors.push("invariants.surface_clause is missing or too short — that clause is The Restriction.");
+  if (surface.trim().length < 30) errors.push("invariants.surface_clause is missing or too short — that clause is The Restriction and the MacBook's identity.");
   if (optics.trim().length < 30) errors.push("invariants.optics_clause is missing or too short — without a stated reflectivity band the panel drifts between a mirror and a matte rectangle across the series.");
 
   let previous = null;
@@ -362,8 +429,8 @@ function validate(plan, routes) {
     const id = frame.id ?? `#${i + 1}`;
     const at = `frame ${id}`;
     if (frame.id !== IDS[i]) errors.push(`${at}: id must be "${IDS[i]}" (frames are ordered and ids are positions).`);
-    if (frame.cursor_clause || frame.surface_clause || frame.optics_clause) {
-      errors.push(`${at}: carries its own cursor, surface or optics clause. Those three are plan-level and byte-identical in all ${FRAME_COUNT} frames — they are what does not vary.`);
+    if (frame.cursor || frame.cursor_clause || frame.surface_clause || frame.optics_clause) {
+      errors.push(`${at}: carries its own cursor, surface or optics setting. Those are plan-level and identical in all ${FRAME_COUNT} frames — they are what does not vary.`);
     }
 
     const minutes = clockMinutes(frame.clock);
@@ -378,9 +445,6 @@ function validate(plan, routes) {
     }
 
     const prompt = String(frame.prompt ?? "");
-    if (cursor.length >= 30 && !prompt.includes(cursor)) {
-      errors.push(`${at}: prompt does not carry invariants.cursor_clause verbatim.`);
-    }
     if (surface.length >= 30 && !prompt.includes(surface)) {
       errors.push(`${at}: prompt does not carry invariants.surface_clause verbatim.`);
     }
@@ -390,10 +454,14 @@ function validate(plan, routes) {
     // The invariant clauses name the forbidden things in order to negate them,
     // so they are stripped before the lexicon runs. Per-frame text must not
     // repeat the negations: a frame that says "no glowing screen" is scanned.
-    const body = prompt.split(cursor).join(" ").split(surface).join(" ").split(optics).join(" ");
+    const body = prompt.split(surface).join(" ").split(optics).join(" ");
     const hits = lexicon(body);
     for (const token of hits.forbidden) {
-      errors.push(`${at}: prompt says "${token}" outside the invariant clause. The Restriction forbids any lit pixel outside the cursor and any staged light — and its negations belong in invariants.surface_clause, not repeated per frame.`);
+      if (["cursor", "mouse pointer", "pointer", "arrow"].includes(token)) {
+        errors.push(`${at}: prompt mentions "${token}". The generator must never be asked for a cursor: it draws one in the middle of the screen at a size of its choosing. The panel is generated blank and the cursor is composited afterwards.`);
+      } else {
+        errors.push(`${at}: prompt says "${token}" outside the invariant clauses. The Restriction forbids any lit pixel and any staged light — and its negations belong in the invariant clauses, not repeated per frame.`);
+      }
     }
     for (const token of hits.ambiguous) {
       warnings.push(`${at}: prompt says "${token.trim()}" — a room window and lamp are the axis; a screen or a second lit device is not. Resolve at the gate.`);
@@ -408,6 +476,14 @@ function validate(plan, routes) {
     const scale = String(frame.framing?.scale ?? "");
     const view = String(frame.framing?.view ?? "");
     if (!SCALES.includes(scale)) errors.push(`${at}: framing.scale must be one of ${SCALES.join(" | ")}, got ${JSON.stringify(scale)}.`);
+    else if (!cursorProblems(plan.cursor).length) {
+      const imageH = Number(String(process.env.SCLD_IMAGE_SIZE ?? "1536x1024").split("x")[1]) || 1024;
+      const glyphH = Math.max(...ARROW.map((p) => p[1])) * plan.cursor.pointer_size;
+      const estimate = (glyphH / plan.cursor.panel.points[1]) * SCALE_PANEL_SHARE[scale] * imageH;
+      if (estimate < MIN_CURSOR_PX) {
+        warnings.push(`${at}: at scale "${scale}" the cursor will be about ${estimate.toFixed(1)}px tall, under the ${MIN_CURSOR_PX}px floor \`panel submit\` enforces. Frame it closer, or raise cursor.pointer_size for the whole series.`);
+      }
+    }
     if (!VIEWS.includes(view)) errors.push(`${at}: framing.view must be one of ${VIEWS.join(" | ")}, got ${JSON.stringify(view)}.`);
 
     const routeId = String(frame.route ?? "");
@@ -473,10 +549,8 @@ function validate(plan, routes) {
 
 // ------------------------------------------------------------- init / probe
 
-const CURSOR_CLAUSE =
-  "a single standard white arrow mouse cursor, monochrome, drawn at exactly the same size and the same angle in every image of the series, its tip landing on exactly 61.5% of the frame width and 43.0% of the frame height, whatever part of the frame the laptop occupies and however large or small it appears";
 const SURFACE_CLAUSE =
-  "an open MacBook whose display is off: a dark grey-black panel emitting no light at all, carrying no windows, icons, wallpaper, notifications, menu bar or interface of any kind, and showing nothing except what the room around it puts on its surface";
+  "the same 14-inch MacBook Pro in space black in every image — same finish, same proportions, same thin black bezel and camera notch — its lid open and its display off: a blank dark grey-black panel emitting no light, with no windows, icons, wallpaper, notifications, menu bar or any mark drawn on it, showing only what the room reflects onto its surface";
 const OPTICS_CLAUSE =
   "the panel is semi-gloss, about thirty percent reflective: the room is legible in it but two or three stops darker than the room itself, reflected edges slightly softened and never crisp, no specular highlight sharp enough to read detail in, and the panel stays the darkest value in the whole frame — neither a clean mirror nor a flat matte black rectangle";
 
@@ -502,16 +576,17 @@ function cmdInit(args) {
     axis: AXIS,
     frame_count: FRAME_COUNT,
     invariants: {
-      cursor_clause: CURSOR_CLAUSE,
       surface_clause: SURFACE_CLAUSE,
       optics_clause: OPTICS_CLAUSE,
     },
+    cursor: DEFAULT_CURSOR,
     frames,
   });
   saveState(dir, { phase: "planning", frames: {}, started: new Date().toISOString() });
   console.log(`run: ${dir}`);
   console.log(`plan: ${P(dir).plan} — ${FRAME_COUNT} frames, every field TODO.`);
-  console.log("The three invariant clauses are already written and are the same in all twelve; every prompt must carry them verbatim.");
+  console.log("The two invariant clauses are already written and are the same in all twelve; every prompt must carry them verbatim.");
+  console.log(`The cursor is not in any prompt. plan.cursor puts it at panel point [${DEFAULT_CURSOR.anchor}] of ${DEFAULT_CURSOR.panel.points.join("x")}, pointer size ${DEFAULT_CURSOR.pointer_size}; it is composited after generation.`);
   console.log(`Vary place, framing.scale (${SCALES.join("/")}) and framing.view (${VIEWS.join("/")}): at least ${MIN_PLACES} places, ${MIN_SCALES} scales and ${MIN_VIEWS} views, or route refuses the plan.`);
   console.log(`next: node ${join(SKILL_DIR, "scripts", "collection.mjs")} probe --run ${dir}`);
 }
@@ -755,6 +830,12 @@ function cmdCollect(args) {
       state.frames[frame.id] = { ...(state.frames[frame.id] ?? {}), artifact: "invalid", reason: info.reason };
       continue;
     }
+    if (info.format !== "png") {
+      const reason = `${info.format} — the cursor is composited onto PNG only; convert it (e.g. \`sips -s format png\`) and drop it back`;
+      rows.push({ id: frame.id, ok: false, reason });
+      state.frames[frame.id] = { ...(state.frames[frame.id] ?? {}), artifact: "wrong-format", reason };
+      continue;
+    }
     const twin = seen.get(info.hash);
     if (twin) {
       rows.push({ id: frame.id, ok: false, reason: `byte-identical to frame ${twin}` });
@@ -778,7 +859,7 @@ function cmdCollect(args) {
   for (const r of rows.filter((r) => r.ok && r.width)) {
     if (dominant && `${r.width}x${r.height}` !== dominant[0]) {
       r.ok = false;
-      r.reason = `geometry ${r.width}x${r.height} differs from the series (${dominant[0]}) — the cursor coordinate is not comparable`;
+      r.reason = `geometry ${r.width}x${r.height} differs from the series (${dominant[0]}) — twelve frames of one collection share one canvas`;
       state.frames[r.id].artifact = "off-geometry";
       state.frames[r.id].reason = r.reason;
       ready -= 1;
@@ -795,7 +876,192 @@ function cmdCollect(args) {
     console.log("Re-dispatch the missing ids (`dispatch --only 03,07 --force`) before judging. A judge that grades eleven frames is grading a different collection.");
     process.exit(1);
   }
+  console.log(`next: panel open --run ${dir}`);
+}
+
+// ---------------------------------------------------------- panel / composite
+
+// The one step a model or a person has to do by eye: say where the panel is.
+// Four corners per frame, clicked in mark.html or returned by a vision agent.
+// Everything after that is arithmetic.
+function allReady(state) {
+  return IDS.every((id) => state.frames[id]?.artifact === "ready");
+}
+
+function cmdPanelOpen(args) {
+  const dir = runDir(args);
+  const plan = loadPlan(dir);
+  const state = loadState(dir);
+  if (!allReady(state)) die("Not every frame is collected. Run `collect` until it reports 12/12 before marking panels.");
+  mkdirSync(P(dir).panels, { recursive: true });
+  const frames = IDS.map((id) => ({
+    id,
+    src: `../frames/${id}.png`,
+    width: state.frames[id].width,
+    height: state.frames[id].height,
+  }));
+  const config = {
+    panel: plan.cursor.panel.points,
+    anchor: plan.cursor.anchor,
+    pointerSize: plan.cursor.pointer_size,
+    arrow: ARROW,
+    minCursorPx: MIN_CURSOR_PX,
+    frames,
+  };
+  writeFileSync(join(P(dir).panels, "frames.js"), `window.SCLD = ${JSON.stringify(config, null, 2)};\n`);
+  copyFileSync(join(SKILL_DIR, "assets", "mark.html"), join(P(dir).panels, "mark.html"));
+  const example = {
+    frames: [{ id: "01", corners: { tl: [412, 233], tr: [988, 251], br: [975, 618], bl: [405, 590] }, clean_panel: true, anchor_occluded: false }],
+  };
+  writeFileSync(join(P(dir).panels, "task.md"), [
+    "# Mark the panels",
+    "",
+    `For each of the twelve images in \`${P(dir).frames}\`, give the four corners of the MacBook's display — the active glass area inside the bezel, where the extended edges meet at the rounded top corners — in image pixels, origin top-left.`,
+    "",
+    "Order is always the panel's own: `tl` top-left, `tr` top-right, `br` bottom-right, `bl` bottom-left, *as the screen itself is oriented*, whatever the camera angle.",
+    "",
+    "`clean_panel` is false if the generator drew anything on the panel — a cursor, a window, a glow. `anchor_occluded` is false unless something in front of the panel (a hand, a cup) covers the point where the cursor will go.",
+    "",
+    "```json",
+    JSON.stringify(example, null, 2),
+    "```",
+    "",
+    "Return all twelve, then: `panel submit --run <run> --file <that json>`.",
+  ].join("\n") + "\n");
+  state.phase = "marking";
+  saveState(dir, state);
+  console.log(`open ${join(P(dir).panels, "mark.html")} in a browser: click the four panel corners of each frame, then download corners.json.`);
+  console.log(`or give ${join(P(dir).panels, "task.md")} to a vision agent. Corners clicked by a person are the reliable path; an agent's must be checked in the composite.`);
+  console.log(`then: panel submit --run ${dir} --file <corners.json>`);
+}
+
+function frameSha(dir, id) {
+  const path = join(P(dir).frames, `${id}.png`);
+  return existsSync(path) ? sha256(readFileSync(path)) : null;
+}
+
+function cmdPanelSubmit(args) {
+  const dir = runDir(args);
+  const plan = loadPlan(dir);
+  const state = loadState(dir);
+  const file = args.file ? resolve(String(args.file)) : die("--file <corners.json> is required.");
+  const submitted = readJson(file);
+  if (!submitted) die(`${file} is not readable JSON.`);
+  const entries = Array.isArray(submitted) ? submitted : submitted.frames ?? [];
+  const byId = new Map(entries.map((e) => [String(e.id), e]));
+  const existing = readJson(P(dir).panelsJson, { cursor_hash: null, frames: {} });
+  const hash = cursorHash(plan.cursor);
+  const panels = { cursor_hash: hash, frames: existing.cursor_hash === hash ? existing.frames : {} };
+  const [pw, ph] = plan.cursor.panel.points;
+  const rejected = [];
+
+  for (const id of IDS) {
+    const entry = byId.get(id);
+    if (!entry) {
+      // A frame regenerated since its corners were accepted loses them.
+      if (panels.frames[id] && panels.frames[id].source_sha !== frameSha(dir, id)) delete panels.frames[id];
+      continue;
+    }
+    const w = state.frames[id]?.width;
+    const h = state.frames[id]?.height;
+    const problems = quadProblems(entry.corners, w, h);
+    if (entry.clean_panel !== true) problems.push("clean_panel is not true — the generator drew something on the panel. Re-dispatch this frame; compositing over it would put two cursors on one screen.");
+    if (entry.anchor_occluded !== false) problems.push("anchor_occluded is not false — something covers the cursor's point. Re-dispatch or re-frame; drawing over the occluder would float the arrow in front of it.");
+    let glyph = null;
+    if (!problems.length) {
+      try {
+        glyph = projectGlyph(homography(pw, ph, entry.corners), plan.cursor.anchor, plan.cursor.pointer_size);
+      } catch (err) {
+        problems.push(String(err.message));
+      }
+    }
+    if (glyph) {
+      if (!glyph.poly.every(([x, y]) => x >= 0 && y >= 0 && x < w && y < h)) problems.push("the cursor projects outside the image — the panel is cropped by the frame at the anchor.");
+      if (glyph.height < MIN_CURSOR_PX) {
+        problems.push(`the cursor would be ${glyph.height.toFixed(1)}px tall, under the ${MIN_CURSOR_PX}px floor. Three honest ways out: re-frame this one closer, generate the series at a higher resolution, or raise cursor.pointer_size for all twelve (that changes the plan and needs the gate again).`);
+      }
+    }
+    if (problems.length) {
+      rejected.push({ id, problems });
+      delete panels.frames[id];
+      continue;
+    }
+    panels.frames[id] = {
+      corners: entry.corners,
+      tip: glyph.tip.map((v) => Number(v.toFixed(2))),
+      cursor_px: Number(glyph.height.toFixed(2)),
+      source_sha: frameSha(dir, id),
+    };
+  }
+  writeJson(P(dir).panelsJson, panels);
+
+  for (const id of IDS) {
+    const p = panels.frames[id];
+    const r = rejected.find((x) => x.id === id);
+    if (p) console.log(`✓ ${id}  tip [${p.tip.join(", ")}]  cursor ${p.cursor_px}px`);
+    else if (r) console.log(`✗ ${id}  ${r.problems.join(" ")}`);
+    else console.log(`· ${id}  not marked yet`);
+  }
+  const done = Object.keys(panels.frames).length;
+  console.log(`\n${done}/${FRAME_COUNT} panels accepted.`);
+  if (done !== FRAME_COUNT) process.exit(1);
+  state.phase = "marked";
+  saveState(dir, state);
+  console.log(`next: composite --run ${dir}`);
+}
+
+function cmdComposite(args) {
+  const dir = runDir(args);
+  const plan = loadPlan(dir);
+  requireApproval(dir, plan);
+  const panels = readJson(P(dir).panelsJson);
+  const hash = cursorHash(plan.cursor);
+  if (!panels || panels.cursor_hash !== hash) die("panels.json is missing or was marked against a different cursor block. Run `panel submit` again.");
+  const [pw, ph] = plan.cursor.panel.points;
+  const stale = IDS.filter((id) => !panels.frames[id] || panels.frames[id].source_sha !== frameSha(dir, id));
+  if (stale.length) die(`frames ${stale.join(", ")} have no accepted corners, or were regenerated after their corners were marked. Mark them again with \`panel submit\`.`);
+
+  mkdirSync(P(dir).composited, { recursive: true });
+  const manifest = { cursor_hash: hash, plan_hash: planHash(plan), cursor: plan.cursor, frames: {} };
+  console.log(`cursor: ${plan.cursor.glyph}, panel point [${plan.cursor.anchor.join(", ")}] of ${pw}x${ph}, pointer size ${plan.cursor.pointer_size} — identical in all ${FRAME_COUNT}\n`);
+  console.log("| Frame | Panel point | Tip in image | Cursor height |");
+  console.log("|---|---|---|---|");
+  for (const id of IDS) {
+    const entry = panels.frames[id];
+    const image = decodePng(readFileSync(join(P(dir).frames, `${id}.png`)));
+    const glyph = projectGlyph(homography(pw, ph, entry.corners), plan.cursor.anchor, plan.cursor.pointer_size);
+    const lit = drawCursor(image, glyph.poly);
+    const out = encodePng(image);
+    writeFileSync(join(P(dir).composited, `${id}.png`), out);
+    manifest.frames[id] = {
+      tip: glyph.tip.map((v) => Number(v.toFixed(2))),
+      cursor_px: Number(glyph.height.toFixed(2)),
+      lit_pixels: lit,
+      source_sha: entry.source_sha,
+      sha: sha256(out),
+    };
+    console.log(`| ${id} | ${plan.cursor.anchor.join(", ")} | ${glyph.tip.map((v) => v.toFixed(1)).join(", ")} | ${glyph.height.toFixed(1)}px |`);
+  }
+  writeJson(P(dir).manifest, manifest);
+  const state = loadState(dir);
+  state.phase = "composited";
+  saveState(dir, state);
+  console.log(`\nwrote ${FRAME_COUNT} frames to ${P(dir).composited}. The raw generations stay in frames/ as provenance.`);
   console.log(`next: judge open --phase blind --run ${dir}`);
+}
+
+function compositedReady(dir, plan) {
+  const manifest = readJson(P(dir).manifest);
+  if (!manifest || manifest.cursor_hash !== cursorHash(plan.cursor)) {
+    die("No composite for the current cursor block. Run `composite` — the judge grades the frames with the cursor on them.");
+  }
+  for (const id of IDS) {
+    const path = join(P(dir).composited, `${id}.png`);
+    if (!existsSync(path) || sha256(readFileSync(path)) !== manifest.frames[id]?.sha) {
+      die(`composited/${id}.png is missing or does not match the manifest. Run \`composite\` again.`);
+    }
+  }
+  return manifest;
 }
 
 // -------------------------------------------------------------------- judge
@@ -819,13 +1085,12 @@ function cmdJudgeOpen(args) {
   const judging = join(SKILL_DIR, "references", "judging.md");
 
   if (phase === "blind") {
+    compositedReady(dir, plan);
     const blindDir = join(P(dir).judge, "blind");
     mkdirSync(blindDir, { recursive: true });
     const pairs = shuffled(plan.frames.map((f) => f.id), dir).map((id, i) => ({ label: LABELS[i], id }));
     for (const pair of pairs) {
-      const src = framePath(dir, pair.id);
-      if (!src) die(`frame ${pair.id} has no file. Run \`collect\` — the blind pass needs all ${FRAME_COUNT}.`);
-      copyFileSync(src, join(blindDir, `${pair.label}.${src.split(".").pop()}`));
+      copyFileSync(join(P(dir).composited, `${pair.id}.png`), join(blindDir, `${pair.label}.png`));
     }
     writeJson(P(dir).key, { pairs });
     const task = [
@@ -836,8 +1101,8 @@ function cmdJudgeOpen(args) {
       "",
       "## The axis you are judging against",
       "",
-      `- **The Restriction**: ${plan.invariants.surface_clause}`,
-      `- **The Constant**: ${plan.invariants.cursor_clause}`,
+      `- **The Restriction and the object**: ${plan.invariants.surface_clause}`,
+      `- **The Constant**: one standard white arrow cursor, lit on that panel at the same point of the screen in every image — ${Math.round((plan.cursor.anchor[0] / plan.cursor.panel.points[0]) * 100)}% across and ${Math.round((plan.cursor.anchor[1] / plan.cursor.panel.points[1]) * 100)}% down the display — sized and foreshortened with the laptop, as a real pointer would be.`,
       `- **The Optics**: ${plan.invariants.optics_clause}`,
       "- **The Variable**: one day passing, read from ambient light, from where the laptop has been carried, from how close the frame sits to it, and from the traces a person left behind.",
       "- **The Discard**: any lit pixel outside the cursor; a panel that reads as a clean mirror or as flat matte black; any posed or selfie-like reflection; any place with no trace of recent human presence.",
@@ -851,14 +1116,14 @@ function cmdJudgeOpen(args) {
       "```json",
       JSON.stringify({
         order: ["<label earliest in the day>", "…", "<label latest in the day>"],
-        frames: [{ label: "A", restriction: "clean", opacity: "in-band", constant: "anchored", presence: "traced", evidence: "what you actually saw, naming the thing you saw" }],
+        frames: [{ label: "A", restriction: "clean", opacity: "in-band", object: "same", constant: "anchored", presence: "traced", evidence: "what you actually saw, naming the thing you saw" }],
       }, null, 2),
       "```",
       "",
       `\`order\` is all twelve labels, earliest to latest. Ordering them is the test: if the day does not read from the images alone, the Variable is not working, and the run's tau will say so.`,
       "Every frame needs an `evidence` sentence naming what you saw. A level without evidence is an opinion.",
       "",
-      "Two things are deliberately free and are not defects: the laptop may sit anywhere in the frame, at any size, seen from any angle, and it may be in a different place in every image. What is not free is the cursor's tip, which must land on the same point of the frame in all twelve, at the same drawn size — compare the images against each other, not against a description.",
+      "Deliberately free, and never a defect: where the laptop is, how much of the frame it takes, and the angle it is seen from. Not free: that it is the same machine in all twelve (`object`), and that the one lit arrow sits at the same point of *its screen* in all twelve, sized as the laptop's distance and angle would size it (`constant`). Compare the images against each other, not against a description. A second arrow, or any other mark on the panel, is a `restriction` violation.",
     ].join("\n");
     writeFileSync(join(blindDir, "task.md"), task + "\n");
     state.phase = "judging-blind";
@@ -876,7 +1141,7 @@ function cmdJudgeOpen(args) {
     const links = transitions(plan);
     const table = plan.frames.map((f, i) => {
       const moved = links.filter((l) => l.to === i).map((l) => `${l.object} → ${l.state}`).join("; ") || "—";
-      return `| ${f.id} | ${f.clock} | ${f.place} | ${f.framing?.scale}/${f.framing?.view} | ${framePath(dir, f.id)} | ${moved} |`;
+      return `| ${f.id} | ${f.clock} | ${f.place} | ${f.framing?.scale}/${f.framing?.view} | ${join(P(dir).composited, `${f.id}.png`)} | ${moved} |`;
     });
     const task = [
       "# Informed pass",
@@ -950,6 +1215,7 @@ function cmdJudgeSubmit(args) {
       checkEnums(entry, {
         restriction: VERDICT_ENUMS.restriction,
         opacity: VERDICT_ENUMS.opacity,
+        object: VERDICT_ENUMS.object,
         constant: VERDICT_ENUMS.constant,
         presence: VERDICT_ENUMS.presence,
       }, `label ${label}`, errors);
@@ -1017,6 +1283,7 @@ function cmdScore(args) {
     restriction_suspect: count((id) => b(id).restriction, "suspect"),
     opacity_too_mirrored: count((id) => b(id).opacity, "too-mirrored"),
     opacity_too_matte: count((id) => b(id).opacity, "too-matte"),
+    object_changed: count((id) => b(id).object, "changed"),
     constant_absent: count((id) => b(id).constant, "absent"),
     constant_drifted: count((id) => b(id).constant, "drifted"),
     presence_sterile: count((id) => b(id).presence, "sterile"),
@@ -1033,8 +1300,9 @@ function cmdScore(args) {
     else if (b(id).restriction === "suspect") add(id, "the judge could not rule out emitted light", "owner looks");
     if (b(id).opacity === "too-mirrored") add(id, "the panel reads as a clean mirror, outside the reflectivity band", "regenerate");
     if (b(id).opacity === "too-matte") add(id, "the panel reads as flat matte black, outside the reflectivity band", "regenerate");
-    if (b(id).constant === "absent") add(id, "no cursor on the glass", "regenerate");
-    else if (b(id).constant === "drifted") add(id, "the cursor moved off the series coordinate", "regenerate");
+    if (b(id).object === "changed") add(id, "not the same MacBook as the other eleven", "regenerate");
+    if (b(id).constant === "absent") add(id, "the composited cursor cannot be seen", "owner looks");
+    else if (b(id).constant === "drifted") add(id, "the cursor does not sit on the panel where the others do — the corners were likely marked wrong", "re-mark corners");
     if (b(id).presence === "sterile") add(id, "no trace of a person having been there", "regenerate");
     if (inf(id).chronology === "out-of-line") add(id, "the image does not sit at the hour it claims", "owner looks");
     if (inf(id).continuity === "broken") add(id, "the trace chain does not survive this frame", "owner looks");
@@ -1044,6 +1312,9 @@ function cmdScore(args) {
   }
 
   const clean = plan.frames.filter((f) => !proposals.some((p) => p.id === f.id)).length;
+  const manifest = readJson(P(dir).manifest, { frames: {} });
+  const px = (id) => manifest.frames?.[id]?.cursor_px;
+  const pxs = IDS.map(px).filter(Number.isFinite);
   const report = [
     `# ${AXIS} — run ${basename(dir)}`,
     "",
@@ -1054,6 +1325,7 @@ function cmdScore(args) {
     `- **Restriction**: ${plan.invariants.surface_clause}`,
     `- **Constant**: ${plan.invariants.cursor_clause}`,
     `- **Optics**: ${plan.invariants.optics_clause}`,
+    `- **Cursor**: ${plan.cursor.glyph} at panel point [${plan.cursor.anchor.join(", ")}] of ${plan.cursor.panel.points.join("x")}, pointer size ${plan.cursor.pointer_size}, composited after generation — ${pxs.length ? `${Math.min(...pxs).toFixed(1)} to ${Math.max(...pxs).toFixed(1)}px tall across the series` : "not composited"}.`,
     "",
     "## Judge",
     "",
@@ -1074,9 +1346,9 @@ function cmdScore(args) {
     "",
     "## Per-frame",
     "",
-    "| Frame | Clock | Place | Scale/view | Restriction | Optics | Constant | Presence | Chronology | Continuity |",
-    "|---|---|---|---|---|---|---|---|---|---|",
-    ...plan.frames.map((f) => `| ${f.id} | ${f.clock} | ${f.place ?? "—"} | ${f.framing?.scale ?? "—"}/${f.framing?.view ?? "—"} | ${b(f.id).restriction ?? "—"} | ${b(f.id).opacity ?? "—"} | ${b(f.id).constant ?? "—"} | ${b(f.id).presence ?? "—"} | ${inf(f.id).chronology ?? "—"} | ${inf(f.id).continuity ?? "—"} |`),
+    "| Frame | Clock | Place | Scale/view | Cursor | Restriction | Optics | Object | Constant | Presence | Chronology | Continuity |",
+    "|---|---|---|---|---|---|---|---|---|---|---|---|",
+    ...plan.frames.map((f) => `| ${f.id} | ${f.clock} | ${f.place ?? "—"} | ${f.framing?.scale ?? "—"}/${f.framing?.view ?? "—"} | ${Number.isFinite(px(f.id)) ? `${px(f.id).toFixed(1)}px` : "—"} | ${b(f.id).restriction ?? "—"} | ${b(f.id).opacity ?? "—"} | ${b(f.id).object ?? "—"} | ${b(f.id).constant ?? "—"} | ${b(f.id).presence ?? "—"} | ${inf(f.id).chronology ?? "—"} | ${inf(f.id).continuity ?? "—"} |`),
     "",
   ].join("\n");
   writeFileSync(P(dir).report, report);
@@ -1099,6 +1371,7 @@ function cmdScore(args) {
     places: new Set(plan.frames.map((f) => String(f.place ?? "").trim().toLowerCase()).filter(Boolean)).size,
     scales: new Set(plan.frames.map((f) => f.framing?.scale).filter(Boolean)).size,
     views: new Set(plan.frames.map((f) => f.framing?.view).filter(Boolean)).size,
+    cursor: { anchor: plan.cursor.anchor, pointer_size: plan.cursor.pointer_size, px_min: pxs.length ? Math.min(...pxs) : null, px_max: pxs.length ? Math.max(...pxs) : null },
     weakest_window: breaks.windows.reduce((a, b2) => (b2.destroyed < a.destroyed ? b2 : a), breaks.windows[0])?.destroyed ?? null,
     tau: blind.tau,
     shape: informed.collection?.shape ?? null,
@@ -1122,15 +1395,17 @@ function cmdExport(args) {
   const to = args.to ? resolve(String(args.to)) : die("--to <directory> is required.");
   const plan = loadPlan(dir);
   if (!existsSync(P(dir).report) && !args.force) die("No report.md — score the run before exporting, or pass --force to export the frames alone.");
+  compositedReady(dir, plan);
   mkdirSync(join(to, "frames"), { recursive: true });
+  mkdirSync(join(to, "raw"), { recursive: true });
   mkdirSync(join(to, "prompts"), { recursive: true });
   const only = args.only ? String(args.only).split(",").map((s) => s.trim()) : null;
   let copied = 0;
   for (const frame of plan.frames) {
     if (only && !only.includes(frame.id)) continue;
-    const src = framePath(dir, frame.id);
-    if (!src) continue;
-    copyFileSync(src, join(to, "frames", basename(src)));
+    copyFileSync(join(P(dir).composited, `${frame.id}.png`), join(to, "frames", `${frame.id}.png`));
+    const raw = framePath(dir, frame.id);
+    if (raw) copyFileSync(raw, join(to, "raw", basename(raw)));
     const prompt = join(P(dir).prompts, `${frame.id}.txt`);
     if (existsSync(prompt)) copyFileSync(prompt, join(to, "prompts", `${frame.id}.txt`));
     copied += 1;
@@ -1139,8 +1414,10 @@ function cmdExport(args) {
     const src = join(dir, file);
     if (existsSync(src)) copyFileSync(src, join(to, file));
   }
-  console.log(`exported ${copied} frame(s), their prompts, the plan and the verdicts to ${to}`);
-  console.log("The images and the report are the deliverable; plan.json and verdicts.json are how someone else checks it.");
+  copyFileSync(P(dir).panelsJson, join(to, "panels.json"));
+  copyFileSync(P(dir).manifest, join(to, "composite.json"));
+  console.log(`exported ${copied} frame(s) with the cursor, their raw generations, prompts, panel corners, the plan and the verdicts to ${to}`);
+  console.log("frames/ and report.md are the deliverable. raw/, panels.json and composite.json are how someone re-derives every cursor from the raw image.");
 }
 
 function cmdClean(args) {
@@ -1159,7 +1436,8 @@ function cmdStatus(args) {
   console.log(`phase: ${state.phase}`);
   for (const id of IDS) {
     const f = state.frames[id] ?? {};
-    console.log(`  ${id}  dispatch=${f.dispatch ?? "—"}  artifact=${f.artifact ?? "—"}  ${f.reason ?? ""}`);
+    const panel = readJson(P(dir).panelsJson, { frames: {} }).frames?.[id];
+    console.log(`  ${id}  dispatch=${f.dispatch ?? "—"}  artifact=${f.artifact ?? "—"}  panel=${panel ? `${panel.cursor_px}px` : "—"}  ${f.reason ?? ""}`);
   }
 }
 
@@ -1169,7 +1447,10 @@ const USAGE = `still-cursor-living-day — twelve frames, one cursor, one day.
   probe   --run <dir>                             which routes on this machine can generate an image
   route   --run <dir> [--approve]                 validate the plan against the axis; --approve locks its hash
   dispatch --run <dir> [--only 03,07] [--concurrency 4] [--budget 600] [--force]
-  collect --run <dir>                             prove twelve real images landed, same geometry, no twins
+  collect --run <dir>                             prove twelve real PNGs landed, same geometry, no twins
+  panel open   --run <dir>                        mark.html + task.md to mark each frame's four panel corners
+  panel submit --run <dir> --file <corners.json>  validate corners; refuse an unreadable or occluded cursor
+  composite --run <dir>                           draw the cursor at one fixed panel point in all twelve
   judge open   --phase blind|informed --run <dir>
   judge submit --phase blind|informed --run <dir> --file <verdicts.json>
   score   --run <dir>                             report, verdicts and the metrics line
@@ -1189,6 +1470,11 @@ function main() {
     case "route": return cmdRoute(args);
     case "dispatch": return cmdDispatch(args);
     case "collect": return cmdCollect(args);
+    case "panel":
+      if (sub === "open") return cmdPanelOpen(args);
+      if (sub === "submit") return cmdPanelSubmit(args);
+      return die(USAGE);
+    case "composite": return cmdComposite(args);
     case "judge":
       if (sub === "open") return cmdJudgeOpen(args);
       if (sub === "submit") return cmdJudgeSubmit(args);
@@ -1209,6 +1495,6 @@ if (process.argv[1] && resolve(process.argv[1]) === resolve(fileURLToPath(import
 
 export {
   validate, transitions, breakage, kendallTau, inspectImage, lexicon, shuffled,
-  planHash, clockMinutes, CURSOR_CLAUSE, SURFACE_CLAUSE, OPTICS_CLAUSE,
-  SCALES, VIEWS, MIN_PLACES, FRAME_COUNT, IDS,
+  planHash, clockMinutes, cursorProblems, SURFACE_CLAUSE, OPTICS_CLAUSE,
+  DEFAULT_CURSOR, MIN_CURSOR_PX, SCALES, VIEWS, MIN_PLACES, FRAME_COUNT, IDS,
 };

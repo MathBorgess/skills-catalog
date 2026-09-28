@@ -13,10 +13,11 @@
   "places": 6,
   "scales": 4,
   "views": 5,
+  "cursor": { "anchor": [1080, 410], "pointer_size": 2, "px_min": 7.4, "px_max": 31.8 },
   "tau": 0.88,
   "shape": "collection",
   "tally": { "restriction_violated": 1, "restriction_suspect": 2,
-             "opacity_too_mirrored": 1, "opacity_too_matte": 0,
+             "opacity_too_mirrored": 1, "opacity_too_matte": 0, "object_changed": 0,
              "constant_absent": 0, "constant_drifted": 1, "presence_sterile": 0,
              "chronology_out": 1, "chronology_ambiguous": 2, "continuity_broken": 0 },
   "proposals": 4,
@@ -29,6 +30,7 @@ What each number is for:
 
 - **`tau`** — the ordering fidelity of the blind pass. The one number that says whether The Variable survived generation. Compare it across runs of the same plan on different routes: that comparison is the actual experiment.
 - **`transitions` and `weakest_window`** — the density of the trace chain, and the cost of deleting the four most deletable frames. They are properties of the plan, not of the images, so they change only when the plan changes.
+- **`cursor`** — the screen pixel and pointer size the whole series was composited with, and the arrow's smallest and largest height in pixels. The range is the perspective at work; a `px_min` near the 6px floor says the most distant frame is barely carrying the constant.
 - **`places`, `scales`, `views`** — how far the plan actually travelled and how much the framing moved. They are the plan's variation, recorded because a series can pass every pillar and still be twelve photographs of one desk. Read them beside `tau`: variation that does not raise the ordering fidelity is variation that is not telling the day.
 - **`tally`** — where the collection fails, by pillar. `restriction_violated` concentrated on one route says that route cannot hold the restriction; spread evenly it says the shared clause is weak.
 - **`dispatch_failures`** — frames that needed a second attempt. Rising failures on a route with a flat tally means the route got slower, not worse.

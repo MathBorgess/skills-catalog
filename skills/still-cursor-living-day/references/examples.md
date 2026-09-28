@@ -1,16 +1,16 @@
 # Prompt examples
 
-`<clauses>` below stands for the three invariant clauses — surface, cursor, optics — pasted verbatim, in that order, at the head of every prompt. What follows them is the part you write, and it is the only part that varies.
+`<clauses>` below stands for the two invariant clauses — surface, then optics — pasted verbatim at the head of every prompt. What follows them is the part you write, and it is the only part that varies. None of it mentions a cursor: the arrow is composited afterwards, on the screen pixel `plan.cursor` names ([`cursor.md`](cursor.md)).
 
 Read the positives for range and the negatives for the traps. Both are here because the first real runs came back coherent and monotonous: the axis was being obeyed and nothing was happening.
 
 ## Positive
 
-### 01 — 05:52, bedroom floor, `distant` / `low`
+### 01 — 05:52, bedroom floor, `small` / `low`
 
 > `<clauses>` Shot from floor level across a rug, the open laptop small in the lower right of the frame where it was set down the night before, the duvet edge and one bare foot out of focus in the foreground. Pre-dawn blue coming from a single uncurtained window behind the camera, so the panel holds a pale rectangle of that window and, very dimly, the shape of a shoulder still in bed. A charging cable runs out of frame towards a socket. A glass of water beside it, nearly empty, a ring of condensation on the floorboards.
 
-**Why it works.** The laptop is tiny and off-centre and the frame still obeys the anchor. Nothing is happening yet and the room already says a person: the glass, the ring, the cable, the shoulder. The light names the hour without a clock.
+**Why it works.** The laptop is small and off-centre, and its screen still faces the camera with nothing across it, so the composited arrow has a clear patch of glass to sit on. Nothing is happening yet and the room already says a person: the glass, the ring, the cable, the shoulder. The light names the hour without a clock.
 
 ### 03 — 08:10, kitchen table, `medium` / `oblique`
 
@@ -38,7 +38,7 @@ Read the positives for range and the negatives for the traps. Both are here beca
 
 ### 12 — 23:41, kitchen table, `medium` / `over-shoulder`
 
-> `<clauses>` The same kitchen table, seen over a shoulder from behind, the laptop occupying the middle third, still open. No daylight at all; the only illumination is spill from a hallway out of frame, so most of the image is near-black and the panel is the deepest black in it, holding a faint doorway rectangle and the outline of the head in front of the camera. The morning's cup is still on the table, cold, a dried ring around it. The jacket is on the floor. The charger is plugged in now, cable taut across the table.
+> `<clauses>` The same kitchen table, seen over a shoulder from behind, the laptop occupying the middle third, still open. No daylight at all; the only illumination is spill from a hallway out of frame, so most of the image is near-black and the panel is the deepest black in it, holding a faint doorway rectangle and the outline of a head, which sits at the left edge of the frame, clear of the screen. The morning's cup is still on the table, cold, a dried ring around it. The jacket is on the floor. The charger is plugged in now, cable taut across the table.
 
 **Why it works.** It closes both chains in the place they opened: the cup found cold where frame 03 filled it, the charger finally plugged in. The panel is barely distinguishable from the dark and is still, measurably, the darkest thing in the frame.
 
@@ -56,9 +56,17 @@ Each of these is a real way the series fails. Most are caught before generation;
 
 **"the panel slightly more reflective here to catch the sunset"** → Not caught by the lexicon, caught at the gate and by the judge's `opacity` level. One reflectivity, across the series. If a frame needs more light in the panel, put more light in the room.
 
-**"the cursor sitting in the middle of the screen"** → Silently fatal. It reads as an instruction to place the arrow relative to the laptop, and the anchor is relative to the *frame*. The cursor clause already says where the tip goes; adding a position is how a series ends up with the cursor drifting frame to frame. The judge's `constant` level is where this surfaces, one dispatch too late.
+**"a white cursor resting on the black screen"** → Refused by the lexicon, and it is the one negative the first runs were built on. Asked for a cursor, every generator drew it in the middle of the screen, at a different size each time, and never at the requested point. The cursor is composited, so the prompt never mentions it.
 
-**"the laptop centred and filling the frame"** in every prompt → Not refused, but it collapses `framing` back to one value and defeats the reason the anchor is hard. Vary the scale; let the anchor put the laptop where it wants.
+**The generator draws an arrow anyway.** It happens even unasked, because stock laptops come with pointers. → Caught at marking: untick "panel is blank" and the frame is refused for re-dispatch. Compositing over it would put two cursors on one screen.
+
+**"her hand resting across the right side of the keyboard and screen"** → Caught at marking as `anchor_occluded`. The anchor sits right of centre on the screen; anything crossing that patch hides the one thing that must be seen, and drawing the arrow over the hand would float it in front of her.
+
+**"the laptop far across the room, a small dark shape on a shelf"** → `route` warns, `panel submit` refuses: at the default pointer size the arrow on a `distant` panel is two or three pixels, under the six-pixel floor. Frame it closer, raise the resolution, or raise `pointer_size` for all twelve — the cursor's size is coherent with the laptop's, so a far laptop needs a larger pointer, never a larger arrow in one frame.
+
+**The laptop changes between frames** — silver here, a different bezel there, an older keyboard. → The surface clause names one machine; the blind judge's `object` level catches the drift. Vary how it is seen, never what it is.
+
+**"the laptop centred and filling the frame"** in every prompt → Refused by the framing floors, and the collection reads as one photograph. Vary the scale and the angle; the cursor follows the screen wherever it goes.
 
 **"a work call open on screen while the person is crying in the reflection"** → Refused. It is also the crutch the restriction exists to remove: the meaning has to come from the glass, the light and the leftovers, never from a lit pixel doing the explaining.
 
@@ -66,7 +74,7 @@ Each of these is a real way the series fails. Most are caught before generation;
 
 **"a beautiful empty room at golden hour, nothing on the table"** → Not refused by the lexicon; refused by the traces rule if every object is `absent`, and binned by the judge's `presence` level otherwise. A room with no leftovers is a furniture catalogue.
 
-**"no glowing screen, not like a mirror, no interface elements"** → Refused, and the error says why: the negations live in the three invariant clauses, once. Repeating them per frame both wastes the prompt and, in generative models, tends to summon what it names.
+**"no glowing screen, not like a mirror, no interface elements"** → Refused, and the error says why: the negations live in the two invariant clauses, once. Repeating them per frame both wastes the prompt and, in generative models, tends to summon what it names.
 
 **"late afternoon vibes, moody and lonely"** → Nothing catches this, and it produces the average of every stock photograph in the training set. Name what the light is doing to a specific surface at a specific height, and let the loneliness be a consequence.
 

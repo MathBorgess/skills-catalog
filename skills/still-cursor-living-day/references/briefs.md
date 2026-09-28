@@ -9,10 +9,10 @@
   "axis": "still-cursor-living-day",
   "frame_count": 12,
   "invariants": {
-    "cursor_clause": "… its tip landing on exactly 61.5% of the frame width and 43.0% of the frame height, whatever part of the frame the laptop occupies …",
-    "surface_clause": "an open MacBook whose display is off: a dark grey-black panel emitting no light at all …",
+    "surface_clause": "the same 14-inch MacBook Pro in space black in every image … its display off: a blank dark grey-black panel …",
     "optics_clause": "the panel is semi-gloss, about thirty percent reflective …"
   },
+  "cursor": { "glyph": "macos-arrow", "panel": { "model": "14-inch MacBook Pro", "points": [1512, 982] }, "anchor": [1080, 410], "pointer_size": 2 },
   "frames": [
     {
       "id": "03",
@@ -27,13 +27,15 @@
         { "object": "charger", "state": "coiled in the bag" }
       ],
       "route": "api:openai",
-      "prompt": "<surface_clause>. <cursor_clause>. <optics_clause>. …"
+      "prompt": "<surface_clause>. <optics_clause>. …"
     }
   ]
 }
 ```
 
-`init` writes all three invariant clauses for you. Change the cursor coordinate once, at the start, if you want a different anchor — never per frame. The script refuses a frame carrying its own clause, because those three are what does not vary.
+`init` writes both invariant clauses and the cursor block for you. Decide `cursor.anchor` and `cursor.pointer_size` once, at the start — never per frame — and read [`cursor.md`](cursor.md) before changing them. The script refuses a frame carrying its own clause or cursor, because those are what does not vary.
+
+The cursor is never in a prompt. Not its position, not its existence: a prompt that says `cursor`, `pointer` or `arrow` is refused, because a generator asked for one draws it in the middle of the screen at a size of its choosing, and the composite would then put a second one beside it.
 
 ## The day, and the places
 
@@ -47,9 +49,9 @@ Twelve clocks, strictly increasing, across one whole day: the first frame before
 
 `framing.scale` is how much of the frame the panel occupies: `distant`, `small`, `medium`, `dominant`. `framing.view` is the angle onto it: `frontal`, `oblique`, `steep`, `over-shoulder`, `low`. The script requires **at least three distinct scales and three distinct views**, with **at most two consecutive frames repeating the same pair**.
 
-The panel does not have to own the frame and does not have to be centred. What it has to do is land so that the cursor's tip falls on the anchor coordinate — the composition is built around the anchor, and the laptop goes wherever that leaves it. A small laptop on the far side of a café counter with the arrow sitting on its screen at the same point as the frame before is the strongest image in the series, and it is also the hardest to get: expect to re-dispatch those.
+The laptop can be anywhere in the frame, at any size, from any of those angles. What every frame owes the cursor is the anchor's patch of screen: facing the camera, unoccluded — no hand, cup or strap across it — and large enough to carry a legible arrow. The cursor is composited in perspective, so it is as big as that patch of screen makes it: at the default pointer size, a `distant` panel yields an arrow of two or three pixels, and `panel submit` refuses anything under six. `route` warns about it before generation. When a distant frame matters, raise `pointer_size` for the whole series rather than dropping the frame.
 
-The cursor's own drawn size stays identical across all twelve, which deliberately breaks perspective. That is the point — the arrow is not in the room, it is on the image, the way a hardware overlay is not in the scene it survives.
+**The object must stay the object.** The same 14-inch MacBook Pro in space black in every frame — same finish, same proportions, same bezel and notch. The surface clause says so, and the blind judge rates it (`object`). Vary how it is seen, never what it is. A persistent physical mark that the camera can see from the front — a scuff on the palm rest, a sticker by the trackpad — helps a generator keep it the same machine, and becomes a trace in its own right.
 
 ## The trace chain, travelling
 
@@ -67,12 +69,11 @@ Every frame declares `traces`: the physical objects present and their state at t
 Build every prompt the same way, in this order:
 
 1. `surface_clause`, verbatim.
-2. `cursor_clause`, verbatim.
-3. `optics_clause`, verbatim.
-4. The place, the hour and the light — concretely.
-5. What is reflected: the person's fragment, what they are doing, the objects at their current state.
-6. The framing in words, matching the `framing` fields: how much of the frame the laptop takes, from what angle, and what sits between the camera and it.
+2. `optics_clause`, verbatim.
+3. The place, the hour and the light — concretely.
+4. What is reflected: the person's fragment, what they are doing, the objects at their current state.
+5. The framing in words, matching the `framing` fields: how much of the frame the laptop takes, from what angle, and what sits between the camera and it — never in front of the screen's right-hand half, where the anchor is.
 
-Do not repeat the negations per frame. The three clauses already say what may not appear, and a frame that writes "no glowing screen" or "not like a mirror" again trips the lexicon scan for good reason: negations in generative prompts are unreliable, and the contract is stated once, in one place, identically.
+Do not repeat the negations per frame. The two clauses already say what may not appear, and a frame that writes "no glowing screen" or "not like a mirror" again trips the lexicon scan for good reason: negations in generative prompts are unreliable, and the contract is stated once, in one place, identically.
 
-The camera changes between frames now, so the thing to keep constant in the wording is the optics and the anchor, never the crop.
+The camera changes between frames, so what stays constant in the wording is the machine and the optics, never the crop. The anchor is not in the wording at all.

@@ -22,7 +22,7 @@ import { join, resolve } from "node:path";
 const ALLOW = 0;
 const AXIS = "still-cursor-living-day";
 const LIVE_MAX_AGE_S = 7200;
-const SEALED = ["plan.json", "prompts", "frames", join("judge", "key.json")];
+const SEALED = ["plan.json", "prompts", "frames", "composited", "panels", join("judge", "key.json")];
 const WRITE_ONCE = ["verdicts.json", join("judge", "blind.verdicts.json"), join("judge", "informed.verdicts.json"), "metrics.jsonl"];
 
 function deny(reason) {

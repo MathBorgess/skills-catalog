@@ -16,7 +16,7 @@ Twelve generations are cheap to launch and expensive to redo, and every one of t
    - The two frames with the longest gap between clocks: is the day skipping something that matters?
    - Any frame where the person's action does not follow from the previous frame's.
    - Each route choice, when routes are mixed, and what that means for the identity drift the axis claims.
-   - The cursor coordinate itself, once: it is the one number that cannot change later without re-running everything.
+   - `plan.cursor`, once: the anchor's screen pixel and the pointer size. They cannot change later without re-marking and re-compositing everything, and every `distant` framing `route` warned about is a question about the pointer size, not about that frame.
 3. Apply the owner's edits to `plan.json`, run `route` again, show the new table. Repeat until they approve.
 
 ## What a round is for

@@ -57,7 +57,7 @@ Compare actual workload patterns from telemetry and `.agents/sketchpad/*.md` aga
 
 1. **Trigger Drift**: If user requests repeatedly trigger a skill inappropriately, or fail to invoke it when intended, propose a refined `description` in frontmatter.
 2. **Responsibility Creep**: If a skill accumulates procedures outside its core domain (e.g. handoff performing file compression, or shunt orchestrating multi-session dispatch), propose moving the responsibility to the correct skill or a deterministic script. Remember: *One job per skill. If the description needs an "and also", it is two skills.*
-3. **Missing Capability**: If telemetry or sketchpad notes reveal recurring manual workarounds that fit no existing skill, propose drafting a new skill adhering to repository layout and CLAUDE.md.
+3. **Missing Capability**: If telemetry or sketchpad notes reveal recurring manual workarounds that fit no existing skill, propose drafting a new skill adhering to repository layout and AGENTS.md.
 
 ## 4. Consult the Owner
 

@@ -1,0 +1,197 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Mark the panels</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root { --bg:#141414; --panel:#1e1e1e; --line:#333; --ink:#e8e8e8; --dim:#8a8a8a; --ok:#6fcf97; --bad:#eb5757; --pin:#f2c94c; }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:14px/1.45 -apple-system, system-ui, sans-serif; display:grid; grid-template-columns:220px 1fr; height:100vh; }
+  aside { border-right:1px solid var(--line); overflow:auto; padding:12px; }
+  aside h1 { font-size:13px; font-weight:600; margin:0 0 10px; color:var(--dim); text-transform:uppercase; letter-spacing:.06em; }
+  .frame { display:flex; justify-content:space-between; padding:6px 8px; border-radius:6px; cursor:pointer; }
+  .frame:hover { background:var(--panel); }
+  .frame.on { background:#2a2a2a; }
+  .st.ok { color:var(--ok); } .st.bad { color:var(--bad); } .st.todo { color:var(--dim); }
+  main { display:grid; grid-template-rows:auto 1fr auto; min-width:0; }
+  header, footer { padding:10px 14px; border-bottom:1px solid var(--line); display:flex; gap:14px; align-items:center; flex-wrap:wrap; }
+  footer { border-top:1px solid var(--line); border-bottom:0; }
+  .stage { position:relative; overflow:auto; display:flex; align-items:flex-start; justify-content:center; padding:12px; }
+  canvas#view { max-width:100%; cursor:crosshair; background:#000; }
+  canvas#loupe { position:fixed; right:16px; bottom:70px; width:180px; height:180px; border:1px solid var(--line); background:#000; pointer-events:none; }
+  button { background:var(--panel); color:var(--ink); border:1px solid var(--line); border-radius:6px; padding:6px 10px; font:inherit; cursor:pointer; }
+  button.primary { background:#2d5b3f; border-color:#3d7a55; }
+  label { display:flex; gap:6px; align-items:center; color:var(--dim); }
+  .next { color:var(--pin); font-weight:600; }
+  .msg { color:var(--dim); } .msg.bad { color:var(--bad); } .msg.ok { color:var(--ok); }
+  kbd { border:1px solid var(--line); border-radius:4px; padding:0 4px; font-size:12px; color:var(--dim); }
+</style>
+</head>
+<body>
+<aside><h1>Frames</h1><div id="list"></div></aside>
+<main>
+  <header>
+    <strong id="title">—</strong>
+    <span>click the display's <span class="next" id="next">top-left</span> corner — the glass, inside the bezel, as the screen itself is oriented</span>
+  </header>
+  <div class="stage"><canvas id="view"></canvas></div>
+  <footer>
+    <button id="undo">Undo <kbd>⌫</kbd></button>
+    <button id="reset">Reset frame</button>
+    <label><input type="checkbox" id="clean" checked> panel is blank (nothing drawn on it)</label>
+    <label><input type="checkbox" id="occluded"> something covers the cursor point</label>
+    <span class="msg" id="msg"></span>
+    <span style="flex:1"></span>
+    <button id="prev">← Prev</button>
+    <button id="nextf">Next →</button>
+    <button class="primary" id="download">Download corners.json</button>
+  </footer>
+</main>
+<canvas id="loupe" width="180" height="180"></canvas>
+<script src="frames.js"></script>
+<script>
+(() => {
+  const S = window.SCLD;
+  if (!S) { document.body.textContent = "frames.js did not load — open this file from the run's panels/ directory."; return; }
+  const ORDER = ["tl", "tr", "br", "bl"];
+  const NAMES = { tl: "top-left", tr: "top-right", br: "bottom-right", bl: "bottom-left" };
+  const KEY = "scld-mark:" + S.frames.map((f) => f.src + f.width).join("|");
+  let marks = {};
+  try { marks = JSON.parse(localStorage.getItem(KEY) || "{}"); } catch (_) { marks = {}; }
+  const save = () => { try { localStorage.setItem(KEY, JSON.stringify(marks)); } catch (_) {} };
+  const images = {};
+  let current = 0;
+
+  const view = document.getElementById("view");
+  const ctx = view.getContext("2d");
+  const loupe = document.getElementById("loupe").getContext("2d");
+  const $ = (id) => document.getElementById(id);
+
+  // The same homography as cursor.mjs. Preview only: composite is authoritative.
+  function solve(A, b) {
+    const n = b.length, M = A.map((r, i) => [...r, b[i]]);
+    for (let c = 0; c < n; c++) {
+      let p = c;
+      for (let r = c + 1; r < n; r++) if (Math.abs(M[r][c]) > Math.abs(M[p][c])) p = r;
+      if (Math.abs(M[p][c]) < 1e-12) return null;
+      [M[c], M[p]] = [M[p], M[c]];
+      for (let r = 0; r < n; r++) { if (r === c) continue; const f = M[r][c] / M[c][c]; for (let k = c; k <= n; k++) M[r][k] -= f * M[c][k]; }
+    }
+    return M.map((r, i) => r[n] / r[i]);
+  }
+  function homography(w, h, c) {
+    const src = [[0,0],[w,0],[w,h],[0,h]], dst = [c.tl, c.tr, c.br, c.bl], A = [], b = [];
+    for (let i = 0; i < 4; i++) { const [x,y] = src[i], [u,v] = dst[i];
+      A.push([x,y,1,0,0,0,-u*x,-u*y]); b.push(u); A.push([0,0,0,x,y,1,-v*x,-v*y]); b.push(v); }
+    const hh = solve(A, b); return hh ? [...hh, 1] : null;
+  }
+  const project = (H, [x, y]) => { const w = H[6]*x + H[7]*y + 1; return [(H[0]*x + H[1]*y + H[2]) / w, (H[3]*x + H[4]*y + H[5]) / w]; };
+
+  function entry(id) { return marks[id] || (marks[id] = { points: [], clean_panel: true, anchor_occluded: false }); }
+  function glyphFor(id) {
+    const e = entry(id);
+    if (e.points.length !== 4) return null;
+    const corners = Object.fromEntries(ORDER.map((k, i) => [k, e.points[i]]));
+    const H = homography(S.panel[0], S.panel[1], corners);
+    if (!H) return null;
+    const poly = S.arrow.map(([x, y]) => project(H, [S.anchor[0] + x * S.pointerSize, S.anchor[1] + y * S.pointerSize]));
+    const tip = poly[0];
+    return { poly, height: Math.max(...poly.map((p) => Math.hypot(p[0] - tip[0], p[1] - tip[1]))) };
+  }
+  function status(id) {
+    const e = entry(id), f = S.frames.find((x) => x.id === id);
+    if (e.points.length < 4) return { cls: "todo", text: `${e.points.length}/4` };
+    if (!e.clean_panel || e.anchor_occluded) return { cls: "bad", text: "re-dispatch" };
+    const g = glyphFor(id);
+    if (!g) return { cls: "bad", text: "bad quad" };
+    if (!g.poly.every(([x, y]) => x >= 0 && y >= 0 && x < f.width && y < f.height)) return { cls: "bad", text: "off image" };
+    if (g.height < S.minCursorPx) return { cls: "bad", text: `${g.height.toFixed(1)}px` };
+    return { cls: "ok", text: `${g.height.toFixed(1)}px` };
+  }
+
+  function renderList() {
+    $("list").innerHTML = "";
+    S.frames.forEach((f, i) => {
+      const st = status(f.id), row = document.createElement("div");
+      row.className = "frame" + (i === current ? " on" : "");
+      row.innerHTML = `<span>${f.id}</span><span class="st ${st.cls}">${st.text}</span>`;
+      row.onclick = () => { current = i; draw(); };
+      $("list").appendChild(row);
+    });
+  }
+
+  function draw() {
+    const f = S.frames[current], e = entry(f.id), img = images[f.id];
+    $("title").textContent = `Frame ${f.id}`;
+    $("clean").checked = e.clean_panel;
+    $("occluded").checked = e.anchor_occluded;
+    $("next").textContent = e.points.length < 4 ? NAMES[ORDER[e.points.length]] : "— done, check the preview";
+    view.width = f.width; view.height = f.height;
+    if (img && img.complete) ctx.drawImage(img, 0, 0);
+    const lw = Math.max(1.5, f.width / 600);
+    ctx.lineWidth = lw; ctx.strokeStyle = "#f2c94c"; ctx.fillStyle = "#f2c94c"; ctx.font = `${Math.round(lw * 9)}px system-ui`;
+    e.points.forEach((p, i) => {
+      ctx.beginPath(); ctx.arc(p[0], p[1], lw * 3, 0, Math.PI * 2); ctx.fill();
+      ctx.fillText(ORDER[i].toUpperCase(), p[0] + lw * 5, p[1] - lw * 5);
+    });
+    if (e.points.length > 1) {
+      ctx.beginPath(); ctx.moveTo(...e.points[0]);
+      e.points.slice(1).forEach((p) => ctx.lineTo(...p));
+      if (e.points.length === 4) ctx.closePath();
+      ctx.stroke();
+    }
+    const g = glyphFor(f.id), st = status(f.id);
+    if (g) {
+      ctx.beginPath(); ctx.moveTo(...g.poly[0]); g.poly.slice(1).forEach((p) => ctx.lineTo(...p)); ctx.closePath();
+      ctx.fillStyle = "#fff"; ctx.fill(); ctx.strokeStyle = "#eb5757"; ctx.lineWidth = Math.max(1, lw / 2); ctx.stroke();
+    }
+    $("msg").className = "msg " + (st.cls === "ok" ? "ok" : st.cls === "bad" ? "bad" : "");
+    $("msg").textContent = st.cls === "ok" ? `cursor ${st.text} tall` : st.cls === "bad" ? `will be refused: ${st.text}` : "";
+    renderList();
+  }
+
+  function toImage(ev) {
+    const r = view.getBoundingClientRect(), f = S.frames[current];
+    return [Math.round(((ev.clientX - r.left) / r.width) * f.width * 10) / 10, Math.round(((ev.clientY - r.top) / r.height) * f.height * 10) / 10];
+  }
+  view.addEventListener("click", (ev) => {
+    const e = entry(S.frames[current].id);
+    if (e.points.length >= 4) return;
+    e.points.push(toImage(ev)); save(); draw();
+  });
+  view.addEventListener("mousemove", (ev) => {
+    const img = images[S.frames[current].id]; if (!img) return;
+    const [x, y] = toImage(ev), r = 22;
+    loupe.imageSmoothingEnabled = false;
+    loupe.fillStyle = "#000"; loupe.fillRect(0, 0, 180, 180);
+    loupe.drawImage(img, x - r, y - r, r * 2, r * 2, 0, 0, 180, 180);
+    loupe.strokeStyle = "#f2c94c"; loupe.beginPath(); loupe.moveTo(90, 0); loupe.lineTo(90, 180); loupe.moveTo(0, 90); loupe.lineTo(180, 90); loupe.stroke();
+  });
+  $("undo").onclick = () => { entry(S.frames[current].id).points.pop(); save(); draw(); };
+  $("reset").onclick = () => { entry(S.frames[current].id).points = []; save(); draw(); };
+  $("clean").onchange = (ev) => { entry(S.frames[current].id).clean_panel = ev.target.checked; save(); draw(); };
+  $("occluded").onchange = (ev) => { entry(S.frames[current].id).anchor_occluded = ev.target.checked; save(); draw(); };
+  $("prev").onclick = () => { current = (current + S.frames.length - 1) % S.frames.length; draw(); };
+  $("nextf").onclick = () => { current = (current + 1) % S.frames.length; draw(); };
+  document.addEventListener("keydown", (ev) => {
+    if (ev.key === "Backspace") { ev.preventDefault(); $("undo").onclick(); }
+    if (ev.key === "ArrowRight") $("nextf").onclick();
+    if (ev.key === "ArrowLeft") $("prev").onclick();
+  });
+  $("download").onclick = () => {
+    const frames = S.frames.filter((f) => entry(f.id).points.length === 4).map((f) => {
+      const e = entry(f.id);
+      return { id: f.id, corners: Object.fromEntries(ORDER.map((k, i) => [k, e.points[i]])), clean_panel: e.clean_panel, anchor_occluded: e.anchor_occluded };
+    });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(new Blob([JSON.stringify({ frames }, null, 2)], { type: "application/json" }));
+    a.download = "corners.json"; a.click();
+  };
+
+  S.frames.forEach((f) => { const img = new Image(); img.onload = () => { if (S.frames[current].id === f.id) draw(); }; img.src = f.src; images[f.id] = img; });
+  draw();
+})();
+</script>
+</body>
+</html>

@@ -104,8 +104,9 @@ if (claudeCheck.error && claudeCheck.error.code === "ENOENT") {
         (skillsCheck.stderr || ""),
     );
   }
-  // plugin.json --strict also loads the repo root and warns that CLAUDE.md is
-  // not plugin context. That warning is correct; do not fail the catalog on it.
+  // plugin.json --strict also loads the repo root and warns that CLAUDE.md and
+  // AGENTS.md are not plugin context. That warning is correct; do not fail the
+  // catalog on it.
   const pluginCheck = claudeValidate(
     join(repo, ".claude-plugin", "plugin.json"),
     false,

@@ -3,7 +3,7 @@ name: explain-me
 description: "Use when the user asks for a visual explanation, says 'explain-me', 'show me how it works', 'explique visualmente', 'explica em vídeo', 'vídeo explicativo', 'vídeo vertical', 'para reels / shorts / tiktok', or needs a diagram, an illustrated mechanism, an interactive explainer, a narrated video, or plain terminology; also when they want it in their project's brand ('use a nossa marca', 'use o DESIGN.md'), and when teach-me requests the explanatory part of one lesson. Every word comes out in the language of the request. The caller owns quizzes, grading and progress records."
 metadata:
   author: Matheus Borges
-  version: 0.0.0
+  version: 1.0.0
 ---
 
 # Explain Me

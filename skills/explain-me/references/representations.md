@@ -1,41 +1,58 @@
-# Choosing an Explanatory Representation
+# Choosing a representation
 
-Select the representation format based on the nature of the concept and user preference. When called interactively, conduct a focused intake grill (maximum 2 questions) to confirm the format and target audience. When called by `teach-me`, bypass questions and honor the caller's requested format.
+Pick the format from the nature of the concept and the user's wish. When called interactively, ask at most two questions: format and audience depth. Recommend a format with each question. When `teach-me` calls, ask nothing and use the format it names.
 
-## Format Decision Matrix
+Every format uses the Requester Language for every word it shows or speaks.
 
-| Need / Nature of Concept | Primary Format | Key Reference | What Must Be Visible |
+## Format decision matrix
+
+| Need | Format | Reference | What must be visible |
 |---|---|---|---|
-| Vocabulary, classification, or small logical distinction | Controlled STE-lite Text & Table | [`references/ste-lite.md`](ste-lite.md) | Plain term → formal name → example; strict word ceilings and stable vocabulary. |
-| Logic flow, state machine, branching conditions | Mermaid Diagram | Markdown native | Inputs, branches, decision gates, state transitions. |
-| Precise spatial layout, component boundaries, internal architecture | Inline Vector SVG | HTML / Markdown | Scalable dark-slate coordinates, labeled buses and boundaries, high contrast. |
-| Abstract intuition, physical analogy, real-world metaphor | Generative Image | Image tool | Realistic or stylized scene; caption must state where the analogy breaks down. |
-| Trade-offs, multi-variable parameter tuning, state exploration | Interactive Single-File HTML | [`references/interactive-html.md`](interactive-html.md) | 3b1b dark theme, responsive canvas/SVG with live range controls; zero build step. |
-| Causal evolution across time, step-by-step mathematical proof | 3b1b Motion Graphics Video | [`references/video-motion.md`](video-motion.md) | Remotion/Motion Canvas, Kokoro ONNX narration sync, subtitles, .mp4 file. |
+| Vocabulary, classification, one small distinction | Controlled text and table | [`ste-lite.md`](ste-lite.md) | Plain name, formal name, example. Stable terms. |
+| Logic flow, state machine, branching | Mermaid | Markdown native | Inputs, branches, decision gates, transitions. |
+| Exact layout, component boundaries, internal structure | Inline SVG | [`design-spec.md`](design-spec.md) | Labelled parts and boundaries, palette and type from the Design Spec. |
+| Abstract intuition, physical analogy | Generative image | Image tool | A scene with a caption that states where the analogy breaks down. |
+| Trade-offs, parameter tuning, state exploration | Interactive HTML | [`interactive-html.md`](interactive-html.md) | Live range controls, `--em-*` tokens from the Design Spec, one file, no build step. |
+| Change over time, step-by-step proof, a process with a before and an after | Scene-Driven Video | [`video-motion.md`](video-motion.md) | HyperFrames, 3b1b Kit motion, one Kokoro Narration clip per Beat, `.srt`, `.mp4`. |
 
----
+Default to the smallest format that shows the Load-bearing Distinction. Choose video only when the mechanism changes over time.
 
-## Controlled Writing: STE-Lite
-All written explanations and narration scripts must adhere to **STE-lite** ([`references/ste-lite.md`](ste-lite.md)):
-- Descriptive sentences ≤ 25 words; procedural sentences ≤ 20 words.
-- Paragraphs ≤ 6 sentences.
-- Active voice, zero decorative metaphors, strictly unified vocabulary without synonyms.
-- Run `node skills/explain-me/scripts/ste-lint.mjs --file <path>` to audit.
+## Palette and type
 
-## Static Visuals: Mermaid vs. Inline SVG vs. Generative Images
-- **Mermaid**: Use for dependency graphs, sequence diagrams, and class relationships where native rendering in GitHub and Markdown viewers is desirable.
-- **Inline SVG**: Use when a diagram requires exact visual hierarchy, custom styling, dark slate container boxes, or coordinates that Mermaid layout engines distort.
-- **Generative Images**: Use solely for analogical imagery (e.g. visualizing physical phenomena). Always append a textual boundary note explaining where the visual metaphor ceases to be technically accurate.
+Inline SVG and interactive HTML take their palette and type from the Design Spec, like video does. The default is the manim palette on a near-black field.
 
-## Interactive HTML Explainers
-- Standalone single file combining HTML, CSS, and JS with zero npm build step ([`references/interactive-html.md`](interactive-html.md)).
-- Uses 3b1b dark theme (`#0f172a`), touch-friendly inputs, high-DPI canvas handling, and responsive single-column mobile viewports.
+- Print the tokens with `node skills/explain-me/scripts/explain.mjs tokens --css [--design <path>]`.
+- Use `var(--em-*)` in every fill, stroke and text colour. Never write a hex value in an artefact.
+- A Brand Spec found by `design find` is the recommended style, and the user chooses at intake.
 
-## Motion Graphics Video & Kokoro TTS
-- Follow the 3b1b aesthetic: dark slate background, geometric transforms, high-contrast mathematical readouts ([`references/video-motion.md`](video-motion.md)).
-- Audio generated per scene via local **Kokoro ONNX**. If Kokoro is missing, instruct the user to install it (`uv pip install kokoro-onnx soundfile`) and offer a silent video with `.srt` subtitles as an immediate fallback.
-- Audio scene duration strictly dictates visual frame duration.
+## Controlled writing
 
-## Caller Boundary
-When returning the artifact to the user or caller (`teach-me`):
-- Deliver: comprehension goal, artifact/fragment path, plain/formal glossary, primary sources, assumptions, and an **explain-back** diagnostic question (without answer key).
+Every written text and every narration follows STE-lite ([`ste-lite.md`](ste-lite.md)) and the Language Profile for the Requester Language ([`profile-en.md`](profile-en.md), [`profile-pt-br.md`](profile-pt-br.md)). Lint it:
+
+```bash
+node skills/explain-me/scripts/ste-lint.mjs --file <path> --lang <en|pt> [--narration]
+```
+
+## Static visuals
+
+- **Mermaid**: dependency graphs, sequence diagrams and class relations. It renders in GitHub and in Markdown viewers.
+- **Inline SVG**: exact hierarchy, custom styling, or coordinates that a Mermaid layout distorts.
+- **Generative image**: analogy only. Always add a boundary note that says where the metaphor stops being accurate.
+
+## Video
+
+- The look is 3b1b Style: one central object, drawn, written and transformed on a near-black field. No header bar, no panels, no bullet lists. A Design Spec may change this.
+- Narration is local Kokoro Narration, one clip per Beat. Its length sets the timing.
+- If the language has no Kokoro voice, make a silent video with an `.srt` and say so.
+- `render` runs only after `check` passes the Motion Gate.
+
+## Caller boundary
+
+When `teach-me` calls, deliver these items:
+
+- The comprehension goal.
+- The fragment path and its assets.
+- The glossary, the primary sources and the assumptions.
+- An Explain-Back question without an answer key.
+
+Do not touch quizzes, grading or progress records.

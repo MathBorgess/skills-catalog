@@ -2,6 +2,3 @@ node_modules
 .claude
 *.tgz
 .DS_Store
-.venv
-explain-me-auto.*
-explain-me-scenes/

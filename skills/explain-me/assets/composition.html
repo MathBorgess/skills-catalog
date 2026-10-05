@@ -1,0 +1,139 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>explain-me</title>
+    <!-- Head includes, in this order. Do not edit. explain.mjs writes the design tokens and explain-data.js. -->
+    <!-- The video engine embeds fonts only from custom properties that sit in an inline <style>, never from a
+         linked file, so explain.mjs rewrites this region from the resolved design (same text as tokens.css). -->
+    <!-- explain:tokens:start -->
+    <style>
+      :root {
+        --em-bg: #000000;
+        --em-surface: #1C1C1C;
+        --em-text: #FFFFFF;
+        --em-muted: #888888;
+        --em-background: #000000;
+        --em-blue: #58C4DD;
+        --em-teal: #5CD0B3;
+        --em-green: #83C167;
+        --em-yellow: #FFFF00;
+        --em-gold: #F0AC5F;
+        --em-red: #FC6255;
+        --em-purple: #9A72AC;
+        --em-font-display: "EB Garamond", serif;
+        --em-font-body: "EB Garamond", serif;
+        --em-font-mono: "JetBrains Mono", monospace;
+      }
+    </style>
+    <!-- explain:tokens:end -->
+    <link rel="stylesheet" href="tokens.css" />
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/DrawSVGPlugin.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/MorphSVGPlugin.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/MotionPathPlugin.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/SplitText.min.js"></script>
+    <script src="explain-data.js"></script>
+    <script src="kit.js"></script>
+    <!-- kit.register() fills this registry; the literal line is what the HyperFrames lint looks for. -->
+    <script>
+      window.__timelines = window.__timelines || {};
+    </script>
+    <style>
+      html,
+      body {
+        margin: 0;
+        background: var(--em-bg, #000);
+      }
+      #root {
+        position: relative;
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+        background: var(--em-bg, #000);
+        color: var(--em-text, #fff);
+        font-family: var(--em-font-body);
+        font-weight: var(--em-weight-body, 400);
+      }
+      /* The stage fills the frame; the camera moves its viewBox. Colors, fonts and line
+         style come from the design spec through tokens.css, never from literals here.
+         Inherited defaults only: attributes on your own elements always win. */
+      #stage {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        display: block;
+        fill: var(--em-text, #fff);
+        stroke: none;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+        font-family: var(--em-font-body);
+        font-weight: var(--em-weight-body, 400);
+        font-size: 56px;
+      }
+      /* The kit places and styles #captions inline from the design's layout.captions box. */
+      #captions {
+        position: absolute;
+        pointer-events: none;
+      }
+      #stage .display {
+        font-family: var(--em-font-display);
+        font-weight: var(--em-weight-display, 400);
+      }
+      #stage .mono {
+        font-family: var(--em-font-mono);
+        font-weight: var(--em-weight-mono, 400);
+      }
+    </style>
+  </head>
+  <body>
+    <div
+      id="root"
+      data-composition-id="explain"
+      data-start="0"
+      data-width="1920"
+      data-height="1080"
+      data-duration="10"
+    >
+      <!-- explain:audio:start -->
+      <!-- explain:audio:end -->
+
+      <!-- explain:stage:start -->
+      <!-- STAGE: one svg element with id "stage", in a 1920 x 1080 viewBox. Give every element you animate an id.
+           Style with presentation attributes using the design colors, e.g. stroke="var(--em-blue)",
+           fill="none", stroke-width="6". Do not use CSS transform or transform attributes on elements
+           that the kit animates. A beat's subject needs real width and height (a bare line never
+           counts as visible). Keep content inside the safe zone of the design (layout.safe in
+           frame.md) and out of the caption band when captions are burned in. The placeholder below uses
+           percentages of the viewBox, so it fits either orientation; use stage units in your own drawing.
+           Replace the placeholder elements inside the stage svg; keep the svg element and its viewBox. -->
+      <svg id="stage" viewBox="0 0 1920 1080" xmlns="http://www.w3.org/2000/svg">
+        <circle id="subject" cx="50%" cy="40%" r="170" fill="none" stroke="var(--em-blue)" stroke-width="8" />
+        <text id="subject-label" class="display" x="50%" y="64%" text-anchor="middle" font-size="72">Replace this stage</text>
+      </svg>
+      <!-- explain:stage:end -->
+
+      <!-- Burned captions. The kit fills this layer from explain-data.js when captions.burn is true and
+           leaves it empty otherwise. Do not edit it, and keep it outside the STAGE region. -->
+      <div id="captions" aria-hidden="true"></div>
+    </div>
+
+    <!-- explain:scene:start -->
+    <script>
+      // SCENE: one kit.beat per beat id in script.json, in beat time. Only the nine kit primitives.
+      // Calls chain one after another; b.at(sec) places the next call sec seconds into the beat.
+      const kit = ExplainKit.create();
+
+      kit.beat("b01", (b) => {
+        b.draw("#subject");                    // the subject first: it must be visible within 0.5 s of the beat
+        b.write("#subject-label");
+        b.at(1.6).indicate("#subject");
+        b.at(2.4).camera({ zoom: 1.1, dur: Math.max(1, b.dur - 2.4) }); // a slow push, so a long beat never sits still
+      });
+
+      kit.register(); // builds one paused timeline and registers window.__timelines["explain"]
+    </script>
+    <!-- explain:scene:end -->
+  </body>
+</html>

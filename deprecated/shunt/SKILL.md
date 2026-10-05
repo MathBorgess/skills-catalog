@@ -9,6 +9,9 @@ metadata:
 
 # Shunt
 
+> [!WARNING]
+> **DEPRECATED**: This skill is deprecated and is no longer maintained or active in `skills-catalog`.
+
 Keep **this** model's context small. Heavy I/O is absorbed by `scripts/shunt.mjs` or by a small/fast subagent. You keep judgment: architecture, hard debug, security review, and edits from excerpts.
 
 The plugin hook (`scripts/guard.mjs`) enforces the Read rules only while this skill is active. Cursor and Codex have no PreToolUse — this file is the whole enforcement there.

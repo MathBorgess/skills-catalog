@@ -1,7 +1,7 @@
 {
   "name": "skills-catalog",
-  "version": "2.3.0",
-  "description": "Matheus Borges's agent skills: study wikis, teaching sessions, cross-provider handoff, shunt (keep a large model off heavy I/O), skills-evaluate (turn run metrics into improvements), and still-cursor-living-day (plan, generate and judge a twelve-frame image collection under one axis). Guard hooks protect live handoff runs and an active shunt. Inspired by Matt Pocock's skills packaging.",
+  "version": "2.5.0",
+  "description": "Matheus Borges's agent skills: study wikis, visual explanations, teaching sessions, domain modeling, skills-evaluate (turn run metrics into improvements), and still-cursor-living-day (plan, generate and judge a twelve-frame image collection under one axis). Inspired by Matt Pocock's skills packaging.",
   "author": {
     "name": "Matheus Borges",
     "url": "https://github.com/MathBorgess"
@@ -13,19 +13,19 @@
     "skills",
     "study-wiki",
     "teach-me",
-    "handoff",
-    "shunt",
+    "domain-modeling",
     "claude",
     "cursor",
     "codex",
-    "image-collection"
+    "image-collection",
+    "explain-me"
   ],
   "skills": [
-    "./skills/handoff",
+    "./skills/domain-modeling",
     "./skills/study-wiki",
     "./skills/teach-me",
-    "./skills/shunt",
     "./skills/skills-evaluate",
-    "./skills/still-cursor-living-day"
+    "./skills/still-cursor-living-day",
+    "./skills/explain-me"
   ]
 }

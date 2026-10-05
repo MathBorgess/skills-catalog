@@ -9,6 +9,9 @@ metadata:
 
 # Handoff
 
+> [!WARNING]
+> **DEPRECATED**: This skill is deprecated and is no longer maintained or active in `skills-catalog`.
+
 Turn current work into self-contained session briefs. In **compact**, make one successor brief. In **fan-out**, cut independent work and let `scripts/handoff.mjs` probe supply, route, launch, recover, and score. Do not repeat its arithmetic, launch a child by hand, read child logs/worktrees, or implement a child's scope.
 
 ## 1. Probe and cut

@@ -2,6 +2,9 @@
 
 Skills that keep an expensive model on judgment and move I/O, dispatch and measurement into scripts.
 
+> Canonical domain modeling glossary: [`GLOSSARY.md`](GLOSSARY.md).
+> Skills `handoff` and `shunt` have been deprecated and moved to [`deprecated/`](deprecated/).
+
 ## Language
 
 ### Shunt

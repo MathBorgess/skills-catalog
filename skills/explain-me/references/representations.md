@@ -1,33 +1,41 @@
-# Choosing an explanatory representation
+# Choosing an Explanatory Representation
 
-Choose by what the learner cannot yet see, not by production value. These modes draw on controlled prose, diagrams, interactive pages and bespoke explainers; they are options, not a ladder every lesson must climb.
+Select the representation format based on the nature of the concept and user preference. When called interactively, conduct a focused intake grill (maximum 2 questions) to confirm the format and target audience. When called by `teach-me`, bypass questions and honor the caller's requested format.
 
-| Need | Default artifact | What must be visible |
-|---|---|---|
-| Unfamiliar vocabulary or a small distinction | Plain names plus a compact comparison | Plain term → formal name → example; preserve formal terms for later recognition |
-| Ownership, dependencies or a causal mechanism | Labeled diagram (Mermaid or inline SVG where suitable) | Inputs, transformations, outputs and the condition on each branch; legend for symbols |
-| Spatial arrangement or visual analogy | Annotated image | The actual mechanism and where the analogy stops; labels readable at the intended display size |
-| Parameter trade-off or alternatives | Interactive HTML | A small control changes a visible outcome; initial state already teaches the idea |
-| Evolution over time | Short video or animation | One step at a time, persistent labels, captions/transcript and a still diagram fallback |
+## Format Decision Matrix
 
-## Clear terms and controlled prose
+| Need / Nature of Concept | Primary Format | Key Reference | What Must Be Visible |
+|---|---|---|---|
+| Vocabulary, classification, or small logical distinction | Controlled STE-lite Text & Table | [`references/ste-lite.md`](ste-lite.md) | Plain term → formal name → example; strict word ceilings and stable vocabulary. |
+| Logic flow, state machine, branching conditions | Mermaid Diagram | Markdown native | Inputs, branches, decision gates, state transitions. |
+| Precise spatial layout, component boundaries, internal architecture | Inline Vector SVG | HTML / Markdown | Scalable dark-slate coordinates, labeled buses and boundaries, high contrast. |
+| Abstract intuition, physical analogy, real-world metaphor | Generative Image | Image tool | Realistic or stylized scene; caption must state where the analogy breaks down. |
+| Trade-offs, multi-variable parameter tuning, state exploration | Interactive Single-File HTML | [`references/interactive-html.md`](interactive-html.md) | 3b1b dark theme, responsive canvas/SVG with live range controls; zero build step. |
+| Causal evolution across time, step-by-step mathematical proof | 3b1b Motion Graphics Video | [`references/video-motion.md`](video-motion.md) | Remotion/Motion Canvas, Kokoro ONNX narration sync, subtitles, .mp4 file. |
 
-Use short active sentences, stable vocabulary and one operation per sentence. Explain an acronym on first use. Prefer a specific action to a vague metaphor. A controlled-language specification such as ASD-STE100 may inspire clarity, but do not claim compliance without checking its rules. A numerical teaching example is illustrative unless derived from measured data; label it accordingly.
+---
 
-## Diagrams and images
+## Controlled Writing: STE-Lite
+All written explanations and narration scripts must adhere to **STE-lite** ([`references/ste-lite.md`](ste-lite.md)):
+- Descriptive sentences ≤ 25 words; procedural sentences ≤ 20 words.
+- Paragraphs ≤ 6 sentences.
+- Active voice, zero decorative metaphors, strictly unified vocabulary without synonyms.
+- Run `node skills/explain-me/scripts/ste-lint.mjs --file <path>` to audit.
 
-Show the load-bearing distinction with as few elements as needed. Label arrows with what moves or changes; avoid unlabeled arrows that could mean either data flow or control. Keep a text explanation beside the visual. For AI-generated images, inspect text and spatial relationships; use ordinary text/SVG overlays when exact labels are essential. Cite evidence in the caption rather than hiding it in an image.
+## Static Visuals: Mermaid vs. Inline SVG vs. Generative Images
+- **Mermaid**: Use for dependency graphs, sequence diagrams, and class relationships where native rendering in GitHub and Markdown viewers is desirable.
+- **Inline SVG**: Use when a diagram requires exact visual hierarchy, custom styling, dark slate container boxes, or coordinates that Mermaid layout engines distort.
+- **Generative Images**: Use solely for analogical imagery (e.g. visualizing physical phenomena). Always append a textual boundary note explaining where the visual metaphor ceases to be technically accurate.
 
-## Interactive HTML
+## Interactive HTML Explainers
+- Standalone single file combining HTML, CSS, and JS with zero npm build step ([`references/interactive-html.md`](interactive-html.md)).
+- Uses 3b1b dark theme (`#0f172a`), touch-friendly inputs, high-DPI canvas handling, and responsive single-column mobile viewports.
 
-For a standalone artifact, use the caller's destination or a local `explain-me/<topic>.html` with a sibling `<topic>-assets/` directory only when assets exist. For `teach-me`, embed in its existing lesson or provide a fragment and relative assets at its requested location; preserve its shared stylesheet, quiz scripts and resume brief.
+## Motion Graphics Video & Kokoro TTS
+- Follow the 3b1b aesthetic: dark slate background, geometric transforms, high-contrast mathematical readouts ([`references/video-motion.md`](video-motion.md)).
+- Audio generated per scene via local **Kokoro ONNX**. If Kokoro is missing, instruct the user to install it (`uv pip install kokoro-onnx soundfile`) and offer a silent video with `.srt` subtitles as an immediate fallback.
+- Audio scene duration strictly dictates visual frame duration.
 
-Use a viewport tag, one mobile column, keyboard-operable controls and no hover-only explanation. Default to local assets and no CDN or analytics. Check at phone width and desktop width when a browser preview is available. An interactive result is complete only when changing the control updates the intended visual state.
-
-## Video and narration
-
-Use the available video skill/runtime. Keep motion tied to a change in the mechanism rather than decoration. Match narration, caption and visible state. A real video deliverable requires a rendered playable file and an inspected frame/sequence; a storyboard alone is an unfinished video. If narration is unavailable, a silent captioned explanation may be useful, but say that it is silent. Never invent rendering success or request an API key just because a source example used one.
-
-## Caller boundary
-
-Return: comprehension goal, explanation artifact/fragment, asset paths, plain/formal glossary, primary sources, assumptions and verification limits. `teach-me` integrates these into its lesson and preserves answer concealment. Generating an attractive explanation is not evidence that the learner understood it.
+## Caller Boundary
+When returning the artifact to the user or caller (`teach-me`):
+- Deliver: comprehension goal, artifact/fragment path, plain/formal glossary, primary sources, assumptions, and an **explain-back** diagnostic question (without answer key).

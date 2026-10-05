@@ -8,21 +8,45 @@ metadata:
 
 # Explain Me
 
-Turn one mechanism into an explanation the learner can inspect and explain back. Work independently or supply the explanation inside a `teach-me` lesson.
+Turn one mechanism into an explanation the learner can inspect and explain back. Deliver controlled text, diagrams, interactive HTML, or 3b1b-style motion graphics. Work standalone or supply the visual explanation inside a `teach-me` lesson.
 
 ## Steps
 
-1. **Set the explanation contract.** Reuse the user's topic, language, audience, confusion, source material and requested format. When called by `teach-me`, also receive its lesson path, time budget, integration target and quiz boundaries. Infer routine choices; ask only when missing information changes the concept or deliverable.
-2. **Find the load-bearing distinction.** Write one sentence saying what the learner should be able to explain. Use one concrete example throughout. Resolve the mechanism against supplied evidence or current primary sources; label unknowns and assumptions. Define each necessary term with a plain name, formal name and example. Simplification must preserve direction, conditions and exceptions.
-3. **Choose the smallest useful representation.** Read [representations.md](references/representations.md) for the selected mode. Prefer plain terms or a labeled diagram for a simple distinction, an image for spatial structure, interactive HTML for changing parameters, and a video for a mechanism that needs time or sequence. Honor an explicit format. Do not generate every format by default.
-4. **Produce and inspect.** Deliver the requested artifact, not just a plan or prompt. Use available dedicated image/video/visualization skills when needed: call the Skill tool with the selected skill if that interface is available, otherwise load its advertised `SKILL.md` and follow it. Never invent a tool or install a media stack just to satisfy this skill. If a required capability is unavailable, report it and supply a usable simpler explanation without claiming the requested media was produced. Inspect labels, causal order and readability; report what could not be verified.
-5. **Return the explanation to its owner.** Standalone: show the artifact and a brief caption connecting it to the learning goal. With `teach-me`: return the embeddable explanation, asset paths, source links, glossary and limits for the existing lesson. Keep its quiz answers hidden and do not select another topic, grade answers, write a session ledger or claim mastery. A short explain-back question may be suggested to the caller, with no answer key shown to the learner.
+1. **Intake grill and contract.**
+   - **When called by `teach-me`**: ask zero questions. Inherit its lesson path, time budget, target format, and quiz boundaries directly.
+   - **When called interactively**: ask at most **two** focused questions with recommended answers:
+     1. *Format*: recommend based on the mechanism and local runtimes ([`references/representations.md`](references/representations.md)).
+     2. *Audience depth*: beginner vs. engineer/operator.
+2. **Isolate the load-bearing distinction.**
+   - Write one sentence stating what the learner must be able to explain back.
+   - Anchor the explanation to one concrete running example throughout.
+   - Define technical terms in a three-part glossary: plain name → formal name → example.
+3. **Enforce STE-lite (80% ASD-STE100).**
+   - Write all explanations, diagram labels, and narration scripts under [`references/ste-lite.md`](references/ste-lite.md).
+   - Descriptive sentences ≤ 25 words; procedural sentences ≤ 20 words.
+   - Paragraphs ≤ 6 sentences. Active voice. Zero synonym switching for defined terms.
+   - Audit text with `node skills/explain-me/scripts/ste-lint.mjs --file <path>`.
+4. **Produce the artifact.**
+   - **Controlled Text & Tables**: Deliver plain/formal glossary and comparison tables.
+   - **Logic & Flow Diagrams**: Use **Mermaid** for state machines, branching, and dependency trees rendered natively in Markdown.
+   - **Spatial & Architectural Maps**: Use **inline SVG** with 3b1b dark theme (`#0f172a`) for high-precision vector layouts and clear coordinate buses.
+   - **Visual Analogies**: Use **generative images** solely for metaphors; always append a caption stating where the physical analogy breaks down.
+   - **Interactive Explainers**: Produce a single-file autonomous HTML document (inlined CSS/JS, zero build step) following [`references/interactive-html.md`](references/interactive-html.md). Responsive single-column, touch controls, and high-DPI canvas/SVG state exploration.
+   - **3b1b Motion Graphics Video**: Follow [`references/video-motion.md`](references/video-motion.md).
+     - Probe local Kokoro ONNX (`python3 -c "import kokoro_onnx, soundfile"`). If missing, instruct installation (`uv pip install kokoro-onnx soundfile`) and offer silent video with `.srt` subtitles as an immediate fallback.
+     - Synthesize scene-by-scene audio. Audio clip duration strictly dictates visual frame duration in Remotion / Motion Canvas.
+     - Assemble final `.mp4` and subtitles via ffmpeg.
+5. **Inspect and deliver.**
+   - Verify mobile readability, contrast, and label consistency.
+   - Standalone: return the artifact path, comprehension goal, glossary, and an **explain-back** diagnostic question (without answer key).
+   - With `teach-me`: return the embeddable fragment and assets without altering lesson quizzes, grading, or session records.
 
 ## Done-check
 
-- [ ] One mechanism, one example and an observable comprehension goal.
-- [ ] Terms, arrows and visual states agree with the evidence; decorative details do not imply unsupported facts.
-- [ ] The artifact exists and was inspected to the extent supported; missing media capabilities are stated plainly.
-- [ ] Mobile text is readable; images have a text equivalent and videos have captions/transcript.
-- [ ] Sources and assumptions accompany the explanation; credentials are never embedded in output.
-- [ ] `teach-me` keeps ownership of quiz, resume prompt, grading and progress records.
+- [ ] One load-bearing distinction, one running example, and an observable comprehension goal.
+- [ ] Text and narration scripts comply with STE-lite limits (verified via `ste-lint.mjs`).
+- [ ] Interactive HTML is a single autonomous file with zero build step, 3b1b dark palette, and touch-friendly controls.
+- [ ] Motion graphics video has time-locked scene audio (or explicit silent+subtitles fallback) and a playable `.mp4`.
+- [ ] Diagrams use Mermaid for logic, inline SVG for architectural precision, or generative image with boundary caption.
+- [ ] An explain-back question is provided without exposing the answer key.
+- [ ] `teach-me` retains full ownership of lesson curriculum, quizzes, and learner progress.

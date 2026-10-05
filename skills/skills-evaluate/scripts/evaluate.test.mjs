@@ -156,10 +156,10 @@ assert("evaluate: median matches expected", evalResult.medians.outlines === 4 &&
 const siblings = getSiblingSkills();
 assert("siblingSkills: found sibling skills in repo", siblings.length >= 4);
 const siblingNames = siblings.map((s) => s.name);
-assert("siblingSkills: contains handoff", siblingNames.includes("handoff"));
-assert("siblingSkills: contains shunt", siblingNames.includes("shunt"));
+assert("siblingSkills: contains domain-modeling", siblingNames.includes("domain-modeling"));
 assert("siblingSkills: contains study-wiki", siblingNames.includes("study-wiki"));
 assert("siblingSkills: contains teach-me", siblingNames.includes("teach-me"));
+assert("siblingSkills: contains still-cursor-living-day", siblingNames.includes("still-cursor-living-day"));
 assert("siblingSkills: descriptions are populated", siblings.every((s) => s.description.length > 20));
 
 // -----------------------------------------------------------------------------

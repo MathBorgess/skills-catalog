@@ -90,10 +90,11 @@ Two kinds of skills live in this catalog:
 |---|---|---|---|
 | [`domain-modeling`](skills/domain-modeling/) | 1.0.0 | operator | Actively builds and sharpens a project's domain model, ubiquitous language, and glossary during design; records ADRs for hard-to-reverse architectural decisions. |
 | [`study-wiki`](skills/study-wiki/) | 1.0.0 | operator | Interviews you about the certifications you are chasing, then builds and operates a personal study repository: a knowledge graph of notes, a question bank, an error log, and a daily study loop that injects questions, grades your answers, and records where you are weak. |
-| [`explain-me`](skills/explain-me/) | 1.1.0 | operator | Creates one visual explanation, in the language you asked in, with controlled-writing text, diagrams, images, interactive HTML or a narrated video, landscape or portrait for Reels/Shorts/TikTok (HyperFrames motion, local Kokoro voice), styled from an editable, brand-able DESIGN.md; teach-me retains quizzes and progress records. |
+| [`explain-me`](skills/explain-me/) | 1.1.1 | operator | Creates one visual explanation, in the language you asked in, with controlled-writing text, diagrams, images, interactive HTML or a narrated video, landscape or portrait for Reels/Shorts/TikTok (HyperFrames motion, local Kokoro voice), styled from an editable, brand-able DESIGN.md; teach-me retains quizzes and progress records. |
 | [`motion-identity`](skills/motion-identity/) | 1.0.0 | operator | Grills a brand's owner, round by round, into a motion identity — personality, one GSAP ease per role (enter, exit, emphasis), durations, ambient level, signature move, kinetic type and a never-list — and writes it into the brand's DESIGN.md, where HyperFrames and explain-me both read it; renders a short deterministic HyperFrames proof the owner approves by watching, and prints the block a HyperFrames BRIEF.md carries to the footage skills. Disney's principles, archetypes and timing adapted for video from LottieFiles' motion-design and GreenSock's gsap-skills. |
 | [`teach-me`](skills/teach-me/) | 1.2.0 | operator | Runs one study session against a wiki that already exists: a phone-sized HTML lesson plus a session note and error log. Not for bootstrapping an empty wiki — that is study-wiki. |
 | [`skills-evaluate`](skills/skills-evaluate/) | 0.2.0 | operator | Reads the metrics the other skills leave in the OS temp dir, the maintainer sketchpad and open issues; compares the last run with the recent median, diagnoses root causes, checks each skill against its own scope, and proposes improvements to the skill or to its observability. |
+| [`easy-to-read`](skills/easy-to-read/) | 1.0.0 | operator | Once activated, keeps every text it writes for you in plain language for the rest of the session — chat replies, documents, notes, summaries, PR and issue bodies — under STE-lite plus the profile of the text's language (ASD-STE100 for English; ABNT NBR ISO 24495-1 and the Senado style for Brazilian Portuguese; the core alone for other languages). Lints documents and long replies with a zero-dependency linter before they ship, and never rewrites code, commands, paths, identifiers or quotes. Canonical home of the writing rules explain-me ships as byte copies. |
 
 ### Experiments
 
@@ -114,7 +115,7 @@ The following skills are **deprecated** and no longer maintained or accessible i
 
 How a skill works under the hood, for whoever maintains it, is in [`docs/`](docs/) — written for people, never loaded by a model.
 
-After install, start a session and type `/domain-modeling`, `/study-wiki`, `/teach-me`, `/explain-me`, `/skills-evaluate`, or `/still-cursor-living-day`, or just say what you want — the skill's `description` is what makes the model reach for it on its own.
+After install, start a session and type `/domain-modeling`, `/study-wiki`, `/teach-me`, `/explain-me`, `/motion-identity`, `/easy-to-read`, `/skills-evaluate`, or `/still-cursor-living-day`, or just say what you want — the skill's `description` is what makes the model reach for it on its own.
 
 **Improving the skills**
 

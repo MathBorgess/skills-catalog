@@ -3,7 +3,7 @@ name: explain-me
 description: "Use when the user asks for a visual explanation, says 'explain-me', 'show me how it works', 'explique visualmente', 'explica em vídeo', 'vídeo explicativo', 'vídeo vertical', 'para reels / shorts / tiktok', or needs a diagram, an illustrated mechanism, an interactive explainer, a narrated video, or plain terminology; also when they want it in their project's brand ('use a nossa marca', 'use o DESIGN.md'), and when teach-me requests the explanatory part of one lesson. Every word comes out in the language of the request. The caller owns quizzes, grading and progress records."
 metadata:
   author: Matheus Borges
-  version: 1.1.0
+  version: 1.1.1
 ---
 
 # Explain Me
@@ -22,7 +22,7 @@ Turn one mechanism into an explanation the learner can inspect and explain back,
    - Never ask the language. The Requester Language is the language of the request message. An explicit instruction or the caller's value wins.
    - For video, read the Orientation from the request. "Reels", "Shorts", "TikTok", "vertical", "stories" or "no celular" mean portrait. With no cue, recommend landscape inside the format question. A caller can pass the orientation.
 2. **Isolate the Load-bearing Distinction.** Write one sentence: what the learner must explain back. Keep one running example. Write a three-part glossary: plain name, formal name, example. Use the Requester Language. Keep the distinction, the glossary and the explain-back question in `<run>/explanation.md`: `new` writes its three sections. Lint it.
-3. **Write under STE-lite and the Language Profile.** Rules: [`references/ste-lite.md`](references/ste-lite.md), plus [`references/profile-en.md`](references/profile-en.md) or [`references/profile-pt-br.md`](references/profile-pt-br.md). Other languages get the core alone. Lint every text before it ships: `ste-lint.mjs --file <f> --lang <en|pt>`. Add `--narration` for narration only. Lint on-screen labels without it. Fix every error.
+3. **Write under STE-lite and the Language Profile.** Rules: [`references/ste-lite.md`](references/ste-lite.md), plus [`references/profile-en.md`](references/profile-en.md) or [`references/profile-pt-br.md`](references/profile-pt-br.md). Other languages get the core alone. Lint every text before it ships: `ste-lint.mjs --file <f> --lang <en|pt>`. Add `--narration` for narration only. Lint on-screen labels without it. Fix every error. These rule files and the linter are byte copies: their canonical home is the `easy-to-read` skill.
 4. **Produce the artefact** for the chosen format.
    - **Text and tables**: glossary and comparison tables.
    - **Mermaid**: state machines, branching, dependency trees.

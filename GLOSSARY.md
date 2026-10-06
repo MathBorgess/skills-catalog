@@ -130,19 +130,29 @@ One JSON object per run appended by a skill to its history in the OS temp dir.
 **Scope Drift**:
 A skill doing work its `description` does not claim, or another skill's work.
 
+### Easy to Read
+
+**STE-lite**:
+The structural writing core that every reader text obeys in any language: sentence and paragraph ceilings, one idea per sentence, and a locked term for each defined concept. Narration has a lower sentence ceiling than written text, because a listener cannot reread. Its canonical home is the `easy-to-read` skill.
+_Avoid_: simple English (STE-lite has strict numeric limits and terminology locks); calling a language profile "STE-lite"
+
+**Language Profile**:
+The layer of grammar and word rules added on top of STE-lite for one language, the language of the text. English follows ASD-STE100; Brazilian Portuguese follows ABNT NBR ISO 24495-1 and the Senado's plain-language style. A language without a profile gets the core alone.
+_Avoid_: dictionary (a profile carries a curated word list, not the ASD dictionary)
+
+**Reader Text**:
+Any text written for a person to read: a chat reply, a document, a note, a summary, a PR or issue body. While easy-to-read is active, every reader text in the session follows STE-lite and the language profile of its language.
+
+**Exempt Span**:
+A part of a reader text that the rules never rewrite: code, commands, file paths, identifiers, URLs, quoted source text, and anything inside backticks or a code fence. It stays byte for byte, even when it breaks a rule.
+
 ### Visual Explanation (Explain Me)
 
 **Load-bearing Distinction**:
 The singular boundary, difference or mechanism the learner must grasp and explain back.
 _Avoid_: general summary, conceptual overview
 
-**STE-lite**:
-The structural writing core every explanation obeys in any language: sentence and paragraph ceilings, one idea per sentence, and a locked term for each defined concept. Narration has a lower sentence ceiling than written text, because a listener cannot reread.
-_Avoid_: simple English (STE-lite has strict numeric limits and terminology locks); calling a language profile "STE-lite"
-
-**Language Profile**:
-The layer of grammar and word rules added on top of STE-lite for one requester language. English follows ASD-STE100; Brazilian Portuguese follows ABNT NBR ISO 24495-1 and the Senado's plain-language style. A language without a profile gets the core alone.
-_Avoid_: dictionary (a profile carries a curated word list, not the ASD dictionary)
+Explain-me writes every text, label and narration under **STE-lite** and the **Language Profile** of the Requester Language. Both terms are defined under Easy to Read, the skill that owns them.
 
 **Interactive Explainer**:
 A standalone, self-contained single-file HTML document (inlined CSS/JS) allowing real-time parameter exploration via Canvas or SVG controls without build steps.
@@ -247,6 +257,8 @@ The domain languages for **Shunt** (outlines, excerpts, edit bypass, run wrapper
 - Every skill writes **metrics lines**; `skills-evaluate` reads them and never the other way around.
 - **Scorers** write the **shadow log**; the **teacher** resolves what the outcome left silent; neither ever acts inside an active run.
 - **Domain modeling** formalizes terms into `GLOSSARY.md` inline and records non-obvious architecture trade-offs in ADRs.
+- **Easy-to-read** owns **STE-lite**, the **language profiles** and their linter; explain-me ships byte copies so it installs and runs alone, and a contract test fails when the copies differ.
+- While **easy-to-read** is active, every **reader text** follows STE-lite and the profile of its language, and every **exempt span** passes through unchanged.
 - **Explain-me** produces standalone visual explanations and controlled STE-lite text; `teach-me` embeds them and owns curriculum, quizzes, and learner state.
 - **Interactive explainers** use single-file HTML/CSS/JS without build steps; **scene-driven videos** key every **beat**'s motion to its **Kokoro narration**, and pass the **motion gate** before they render.
 - **Orientation** sets the frame and its **safe zone**; in portrait the kit draws **burned captions** in a band of their own, and the **motion gate** watches the stage, never the captions.
@@ -261,5 +273,6 @@ The domain languages for **Shunt** (outlines, excerpts, edit bypass, run wrapper
 - "Judge" collided with **teacher**, which must never write verdicts — resolved: a **judge** grades artefacts against a declared axis and decides nothing about what runs next; a **teacher** labels past decisions from their outcomes and grades no work.
 - "Deprecated skill" vs "Experiment" — resolved: an experiment has an active hypothesis being measured; a deprecated skill is retired work removed from `skills/` to `deprecated/`.
 - "Full ASD-STE100" vs "STE-lite" — resolved: full ASD-STE100 requires an English-only dictionary; STE-lite is the language-agnostic structural core, and the grammar and word rules of one language live in its **language profile** (ASD-STE100 for English; ABNT NBR ISO 24495-1 and the Senado style for Brazilian Portuguese).
+- "Requester Language" vs "the language of the text" — resolved: easy-to-read picks the **language profile** from the language of the text, which is the language of the request unless the user or a caller names another; in explain-me that language is the **Requester Language**, so both skills pick the same profile.
 - "3b1b style" meant both a fixed palette and a way of moving — resolved: it is explain-me's default look, motion grammar included; a **brand spec** may replace any part of it, and only the **motion gate** and the **requester language** stay fixed.
 - "Motion graphics" meant both HyperFrames' short-piece genre and the style of any video — resolved: **motion graphics** is the style and dynamics of a video, at any length; HyperFrames' `motion-graphics` names one of its workflows, not this term. How a brand prescribes that style is its **motion identity**.

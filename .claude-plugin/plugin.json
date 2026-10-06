@@ -1,7 +1,7 @@
 {
   "name": "skills-catalog",
-  "version": "2.6.0",
-  "description": "Matheus Borges's agent skills: study wikis, visual explanations, brand motion identities for HyperFrames and explain-me videos, teaching sessions, domain modeling, skills-evaluate (turn run metrics into improvements), and still-cursor-living-day (plan, generate and judge a twelve-frame image collection under one axis). Inspired by Matt Pocock's skills packaging.",
+  "version": "2.7.0",
+  "description": "Matheus Borges's agent skills: study wikis, visual explanations, brand motion identities for HyperFrames and explain-me videos, plain-language writing for every reply and document (easy-to-read), teaching sessions, domain modeling, skills-evaluate (turn run metrics into improvements), and still-cursor-living-day (plan, generate and judge a twelve-frame image collection under one axis). Inspired by Matt Pocock's skills packaging.",
   "author": {
     "name": "Matheus Borges",
     "url": "https://github.com/MathBorgess"
@@ -19,7 +19,9 @@
     "codex",
     "image-collection",
     "explain-me",
-    "motion-identity"
+    "motion-identity",
+    "easy-to-read",
+    "plain-language"
   ],
   "skills": [
     "./skills/domain-modeling",
@@ -28,6 +30,7 @@
     "./skills/skills-evaluate",
     "./skills/still-cursor-living-day",
     "./skills/explain-me",
-    "./skills/motion-identity"
+    "./skills/motion-identity",
+    "./skills/easy-to-read"
   ]
 }

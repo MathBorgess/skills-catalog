@@ -27,10 +27,47 @@ const RHYTHM = {
   energetic: { stagger: 0.06, peak: 1.22 },
 };
 const NEUTRAL_RHYTHM = { stagger: 0.1, peak: 1.08 };
+// Per personality: how a word enters (from -> to, each word on its own, in reading order, from where no word
+// is yet) and how the headline leaves. The exit is "together, last word first": the headline travels as one
+// block (`away`), so no word crosses a word still on screen, while each word plays `out` in reverse order.
+// In `away`, xPercent is a percent of the mean word width and yPercent a percent of the line height.
+export const CHOREOGRAPHY = {
+  playful: { from: { yPercent: 70, scale: 0.6, rotation: -6, opacity: 0 }, to: { yPercent: 0, scale: 1, rotation: 0, opacity: 1 }, away: { yPercent: -60 }, out: { scale: 0.7, rotation: 4, opacity: 0 } },
+  premium: { from: { y: 18, scale: 0.98, opacity: 0 }, to: { y: 0, scale: 1, opacity: 1 }, away: { y: -16 }, out: { opacity: 0 } },
+  corporate: { from: { x: -48, opacity: 0 }, to: { x: 0, opacity: 1 }, away: { x: 56 }, out: { opacity: 0 } },
+  energetic: { from: { xPercent: 60, scale: 1.35, opacity: 0 }, to: { xPercent: 0, scale: 1, opacity: 1 }, away: { xPercent: -90 }, out: { scale: 0.9, opacity: 0 } },
+};
 export const MAX_WORDS = 6;
 const STAGGER_BUDGET = 0.5; // total stagger of one group stays under half a second
 
 const round3 = (n) => Math.round(n * 1000) / 1000;
+
+// The highest value a GSAP ease reaches on [0, 1], with GSAP's own formulas. Only back and elastic, in their
+// out and inOut forms, pass 1: back.out(3) reaches 1.25. The emphasized word grows to 1 + (peak - 1) times
+// this, and the page leaves it that room.
+export function easePeak(name) {
+  const m = /^(back|elastic)\.(out|inOut)(?:\(([^)]*)\))?$/.exec(String(name ?? "").trim());
+  if (!m) return 1;
+  const args = m[3] && m[3].trim() ? m[3].split(",").map((s) => Number(s.trim())) : [];
+  let f;
+  if (m[1] === "back") {
+    const s = Number.isFinite(args[0]) ? args[0] : 1.70158;
+    const easeIn = (p) => (p ? p * p * ((s + 1) * p - s) : 0);
+    f = m[2] === "out" ? (p) => 1 - easeIn(1 - p) : (p) => (p < 0.5 ? easeIn(p * 2) / 2 : 1 - easeIn((1 - p) * 2) / 2);
+  } else {
+    const amplitude = Number.isFinite(args[0]) ? args[0] : 1;
+    const period = Number.isFinite(args[1]) && args[1] ? args[1] : m[2] === "out" ? 0.3 : 0.45;
+    const p1 = amplitude >= 1 ? amplitude : 1;
+    let p2 = period / (amplitude < 1 ? amplitude : 1);
+    const p3 = (p2 / (2 * Math.PI)) * (Math.asin(1 / p1) || 0);
+    p2 = (2 * Math.PI) / p2;
+    const out = (p) => (p === 1 ? 1 : p1 * 2 ** (-10 * p) * Math.sin((p - p3) * p2) + 1);
+    f = m[2] === "out" ? out : (p) => (p < 0.5 ? (1 - out(1 - p * 2)) / 2 : 0.5 + out((p - 0.5) * 2) / 2);
+  }
+  let max = 1;
+  for (let i = 0; i <= 2000; i++) max = Math.max(max, f(i / 2000));
+  return max;
+}
 
 export function normalizeOrientation(v) {
   const s = String(v ?? "portrait").toLowerCase();
@@ -100,6 +137,8 @@ export function planProof(data, { orientation = "portrait", text, sub, accentKey
     sub: sub ? String(sub).trim() : null,
     personality,
     peak: rhythm.peak,
+    emphasisReach: round3(1 + (rhythm.peak - 1) * easePeak(eases.emphasis)),
+    choreography: CHOREOGRAPHY[personality] ?? CHOREOGRAPHY.corporate,
     stagger: round3(stagger),
     exitStagger,
     exitDur,
@@ -149,7 +188,7 @@ export function tokensCss(data, plan) {
 }
 
 const escapeHtml = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
-const jsonForScript = (v) => JSON.stringify(v, null, 2).replace(/</g, "\\u003c");
+const jsonForScript = (v) => JSON.stringify(v).replace(/</g, "\\u003c"); // one line: HyperFrames lints a composition over 300 lines
 
 // Deterministic-motion rules a signature script must keep (HyperFrames renders by seeking a paused timeline).
 const SIGNATURE_BANS = [

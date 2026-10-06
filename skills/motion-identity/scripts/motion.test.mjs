@@ -7,7 +7,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { DEFAULT_DURATIONS, MAX_WORDS, buildPage, lintSignature, motionJson, normalizeOrientation, planProof, runProof, slugify, summarizeCheck, tokensCss } from "./lib/proof.mjs";
+import { CHOREOGRAPHY, DEFAULT_DURATIONS, MAX_WORDS, buildPage, easePeak, lintSignature, motionJson, normalizeOrientation, planProof, runProof, slugify, summarizeCheck, tokensCss } from "./lib/proof.mjs";
 import { AMBIENT_LEVELS, EASE_ROLES, KIT_PRIMITIVES, MOTION_PERSONALITIES, PROJECT_SPEC_NAMES, briefFor, briefLines, checkIdentity, contrastRatio, easeHint, findProjectSpec, identityStatus, isGsapEase, pickAccent, splitFrontmatter } from "./lib/spec.mjs";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -175,6 +175,27 @@ const errorAt = (r, p) => r.errors.some((e) => e.path === p);
   assert("plan: a brand box for the orientation is used", same(planProof({ ...data, layout: { portrait: { safe: [80, 300, 1000, 1300] } } }, { text: "x" }).safe, [80, 300, 1000, 1300]));
 }
 
+// ------------------------------------------------------------------ emphasis room and the exit (no collisions)
+{
+  // peaks measured with gsap.parseEase in GSAP 3.14.2, the version the proof loads
+  const near = (a, b) => Math.abs(a - b) < 1e-4;
+  assert("ease peak: back.out(n) overshoots by GSAP's formula", near(easePeak("back.out(3)"), 1.25) && near(easePeak("back.out(2.2)"), 1.15405) && near(easePeak("back.out"), 1.1) && near(easePeak("back.inOut(1.7)"), 1.04992));
+  assert("ease peak: elastic.out(a, p) overshoots by GSAP's formula", near(easePeak("elastic.out(1, 0.45)"), 1.2367) && near(easePeak("elastic.out"), 1.37309) && near(easePeak("elastic.inOut(1.2, 0.5)"), 1.16941));
+  assert("ease peak: eases that do not overshoot stay at 1", ["power2.out", "expo.out", "sine.inOut", "bounce.out", "back.in(2)", "none"].every((n) => easePeak(n) === 1));
+  const energetic = { colors: { background: "#0E0E10", text: "#FFFFFF", accentLime: "#C8FF2E" }, motion: { personality: "energetic", ease: "power3.inOut", eases: { enter: "expo.out", exit: "expo.in", emphasis: "back.out(3)" } } };
+  const premium = { colors: energetic.colors, motion: { personality: "premium", ease: "sine.inOut", eases: { enter: "power3.out", exit: "power2.in", emphasis: "power2.out" } } };
+  // "Go faster today" with "faster" emphasized: back.out(3) took the 1.22 peak to 1.275 and ran into "Go"
+  assertEq("plan: the emphasis reach is the peak times the ease's overshoot", [planProof(energetic, { text: "Go faster today", accentWord: "2" }).emphasisReach, planProof(premium, { text: "x" }).emphasisReach], [1.275, 1.03]);
+  const travel = ["x", "y", "xPercent", "yPercent"];
+  for (const [name, c] of Object.entries(CHOREOGRAPHY)) {
+    assert(`choreography ${name}: a leaving word never travels on its own (the headline does), so it cannot cross a word still on screen`, !Object.keys(c.out).some((k) => travel.includes(k)) && Object.keys(c.away).length > 0 && Object.keys(c.away).every((k) => travel.includes(k)));
+    assert(`choreography ${name}: the entrance ends where the word rests, and every word leaves invisible`, same(Object.keys(c.from).sort(), Object.keys(c.to).sort()) && c.out.opacity === 0);
+  }
+  assert("plan: an unknown personality moves like corporate", same(planProof({ colors: energetic.colors, motion: { personality: "editorial" } }, { text: "x" }).choreography, CHOREOGRAPHY.corporate));
+  const template = fs.readFileSync(path.join(SKILL, "assets", "proof.html"), "utf8");
+  assert("page: the layout reserves the emphasis reach and the headline leaves as one block", /function reserve\(size\)/.test(template) && template.includes("P.emphasisReach") && /tl\.to\(head,/.test(template) && template.includes("C.out") && !/\bvar (IN|OUT) = \{/.test(template));
+}
+
 // ------------------------------------------------------------------ the page
 {
   const data = splitFrontmatter(FULL).data;
@@ -184,6 +205,7 @@ const errorAt = (r, p) => r.errors.some((e) => e.path === p);
   assert("page: tokens are inlined", page.includes("--mi-bg: #0B1020;") && page.includes("--mi-accent: #FF5C8A;") && page.includes('--mi-font-display: Inter, sans-serif;'));
   assert("page: words are escaped and the accent word is marked", page.includes("&lt;it&gt;") && page.includes('class="mi-word mi-accent-word" id="mi-w3"'));
   assert("page: the plan, size, duration and language are written", page.includes("window.MOTION_PROOF =") && page.includes('data-duration="' + plan.total + '"') && page.includes('<html lang="pt-BR">') && page.includes('data-width="1080"'));
+  assert("page: the plan is inlined on one line (HyperFrames lints a composition over 300 lines)", page.split("\n").some((l) => /^\s*window\.MOTION_PROOF = \{.*\};$/.test(l)));
   assert("page: no marker is left behind", ["<!-- mi:tokens -->", "<!-- mi:headline -->", "/* mi:plan */", "/* mi:signature */"].every((m) => !page.includes(m)));
   assert("page: the supporting line uses muted only when it is readable", tokensCss(data, plan).includes("--mi-sub: #8A93B2;") && tokensCss({ ...data, colors: { ...data.colors, muted: "#303550" } }, plan).includes("--mi-sub: #F4F6FF;"));
   let threw = false;

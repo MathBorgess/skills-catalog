@@ -64,6 +64,7 @@
         display: flex;
         flex-wrap: wrap;
         justify-content: center;
+        align-items: baseline;
         column-gap: 0.24em;
       }
       .mi-word {
@@ -116,19 +117,6 @@
           if (typeof gsap.parseEase(P.eases[role]) !== "function") fail("the " + role + " ease " + JSON.stringify(P.eases[role]) + " is not a GSAP ease.");
         });
 
-        // Entrance and exit per personality: what the archetype's first and last impression looks like.
-        var IN = {
-          playful: [{ yPercent: 70, scale: 0.6, rotation: -6, opacity: 0 }, { yPercent: 0, scale: 1, rotation: 0, opacity: 1 }],
-          premium: [{ y: 18, scale: 0.98, opacity: 0 }, { y: 0, scale: 1, opacity: 1 }],
-          corporate: [{ x: -48, opacity: 0 }, { x: 0, opacity: 1 }],
-          energetic: [{ xPercent: 60, scale: 1.35, opacity: 0 }, { xPercent: 0, scale: 1, opacity: 1 }]
-        };
-        var OUT = {
-          playful: { yPercent: -60, scale: 0.7, rotation: 4, opacity: 0 },
-          premium: { y: -16, opacity: 0 },
-          corporate: { x: 56, opacity: 0 },
-          energetic: { xPercent: -90, scale: 0.9, opacity: 0 }
-        };
         var AMBIENT = { subtle: { period: 9, shift: 4, scale: 1.08, opacity: 0.22 }, lively: { period: 5, shift: 8, scale: 1.16, opacity: 0.38 } };
 
         var root = document.getElementById("root");
@@ -139,10 +127,57 @@
         var sub = document.getElementById("mi-sub");
         var svg = document.getElementById("mi-signature");
         var words = Array.prototype.slice.call(head.querySelectorAll(".mi-word"));
+        var aw = words[P.accentIndex];
         var safe = P.safe;
         var sw = safe[2] - safe[0];
         var sh = safe[3] - safe[1];
         var portrait = P.orientation === "portrait";
+        var meter = document.createElement("canvas").getContext("2d");
+
+        // The ink of a word (its glyphs, not its line box), in the coordinates of #mi-block.
+        function ink(el) {
+          var cs = getComputedStyle(el);
+          meter.font = cs.fontStyle + " " + cs.fontWeight + " " + cs.fontSize + " " + cs.fontFamily;
+          if ("letterSpacing" in meter) meter.letterSpacing = cs.letterSpacing;
+          var m = meter.measureText(el.textContent);
+          var base = el.offsetTop + (el.offsetHeight - m.fontBoundingBoxAscent - m.fontBoundingBoxDescent) / 2 + m.fontBoundingBoxAscent;
+          return { l: el.offsetLeft - m.actualBoundingBoxLeft, r: el.offsetLeft + m.actualBoundingBoxRight, t: base - m.actualBoundingBoxAscent, b: base + m.actualBoundingBoxDescent };
+        }
+
+        // The emphasized word grows to P.emphasisReach (the peak, times the overshoot of the emphasis ease),
+        // from its centre. Give it that room: a margin on each side where a word of its line, or a word of
+        // the line above or below, would be touched. A word space stays readable at the peak (0.16em, about
+        // half the gap at rest); a line keeps the headline's own tight leading (0.04em). Returns the grown ink.
+        function reserve(size) {
+          var clearX = size * 0.16;
+          var clearY = size * 0.04;
+          var R = P.emphasisReach;
+          var add = { l: 0, r: 0, t: 0, b: 0 };
+          var g;
+          aw.style.margin = "0px";
+          for (var pass = 0; pass < 3; pass++) {
+            var a = ink(aw);
+            var cx = aw.offsetLeft + aw.offsetWidth / 2;
+            var cy = aw.offsetTop + aw.offsetHeight / 2;
+            g = { l: cx - R * (cx - a.l), r: cx + R * (a.r - cx), t: cy - R * (cy - a.t), b: cy + R * (a.b - cy) };
+            var need = { l: 0, r: 0, t: 0, b: 0 };
+            words.forEach(function (w) {
+              if (w === aw) return;
+              var k = ink(w);
+              if (Math.abs(w.offsetTop - aw.offsetTop) < 1) {
+                if (w.offsetLeft < aw.offsetLeft) need.l = Math.max(need.l, k.r + clearX - g.l);
+                else need.r = Math.max(need.r, g.r + clearX - k.l);
+              } else if (k.r > g.l && k.l < g.r) {
+                if (w.offsetTop < aw.offsetTop) need.t = Math.max(need.t, k.b + clearY - g.t);
+                else need.b = Math.max(need.b, g.b + clearY - k.t);
+              }
+            });
+            if (need.l <= 0.5 && need.r <= 0.5 && need.t <= 0.5 && need.b <= 0.5) break;
+            ["l", "r", "t", "b"].forEach(function (s) { add[s] += Math.max(0, Math.ceil(need[s])); });
+            aw.style.margin = add.t + "px " + add.r + "px " + add.b + "px " + add.l + "px";
+          }
+          return g;
+        }
 
         function layout() {
           block.style.left = safe[0] + "px";
@@ -150,13 +185,16 @@
           block.style.width = sw + "px";
           block.style.height = sh + "px";
           svg.setAttribute("viewBox", "0 0 " + P.width + " " + P.height);
-          // Big words: the largest size at which every word fits the safe width and the headline half its height.
+          // Big words: the largest size at which every word fits the safe width, the headline half its height,
+          // and the emphasized word, at the height of its emphasis, the safe width too.
           var size = portrait ? 236 : 212;
           var floor = portrait ? 96 : 80;
           for (;;) {
             head.style.fontSize = size + "px";
+            var grown = reserve(size);
             var widest = words.reduce(function (w, el) { return Math.max(w, el.offsetWidth); }, 0);
-            if ((widest <= sw * 0.94 && head.offsetHeight <= sh * 0.5) || size <= floor) break;
+            var room = grown.l >= 0 && grown.r <= sw;
+            if ((widest <= sw * 0.94 && head.offsetHeight <= sh * 0.5 && room) || size <= floor) break;
             size -= 4;
           }
           rule.style.width = Math.round(Math.min(sw * 0.5, head.offsetWidth * 0.6)) + "px";
@@ -199,15 +237,14 @@
           var D = P.durations;
           var E = P.eases;
           var tl = gsap.timeline({ paused: true });
-          var pin = IN[P.personality] || IN.corporate;
-          var pout = OUT[P.personality] || OUT.corporate;
+          var C = P.choreography;
 
           ambient(tl);
           words.forEach(function (w, i) {
-            tl.fromTo(w, pin[0], Object.assign({ duration: D.grow, ease: E.enter }, pin[1]), T.enter + i * P.stagger);
+            tl.fromTo(w, C.from, Object.assign({ duration: D.grow, ease: E.enter }, C.to), T.enter + i * P.stagger);
           });
-          // emphasis: up on the brand's emphasis ease, then settle (follow-through), and keep the accent color
-          var aw = words[P.accentIndex];
+          // emphasis: up on the brand's emphasis ease, then settle (follow-through), and keep the accent color.
+          // layout() left it room for P.emphasisReach.
           tl.to(aw, { scale: P.peak, duration: D.indicate * 0.55, ease: E.emphasis }, T.emphasis);
           tl.to(aw, { scale: 1, duration: D.indicate * 0.45, ease: "power2.out" }, T.emphasis + D.indicate * 0.55);
           tl.to(aw, { color: P.accent.value, duration: D.indicate * 0.5, ease: "power1.out" }, T.emphasis);
@@ -221,9 +258,16 @@
               accent: P.accent.value, eases: E, durations: D
             });
           }
-          // exit: faster than the entrance, last word first, on the exit ease
+          // exit: together, last word first, faster than the entrance, on the exit ease. The headline travels
+          // as one block, so a word that leaves never crosses a word still on screen; each word plays its own
+          // part (shrink, turn, fade) in reverse order.
+          var away = {};
+          var meanWidth = words.reduce(function (s, w) { return s + w.offsetWidth; }, 0) / words.length;
+          if (C.away.x || C.away.xPercent) away.x = (C.away.x || 0) + ((C.away.xPercent || 0) / 100) * meanWidth;
+          if (C.away.y || C.away.yPercent) away.y = (C.away.y || 0) + ((C.away.yPercent || 0) / 100) * aw.offsetHeight;
+          tl.to(head, Object.assign({ duration: P.exitDur + P.exitStagger * (words.length - 1), ease: E.exit }, away), T.exit);
           words.slice().reverse().forEach(function (w, i) {
-            tl.to(w, Object.assign({ duration: P.exitDur, ease: E.exit }, pout), T.exit + i * P.exitStagger);
+            tl.to(w, Object.assign({ duration: P.exitDur, ease: E.exit }, C.out), T.exit + i * P.exitStagger);
           });
           tl.to(rule, { scaleX: 0, transformOrigin: "100% 50%", duration: P.exitDur, ease: E.exit }, T.exit);
           if (P.sub) tl.to(sub, { opacity: 0, y: -16, duration: P.exitDur, ease: E.exit }, T.exit);

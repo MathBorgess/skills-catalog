@@ -3,7 +3,7 @@ name: easy-to-read
 description: "Use when the user wants plain, easy-to-read language in what you write for them: 'easy to read', 'plain language', 'plain English', 'write simply', 'simplify this text', 'shorter sentences', 'Simplified Technical English', 'ASD-STE100', 'linguagem simples', 'linguagem clara', 'escreve simples', 'fala mais simples', 'texto fácil de ler', 'simplifica esse texto', 'responde de forma simples', 'ISO 24495', 'manual do Senado'. Once active, it stays on for the rest of the session: every chat reply, document, note, summary, and PR or issue body written for a person follows STE-lite and the Language Profile of the text's language (English: ASD-STE100; Brazilian Portuguese: ABNT NBR ISO 24495-1 and the Senado style; other languages: the core only). Documents pass the bundled linter before delivery, and long replies are linted as drafts. Code, commands, paths, identifiers and quoted text are never rewritten."
 metadata:
   author: Matheus Borges
-  version: 0.0.0
+  version: 1.0.0
 ---
 
 # Easy to Read

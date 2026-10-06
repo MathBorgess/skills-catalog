@@ -5,7 +5,7 @@
 import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
-import { explainDesign } from "./design.mjs";
+import { explainDesign, hasAmbient } from "./design.mjs";
 import { resolveLayout, runOrientation } from "./orientation.mjs";
 import { projectDir, readProjectDesign, readRun, sha256, updateRun, writeJson } from "./run.mjs";
 import {
@@ -135,9 +135,10 @@ export async function runVoice({ runDir, synth, lint, strict = false, glossary, 
   }
   fs.writeFileSync(htmlPath, rewriteComposition(html, { tags: silent ? [] : audioTags(full), total: timeline.total, tokens, lang }));
   fs.writeFileSync(path.join(project, "explain-data.js"), buildExplainData({ lang, silent, total: timeline.total, beats: full, design: explainDesign(design), orientation, layout, captions }));
-  // burned captions change all the time, so with them only the stage has to keep moving; the gate stops at the
-  // end of the last beat, so the closing tail (a deliberate hold) is never judged
-  writeJson(path.join(project, "index.motion.json"), buildMotionJson(full, { maxStaticSec: motion.maxStaticSec ?? 2, withinSelector: captions.burn ? "#stage" : undefined }));
+  // burned captions and an ambient glow change all the time, so with either only the stage has to keep moving;
+  // the gate stops at the end of the last beat, so the closing tail (a deliberate hold) is never judged
+  const stageOnly = captions.burn || hasAmbient(motion);
+  writeJson(path.join(project, "index.motion.json"), buildMotionJson(full, { maxStaticSec: motion.maxStaticSec ?? 2, withinSelector: stageOnly ? "#stage" : undefined }));
   const srtPath = path.join(runDir, `${run.slug}.srt`);
   fs.writeFileSync(srtPath, buildSrt(full));
 

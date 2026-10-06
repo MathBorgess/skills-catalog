@@ -216,6 +216,36 @@ _Avoid_: brand kit, template
 **Explain-Back**:
 A targeted diagnostic question testing whether the learner can reconstruct the mechanism without seeing the answer key.
 
+### Motion
+
+**Motion Graphics**:
+The style and dynamics of a video: large words that dominate the frame, and movement shaped by Disney's principles of animation so that it delights the viewer instead of only showing a thing. It applies at any length, with or without a person on screen.
+_Avoid_: HyperFrames' `motion-graphics` workflow (one genre: a short, unnarrated piece of about ten seconds); animation (one tween is not a style)
+
+**Motion Identity**:
+How a brand describes the movement of its content — its personality, timing, easing, signature moves and what it never does — kept as the motion layer of its brand spec, where every video tool reads it.
+_Avoid_: motion graphics (the style of one video), brand kit, motion preset
+
+**Role Ease**:
+The one GSAP ease a motion identity gives each role a move can play: an entrance decelerates, an exit accelerates, an emphasis may overshoot. Moves between positions keep the base ease.
+_Avoid_: easing curve (unqualified), CSS timing function (the tools take GSAP names only)
+
+**Signature Move**:
+The one move a viewer could recognize a brand by with the sound off, made from a motif the brand already owns, used once per video where the main point lands. The logo itself never deforms.
+_Avoid_: logo animation, sting (a sting is a whole short piece)
+
+**Ambient Level**:
+How much background life a brand allows behind the stage: none, subtle or lively. It never stands in for the content's motion, and the Motion Gate never counts it.
+_Avoid_: idle loop, wobble
+
+**Motion Proof**:
+A short, deterministic clip rendered from a brand spec alone that plays its motion identity, so the owner approves the identity by watching it. An identity without one stays a draft.
+_Avoid_: preview, mockup, sample video
+
+**Brief Block**:
+The few lines of a motion identity written for a HyperFrames `BRIEF.md`, the only channel through which the footage workflows hear the brand.
+_Avoid_: summary, prompt snippet
+
 ## Deprecated Domains
 
 The domain languages for **Shunt** (outlines, excerpts, edit bypass, run wrapper, recover event) and **Handoff** (session, slot, graph gate, digest, supervisor, child, capabilities, gate run, verdict, risk level, attention matrix, revise round) have been moved to [deprecated/](deprecated/) alongside their retired skill implementations.
@@ -234,6 +264,8 @@ The domain languages for **Shunt** (outlines, excerpts, edit bypass, run wrapper
 - **Orientation** sets the frame and its **safe zone**; in portrait the kit draws **burned captions** in a band of their own, and the **motion gate** watches the stage, never the captions.
 - A **design spec** styles every format; a **brand spec** may replace any 3b1b default, but never switches the motion gate off or changes the **requester language**.
 - **STE-lite** is shared by every language; a **language profile** adds the rules of one language on top of it.
+- A **motion identity** lives in a **brand spec** and shapes the **motion graphics** of every video made from that spec, through HyperFrames or explain-me; it never switches the **motion gate** off.
+- A **motion identity** is approved only after its owner watched a **motion proof**; it reaches explain-me through the spec, HyperFrames through the spec at the project root, and the footage workflows through its **brief block**.
 
 ## Flagged Ambiguities
 
@@ -243,3 +275,4 @@ The domain languages for **Shunt** (outlines, excerpts, edit bypass, run wrapper
 - "Full ASD-STE100" vs "STE-lite" — resolved: full ASD-STE100 requires an English-only dictionary; STE-lite is the language-agnostic structural core, and the grammar and word rules of one language live in its **language profile** (ASD-STE100 for English; ABNT NBR ISO 24495-1 and the Senado style for Brazilian Portuguese).
 - "Requester Language" vs "the language of the text" — resolved: easy-to-read picks the **language profile** from the language of the text, which is the language of the request unless the user or a caller names another; in explain-me that language is the **Requester Language**, so both skills pick the same profile.
 - "3b1b style" meant both a fixed palette and a way of moving — resolved: it is explain-me's default look, motion grammar included; a **brand spec** may replace any part of it, and only the **motion gate** and the **requester language** stay fixed.
+- "Motion graphics" meant both HyperFrames' short-piece genre and the style of any video — resolved: **motion graphics** is the style and dynamics of a video, at any length; HyperFrames' `motion-graphics` names one of its workflows, not this term. How a brand prescribes that style is its **motion identity**.

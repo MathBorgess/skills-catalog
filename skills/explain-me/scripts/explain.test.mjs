@@ -8,7 +8,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { KIT_PRIMITIVES, deepMerge, diffOverrides, findProjectSpec, loadSpec, mergeProse, resolveDesign, splitFrontmatter, splitSections, tokensCss, validateSpec } from "./lib/design.mjs";
+import { AMBIENT_LEVELS, EASE_ROLES, KIT_PRIMITIVES, MOTION_PERSONALITIES, deepMerge, diffOverrides, findProjectSpec, hasAmbient, isGsapEase, loadSpec, mergeProse, motionIdentityLine, resolveDesign, splitFrontmatter, splitSections, tokensCss, validateSpec } from "./lib/design.mjs";
 import { SLUG_RE, resolveRun, runStamp, skillHome, slugify, venvPython } from "./lib/home.mjs";
 import { commandLine, quoteArg, scriptRef } from "./lib/hints.mjs";
 import { firstJsonObject, hfEnv, lastJsonObject, summarizeCheck } from "./lib/hyperframes.mjs";
@@ -345,6 +345,28 @@ kit.beat("b01", (b) => {
   const unknown = validateSpec({ path: file, data: { colour: {}, rules: { huddle: true } }, body: "" });
   assert("check: unknown keys are warnings, not errors", unknown.errors.length === 0 && unknown.warnings.length === 2);
   assert("check: KIT_PRIMITIVES is the contract list", same(KIT_PRIMITIVES, ["draw", "write", "morph", "move", "camera", "indicate", "count", "grow", "fade"]));
+
+  // the motion identity keys
+  const mi = (motion) => validateSpec({ path: file, data: { motion }, body: "" });
+  const identity = { personality: "playful", eases: { enter: "back.out(1.6)", exit: "power2.in", emphasis: "elastic.out(1, 0.5)" }, ambient: "subtle", signature: { name: "ribbon sweep", note: "a stroke drawn along the logo's curve" } };
+  const full = mi(identity);
+  assert("identity: a complete motion identity validates with no warning", full.errors.length === 0 && full.warnings.length === 0, JSON.stringify(full));
+  assertEq("identity: the contract lists", [MOTION_PERSONALITIES, EASE_ROLES, AMBIENT_LEVELS], [["playful", "premium", "corporate", "energetic"], ["enter", "exit", "emphasis"], ["none", "subtle", "lively"]]);
+  const custom = mi({ personality: "editorial" });
+  assert("identity: a personality outside the archetypes is a warning, not an error", custom.errors.length === 0 && custom.warnings.some((w) => w.path === "motion.personality"));
+  assert("identity: an empty personality is an error", mi({ personality: "" }).errors.some((e) => e.path === "motion.personality"));
+  assert("identity: eases must be a map of non-empty strings", mi({ eases: "back.out" }).errors.some((e) => e.path === "motion.eases") && mi({ eases: { enter: "" } }).errors.some((e) => e.path === "motion.eases.enter") && mi({ eases: { enter: 2 } }).errors.some((e) => e.path === "motion.eases.enter"));
+  assert("identity: an unknown ease role is a warning", mi({ eases: { hover: "power1.out" } }).warnings.some((w) => w.path === "motion.eases.hover"));
+  assert("identity: ambient is none, subtle or lively", ["loud", true, 1].every((v) => mi({ ambient: v }).errors.some((e) => e.path === "motion.ambient")) && AMBIENT_LEVELS.every((v) => mi({ ambient: v }).errors.length === 0));
+  assert("identity: signature needs a name", mi({ signature: "sweep" }).errors.some((e) => e.path === "motion.signature") && mi({ signature: { note: "x" } }).errors.some((e) => e.path === "motion.signature.name") && mi({ signature: { name: "s", note: 3 } }).errors.some((e) => e.path === "motion.signature.note"));
+  assert("identity: GSAP ease names pass, CSS names and cubic-bezier do not", ["power2.inOut", "back.out(1.6)", "elastic.out(1, 0.5)", "expo.out", "sine.inOut", "none", "steps(5)"].every(isGsapEase) && !["ease-out-back", "cubic-bezier(0.4,0,0.2,1)", "spring", "power2.sideways", ""].some(isGsapEase));
+  assert("identity: a non-GSAP ease is a warning", mi({ eases: { enter: "ease-out-back" } }).warnings.some((w) => w.path === "motion.eases.enter") && validateSpec({ path: file, data: { motion: { ease: "ease-in-out" } }, body: "" }).warnings.some((w) => w.path === "motion.ease"));
+  assert("identity: hasAmbient is true only for subtle and lively", hasAmbient({ ambient: "subtle" }) && hasAmbient({ ambient: "lively" }) && !hasAmbient({ ambient: "none" }) && !hasAmbient({ ambient: "loud" }) && !hasAmbient({}) && !hasAmbient(null));
+  assertEq("identity: the one-line summary names every key the design sets", motionIdentityLine(identity), 'personality playful; eases enter back.out(1.6), exit power2.in, emphasis elastic.out(1, 0.5); ambient subtle; signature "ribbon sweep"');
+  assertEq("identity: no summary when the design sets none of it", [motionIdentityLine({ ease: "power2.inOut" }), motionIdentityLine(undefined)], [null, null]);
+  assertEq("overrides: an ambient level other than the default is an override", diffOverrides({ motion: { ambient: "lively" } }, { motion: { ambient: "none" } }), [{ key: "motion.ambient", default: "none", value: "lively" }]);
+  assertEq("overrides: ambient none against a default that names none is not", diffOverrides({ motion: { ambient: "none" } }, {}), []);
+  assertEq("overrides: maxStaticSec, then ambient", diffOverrides({ motion: { maxStaticSec: 3, ambient: "subtle" } }, { motion: { maxStaticSec: 2 } }).map((o) => o.key), ["motion.maxStaticSec", "motion.ambient"]);
 }
 
 // layout and captions (orientation)
@@ -1218,6 +1240,17 @@ fs.writeFileSync(path.join(fx, "kit.js"), "// kit");
   data = evalData(swappedP.projectDir);
   assert("voice: a brand's portrait box, burn switch and chunk size reach explain-data", same(data.layout.safe, [80, 300, 1000, 1300]) && data.captions.burn === false && data.captions.maxWords === 4 && !("withinSelector" in motionOf(swappedP.projectDir).assertions[0]));
   assertEq("voice: a brand that burns landscape captions gets withinSelector", motionOf(swappedL.projectDir).assertions[0].withinSelector, "#stage");
+
+  // an ambient glow changes all the time too: with it only the stage has to keep moving, captions or not
+  const glow = path.join(dd, "brand", "glow.md");
+  fs.writeFileSync(glow, "---\nmotion:\n  ambient: subtle\n  eases:\n    enter: back.out(1.6)\n---\n");
+  const glowL = createRun({ home, slug: "glow-l", lang: "en", assetsDir: fx, designPath: glow });
+  assertEq("run: an ambient level is recorded as an override", glowL.run.design.overrides.map((o) => o.key), ["motion.ambient"]);
+  writeScript(glowL.runDir, beat, "en");
+  await runVoice({ runDir: glowL.runDir, synth, lint });
+  data = evalData(glowL.projectDir);
+  assert("voice: the ambient level and the role eases reach explain-data", data.design.motion.ambient === "subtle" && data.design.motion.eases.enter === "back.out(1.6)", JSON.stringify(data.design.motion));
+  assertEq("voice: an ambient glow limits keepsMoving to #stage without burned captions", motionOf(glowL.projectDir).assertions[0], { kind: "keepsMoving", maxStaticSec: 2, withinSelector: "#stage" });
 
   // a run made before orientation existed is landscape and keeps working
   const legacy = createRun({ home, slug: "legacy", lang: "pt-BR", assetsDir: fx });

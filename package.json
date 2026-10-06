@@ -38,7 +38,7 @@
     "registry": "https://npm.pkg.github.com"
   },
   "scripts": {
-    "check": "node scripts/check-catalog.mjs && node skills/skills-evaluate/scripts/evaluate.test.mjs && node skills/still-cursor-living-day/scripts/collection.test.mjs && node skills/easy-to-read/scripts/ste-lint.test.mjs && node skills/explain-me/scripts/ste-lint.test.mjs && node skills/explain-me/scripts/explain.test.mjs",
+    "check": "node scripts/check-catalog.mjs && node skills/skills-evaluate/scripts/evaluate.test.mjs && node skills/still-cursor-living-day/scripts/collection.test.mjs && node skills/easy-to-read/scripts/ste-lint.test.mjs && node skills/explain-me/scripts/ste-lint.test.mjs && node skills/explain-me/scripts/explain.test.mjs && node skills/motion-identity/scripts/motion.test.mjs",
     "link": "bash scripts/link-skills.sh",
     "list": "bash scripts/list-skills.sh",
     "sync-plugin-version": "node scripts/sync-plugin-version.mjs",

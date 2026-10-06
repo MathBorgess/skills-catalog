@@ -11,7 +11,7 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
-import { KIT_PRIMITIVES, describeOverride, findProjectSpec, loadSpec, resolveDesign, tokensCss, validateSpec, SpecError } from "./lib/design.mjs";
+import { KIT_PRIMITIVES, describeOverride, motionIdentityLine, findProjectSpec, loadSpec, resolveDesign, tokensCss, validateSpec, SpecError } from "./lib/design.mjs";
 import { assetsDir, personalDesignPath, resolveRun, runsDir, skillHome, venvDir, venvPython } from "./lib/home.mjs";
 import { commandLine, quoteArg } from "./lib/hints.mjs";
 import { ffmpegFrame, runCheck, runRender, synthesizeBeat } from "./lib/hyperframes.mjs";
@@ -447,6 +447,7 @@ command("new", {
     const kLang = kokoroLang(values.lang);
     const { width, height } = frameSize(run.orientation);
     const { layout, captions } = resolveLayout(created.designData, run.orientation);
+    const identity = motionIdentityLine(created.designData?.motion);
     const data = {
       ok: true,
       run: runDir,
@@ -474,6 +475,7 @@ command("new", {
       `  voice:   ${run.voice ? `${run.voice} (${kLang})` : `none: no Kokoro voice for ${values.lang}, the video will be silent with subtitles`}`,
       `  frame:   ${run.orientation} ${width}x${height} (author the stage in viewBox 0 0 ${width} ${height})`,
       `  layout:  keep content inside the safe box ${box(layout.safe)}; captions ${captions.burn ? `are burned in at ${box(layout.captions)}, up to ${captions.maxWords} words at a time` : "are not burned in (the .srt ships beside the video)"}`,
+      ...(identity ? [`  motion:  ${identity} (the intent is in the motion sections of ${data.files.frame})`] : []),
       ...overrideLines(run.design.overrides).map((l) => `  ${l}`),
       ...warnings.map((w) => `  warn: ${path.basename(w.file)}: ${w.path}: ${w.message}`),
       `  next: edit script.json, then: ${hint(`voice ${q(runDir)}`)}`,

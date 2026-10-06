@@ -3,7 +3,7 @@ name: motion-identity
 description: "Use when the user wants to create, grill or evolve a brand's motion identity — how its videos move — inside the brand's DESIGN.md (or frame.md / design.md), so that HyperFrames videos and explain-me videos come out with the same captivating motion graphics: 'motion identity', 'motion graphics da marca', 'como a marca se move', 'quero vídeos que brilhem os olhos', 'deixa o vídeo mais dinâmico / encantador', 'princípios Disney', 'easing da marca', 'movimento no DESIGN.md', 'prepara o DESIGN.md para vídeo'; also when feedback on a finished video is about how things move ('muito quicado', 'saída lenta', 'too bouncy', 'feels flat'). Runs a grilling round by round, writes the motion keys and prose the video tools read, renders a short proof the owner approves by watching, and prints the block for a HyperFrames BRIEF.md. Not for making the video itself (HyperFrames or explain-me do that), nor for palette or type work with no motion in it."
 metadata:
   author: Matheus Borges
-  version: 0.0.0
+  version: 1.0.0
 ---
 
 # Motion Identity

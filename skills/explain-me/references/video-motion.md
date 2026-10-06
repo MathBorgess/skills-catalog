@@ -66,7 +66,7 @@ kit.register();
 
 ### Options of every primitive
 
-Every primitive takes `dur` (seconds; `duration` is an alias) and `ease` (a GSAP ease). Defaults come from `motion.durations` and `motion.ease`. `b.dur` is the beat length. The kit ignores an unknown option and warns.
+Every primitive takes `dur` (seconds; `duration` is an alias) and `ease` (a GSAP ease). Defaults come from `motion.durations` and from the ease of the call's role: `motion.eases.enter` for an entrance, `.exit` for a call with `out: true`, `.emphasis` for `indicate`, else `motion.ease`. `b.dur` is the beat length. The kit ignores an unknown option and warns.
 
 | Primitive | Option: meaning (default) |
 |---|---|
@@ -112,7 +112,7 @@ A design can loosen `maxStaticSec`. It can never switch the gate off. Repeat eve
 
 The sampler sees boxes that move, resize or fade. A stroke that draws on, a `count` that keeps its width and a caption change alter none of those. They are not motion. Keep each `draw` or `count` near 1 s and pair it with other motion. The last beat needs real stage motion until close to its end: a `move`, a `camera` push, an `indicate` or a `fade`.
 
-A `container_overflow` info line for an object inside `#stage` only means the camera crops it. Do not add idle loops or tiny wobbles to silence the gate. A decoration hides a still frame from the viewer.
+A `container_overflow` info line for an object inside `#stage` only means the camera crops it. Do not add idle loops or tiny wobbles to silence the gate. A decoration hides a still frame from the viewer. A design's `motion.ambient` glow is the one background life the kit allows: it sits behind the stage, and the gate then watches `#stage` only.
 
 ## Fix a finding
 

@@ -1,0 +1,249 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>motion identity proof</title>
+    <!-- motion.mjs proof writes the brand tokens here. The video engine embeds fonts only from custom
+         properties in an inline <style>, never from a linked file. -->
+    <!-- mi:tokens -->
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+    <!-- the proof registers its paused timeline here; the literal line is what the HyperFrames lint looks for -->
+    <script>
+      window.__timelines = window.__timelines || {};
+    </script>
+    <script>
+      /* mi:plan */
+    </script>
+    <style>
+      html,
+      body {
+        margin: 0;
+        background: var(--mi-bg);
+      }
+      #root {
+        position: relative;
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+        background: var(--mi-bg);
+        color: var(--mi-text);
+        font-family: var(--mi-font-body);
+        font-weight: var(--mi-weight-body);
+      }
+      #mi-ambient {
+        position: absolute;
+        left: -20%;
+        top: -20%;
+        width: 140%;
+        height: 140%;
+        pointer-events: none;
+        opacity: 0;
+        background: radial-gradient(closest-side at 50% 45%, var(--mi-ambient) 0%, transparent 100%);
+      }
+      #mi-stage {
+        position: absolute;
+        inset: 0;
+      }
+      #mi-block {
+        position: absolute;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      #mi-content {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        text-align: center;
+      }
+      #mi-headline {
+        font-family: var(--mi-font-display);
+        font-weight: var(--mi-weight-display);
+        line-height: 1.02;
+        letter-spacing: -0.02em;
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: center;
+        column-gap: 0.24em;
+      }
+      .mi-word {
+        display: inline-block;
+      }
+      #mi-rule {
+        background: var(--mi-accent);
+        transform-origin: 0% 50%;
+      }
+      #mi-sub {
+        color: var(--mi-sub);
+        font-family: var(--mi-font-body);
+        font-weight: var(--mi-weight-body);
+        line-height: 1.2;
+      }
+      #mi-signature {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        overflow: visible;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="root" data-composition-id="proof" data-start="0" data-width="1080" data-height="1920" data-duration="8">
+      <div id="mi-ambient" aria-hidden="true"></div>
+      <div id="mi-stage">
+        <div id="mi-block">
+          <div id="mi-content">
+            <div id="mi-headline"><!-- mi:headline --></div>
+            <div id="mi-rule"></div>
+            <div id="mi-sub"></div>
+          </div>
+        </div>
+        <svg id="mi-signature" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"></svg>
+      </div>
+    </div>
+
+    <script>
+      (function () {
+        "use strict";
+        var P = window.MOTION_PROOF;
+        function fail(message) {
+          if (window.console && console.error) console.error("motion proof: " + message);
+          throw new Error(message);
+        }
+        if (typeof window.gsap === "undefined") fail("GSAP did not load: the render needs network access to cdn.jsdelivr.net.");
+        ["enter", "exit", "emphasis", "move"].forEach(function (role) {
+          if (typeof gsap.parseEase(P.eases[role]) !== "function") fail("the " + role + " ease " + JSON.stringify(P.eases[role]) + " is not a GSAP ease.");
+        });
+
+        // Entrance and exit per personality: what the archetype's first and last impression looks like.
+        var IN = {
+          playful: [{ yPercent: 70, scale: 0.6, rotation: -6, opacity: 0 }, { yPercent: 0, scale: 1, rotation: 0, opacity: 1 }],
+          premium: [{ y: 18, scale: 0.98, opacity: 0 }, { y: 0, scale: 1, opacity: 1 }],
+          corporate: [{ x: -48, opacity: 0 }, { x: 0, opacity: 1 }],
+          energetic: [{ xPercent: 60, scale: 1.35, opacity: 0 }, { xPercent: 0, scale: 1, opacity: 1 }]
+        };
+        var OUT = {
+          playful: { yPercent: -60, scale: 0.7, rotation: 4, opacity: 0 },
+          premium: { y: -16, opacity: 0 },
+          corporate: { x: 56, opacity: 0 },
+          energetic: { xPercent: -90, scale: 0.9, opacity: 0 }
+        };
+        var AMBIENT = { subtle: { period: 9, shift: 4, scale: 1.08, opacity: 0.22 }, lively: { period: 5, shift: 8, scale: 1.16, opacity: 0.38 } };
+
+        var root = document.getElementById("root");
+        var block = document.getElementById("mi-block");
+        var content = document.getElementById("mi-content");
+        var head = document.getElementById("mi-headline");
+        var rule = document.getElementById("mi-rule");
+        var sub = document.getElementById("mi-sub");
+        var svg = document.getElementById("mi-signature");
+        var words = Array.prototype.slice.call(head.querySelectorAll(".mi-word"));
+        var safe = P.safe;
+        var sw = safe[2] - safe[0];
+        var sh = safe[3] - safe[1];
+        var portrait = P.orientation === "portrait";
+
+        function layout() {
+          block.style.left = safe[0] + "px";
+          block.style.top = safe[1] + "px";
+          block.style.width = sw + "px";
+          block.style.height = sh + "px";
+          svg.setAttribute("viewBox", "0 0 " + P.width + " " + P.height);
+          // Big words: the largest size at which every word fits the safe width and the headline half its height.
+          var size = portrait ? 236 : 212;
+          var floor = portrait ? 96 : 80;
+          for (;;) {
+            head.style.fontSize = size + "px";
+            var widest = words.reduce(function (w, el) { return Math.max(w, el.offsetWidth); }, 0);
+            if ((widest <= sw * 0.94 && head.offsetHeight <= sh * 0.5) || size <= floor) break;
+            size -= 4;
+          }
+          rule.style.width = Math.round(Math.min(sw * 0.5, head.offsetWidth * 0.6)) + "px";
+          rule.style.height = Math.max(8, Math.round(size * 0.06)) + "px";
+          rule.style.borderRadius = Math.max(4, Math.round(size * 0.03)) + "px";
+          rule.style.marginTop = Math.round(size * 0.28) + "px";
+          if (P.sub) {
+            sub.textContent = P.sub;
+            sub.style.fontSize = Math.max(portrait ? 56 : 44, Math.round(size * 0.26)) + "px";
+            sub.style.marginTop = Math.round(size * 0.22) + "px";
+            sub.style.maxWidth = Math.round(sw * 0.9) + "px";
+          } else {
+            sub.style.display = "none";
+          }
+          return size;
+        }
+
+        function ambient(tl) {
+          var level = AMBIENT[P.ambient];
+          var el = document.getElementById("mi-ambient");
+          if (!level) return;
+          el.style.opacity = String(level.opacity);
+          var cycles = Math.max(1, Math.round(P.total / level.period));
+          tl.fromTo(el, { xPercent: -level.shift, yPercent: -level.shift / 2, scale: 1 }, {
+            xPercent: level.shift, yPercent: level.shift / 2, scale: level.scale,
+            duration: P.total / cycles, ease: "sine.inOut", yoyo: true, repeat: cycles - 1
+          }, 0);
+        }
+
+        // SIGNATURE: the brand's own move, written for this proof by motion.mjs proof --signature <file>.
+        // Add tweens to tl only, between `at` and `at + dur`. ctx.svg is an empty full-frame <svg> (viewBox in
+        // frame pixels); ctx.content is the headline group. No play(), no repeat: -1, no clocks, no random.
+        function signature(tl, at, dur, ctx) {
+          /* mi:signature */
+        }
+
+        function build() {
+          var size = layout();
+          var T = P.times;
+          var D = P.durations;
+          var E = P.eases;
+          var tl = gsap.timeline({ paused: true });
+          var pin = IN[P.personality] || IN.corporate;
+          var pout = OUT[P.personality] || OUT.corporate;
+
+          ambient(tl);
+          words.forEach(function (w, i) {
+            tl.fromTo(w, pin[0], Object.assign({ duration: D.grow, ease: E.enter }, pin[1]), T.enter + i * P.stagger);
+          });
+          // emphasis: up on the brand's emphasis ease, then settle (follow-through), and keep the accent color
+          var aw = words[P.accentIndex];
+          tl.to(aw, { scale: P.peak, duration: D.indicate * 0.55, ease: E.emphasis }, T.emphasis);
+          tl.to(aw, { scale: 1, duration: D.indicate * 0.45, ease: "power2.out" }, T.emphasis + D.indicate * 0.55);
+          tl.to(aw, { color: P.accent.value, duration: D.indicate * 0.5, ease: "power1.out" }, T.emphasis);
+          tl.fromTo(rule, { scaleX: 0 }, { scaleX: 1, duration: D.draw, ease: E.enter }, T.rule);
+          if (P.sub) tl.fromTo(sub, { opacity: 0, y: 24 }, { opacity: 1, y: 0, duration: D.fade, ease: E.enter }, T.sub);
+          // a move on the base ease: the group makes room, the way a scene hands over to the next idea
+          tl.fromTo(content, { y: 0 }, { y: -Math.round(sh * (P.signature ? 0.2 : 0.08)), duration: D.move, ease: E.move, immediateRender: false }, T.move);
+          if (P.signature) {
+            signature(tl, P.signature.start, P.signature.dur, {
+              svg: svg, content: content, width: P.width, height: P.height, safe: safe, size: size,
+              accent: P.accent.value, eases: E, durations: D
+            });
+          }
+          // exit: faster than the entrance, last word first, on the exit ease
+          words.slice().reverse().forEach(function (w, i) {
+            tl.to(w, Object.assign({ duration: P.exitDur, ease: E.exit }, pout), T.exit + i * P.exitStagger);
+          });
+          tl.to(rule, { scaleX: 0, transformOrigin: "100% 50%", duration: P.exitDur, ease: E.exit }, T.exit);
+          if (P.sub) tl.to(sub, { opacity: 0, y: -16, duration: P.exitDur, ease: E.exit }, T.exit);
+          if (P.signature) tl.to(svg, { opacity: 0, duration: P.exitDur, ease: E.exit }, T.exit);
+          tl.set({}, {}, P.total);
+          tl.seek(0, false);
+
+          var key = root.getAttribute("data-composition-id") || "proof";
+          window.__timelines = window.__timelines || {};
+          window.__timelines[key] = tl;
+          if (typeof window.__hfForceTimelineRebind === "function") window.__hfForceTimelineRebind();
+        }
+
+        if (document.fonts && document.fonts.ready) {
+          void document.body.offsetHeight;
+          document.fonts.ready.then(build);
+        } else {
+          build();
+        }
+      })();
+    </script>
+  </body>
+</html>

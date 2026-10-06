@@ -34,7 +34,7 @@ The floor never moves:
 - Every word stays in the requester's language, whatever the brand says.
 - `preferred` and `## Motion examples` may only use the nine kit primitives.
 
-An **override** is a `rules.*` value that differs from the shipped default, a changed `motion.maxStaticSec`, or a changed `captions.burn.*` value. `new`, `voice` and `render` print every override, and `run.json` records them. Repeat them in the delivery, for example: "this brand allows a HUD; static limit 4 s; portrait captions off". Changes to `layout` and `captions.maxWords` are not overrides, but say them when they matter.
+An **override** is a `rules.*` value that differs from the shipped default, a changed `motion.maxStaticSec`, a `motion.ambient` other than `none`, or a changed `captions.burn.*` value. `new`, `voice` and `render` print every override, and `run.json` records them. Repeat them in the delivery, for example: "this brand allows a HUD; static limit 4 s; portrait captions off". Changes to `layout` and `captions.maxWords` are not overrides, but say them when they matter.
 
 ## Schema
 
@@ -44,7 +44,7 @@ name: Acme explainers
 colors: { background: "#0B1020", text: "#F4F6FF", muted: "#8A93B2", blue: "#4F8CFF" }
 typography:
   display: { family: "Montserrat", weight: 700, fallback: sans-serif }
-motion: { maxStaticSec: 3, durations: { draw: 1.6 } }
+motion: { maxStaticSec: 3, durations: { draw: 1.6 }, eases: { enter: "back.out(1.4)", exit: "power2.in" }, ambient: subtle }
 rules: { hud: true }
 layout: { portrait: { safe: [80, 240, 940, 1360] } }
 captions: { burn: { landscape: true }, maxWords: 5 }
@@ -81,6 +81,12 @@ images:
 | `durations` | seconds per primitive: `draw, write, morph, move, camera, indicate, count, grow, fade`. |
 | `preferred` | a list of `{ primitive, note }`: what the brand favors. The agent reads the notes as guidance. |
 | `examples` | paths (relative to the spec) to complete compositions showing the brand's motion. The agent reads them as few-shot examples. |
+| `personality` | the brand's motion archetype: `playful`, `premium`, `corporate` or `energetic`. Another word is a warning; the agent reads it as a note. |
+| `eases` | one GSAP ease per role: `enter`, `exit`, `emphasis`. The kit applies them: `draw`, `grow` and the first `fade` enter; a call with `out: true` exits; `indicate` is the emphasis. `move`, `morph`, `camera`, `count` and a dim keep `ease`. A role left out uses `ease`. |
+| `ambient` | `none` (default), `subtle` or `lively`: a glow in `colors.ambient` (else `muted`) that drifts slowly behind the stage. The Motion Gate then watches `#stage` only, so the glow never passes it. Any level but `none` is an override. |
+| `signature` | `{ name, note }`: the brand's own move. The agent reads the note and uses the move where the narration lands its main point. |
+
+These four keys are a **motion identity**: the part of a brand spec that says how the brand moves. `new` prints the resolved one. Its intent lives in the prose, under `## Motion identity`.
 
 Worked examples also live in the prose, in a `## Motion examples` section with fenced `js` blocks. Each block is one complete beat: the narration in a comment, then `kit.beat` with only `b.<primitive>(...)` and `b.at(...)` calls. `design check` rejects any other `b.<name>(`.
 

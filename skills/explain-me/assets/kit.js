@@ -14,21 +14,30 @@
  *   kit.register();
  *
  * The nine primitives are draw, write, morph, move, camera, indicate, count, grow and fade.
- * Each takes { dur, ease }; defaults come from window.EXPLAIN.design.motion.
+ * Each takes { dur, ease }; defaults come from window.EXPLAIN.design.motion: durations per primitive, and
+ * the ease of the call's role (motion.eases.enter, .exit, .emphasis), else motion.ease.
  * When window.EXPLAIN.captions.burn is true the kit also fills <div id="captions"> with the
  * narration as timed caption chunks (see buildCaptions); the stage and the camera never touch it.
  * The camera frames its focus inside the design's safe zone, and after the build the kit samples the
  * timeline and reports stage content that sits in the caption band or outside the safe zone (auditStage).
- * No randomness, no clocks, no infinite repeats, no idle loops: every frame is a
+ * No randomness, no clocks, no infinite repeats, no idle loops on the stage (an ambient level only drifts
+ * a glow behind it, and the Motion Gate never counts that glow): every frame is a
  * function of the playhead time alone (HyperFrames determinism rules).
  */
 (function (global) {
   "use strict";
 
-  var VERSION = "2.2.0";
+  var VERSION = "2.3.0";
   var PRIMITIVES = ["draw", "write", "morph", "move", "camera", "indicate", "count", "grow", "fade"];
   var DEFAULT_DURATIONS = { draw: 1.2, write: 0.9, morph: 1.0, move: 1.2, camera: 1.5, indicate: 0.6, count: 1.0, grow: 0.6, fade: 0.5 };
   var DEFAULT_EASE = "power2.inOut";
+  var EASE_ROLES = ["enter", "exit", "emphasis"];
+  // A motion identity's ambient level: a slow glow drifting behind the stage. Its period is long and its
+  // repeat count finite, so it stays a function of the playhead; the Motion Gate never counts it as motion.
+  var AMBIENT = {
+    subtle: { period: 9, shift: 4, scale: 1.08, opacity: 0.22 },
+    lively: { period: 5, shift: 8, scale: 1.16, opacity: 0.38 }
+  };
   var STAGE_ID = "stage";
   var STAGE_W = 1920; // the landscape default, used when explain-data.js carries no width and height
   var STAGE_H = 1080;
@@ -121,6 +130,8 @@
       lang: data.lang || "en",
       durations: durations,
       ease: motion.ease || DEFAULT_EASE,
+      eases: easesByRole(motion.eases),
+      ambient: Object.prototype.hasOwnProperty.call(AMBIENT, motion.ambient) ? motion.ambient : "none",
       maxStatic: num(motion.maxStaticSec, 2),
       colors: design.colors || {}
     };
@@ -137,6 +148,26 @@
   }
 
   /* ---------------------------------------------------------------- helpers */
+
+  // motion.eases names one GSAP ease per role; a role it leaves out falls back to motion.ease.
+  function easesByRole(eases) {
+    var out = {};
+    EASE_ROLES.forEach(function (role) {
+      var v = eases && typeof eases === "object" ? eases[role] : null;
+      out[role] = typeof v === "string" && v.trim() ? v.trim() : null;
+    });
+    return out;
+  }
+
+  // Which role a call plays: an entrance decelerates, an exit accelerates, an emphasis overshoots. Moves,
+  // morphs, camera pushes, counts and dims keep the base ease. write ignores ease (its characters fade).
+  function easeRole(prim, opts) {
+    if (prim === "indicate") return "emphasis";
+    if ((prim === "draw" || prim === "grow" || prim === "fade") && opts.out) return "exit";
+    if (prim === "draw" || prim === "grow") return "enter";
+    if (prim === "fade" && opts.to == null) return "enter";
+    return null;
+  }
 
   function tagOf(el) {
     return (el.localName || el.tagName || "").toLowerCase();
@@ -370,7 +401,8 @@
       if (dur == null) dur = cfg.durations[prim];
       dur = num(dur, NaN);
       if (!(dur > 0)) fail(where + ": dur must be a number of seconds greater than 0.");
-      return { dur: dur, ease: opts.ease || cfg.ease, o: opts };
+      var role = easeRole(prim, opts);
+      return { dur: dur, ease: opts.ease || (role && cfg.eases[role]) || cfg.ease, o: opts };
     }
 
     var api = {
@@ -1160,6 +1192,43 @@
     });
   }
 
+  /* ---------------------------------------------------------------- ambient */
+  // motion.ambient "subtle" or "lively": one glow in --em-ambient (colors.ambient, else --em-muted) drifting
+  // behind the stage for the whole video. It lives outside #stage, and voice limits keepsMoving to #stage
+  // whenever it is on, so background life can never pass the Motion Gate for a still stage.
+  function buildAmbient(kit, tl) {
+    var cfg = kit._cfg;
+    var level = AMBIENT[cfg.ambient];
+    if (!level) return null;
+    var root = document.querySelector("[data-composition-id]") || document.body;
+    var el = document.getElementById("em-ambient");
+    if (!el) {
+      el = document.createElement("div");
+      el.id = "em-ambient";
+      root.insertBefore(el, root.firstChild);
+    }
+    el.setAttribute("aria-hidden", "true");
+    var st = el.style;
+    st.position = "absolute";
+    st.left = "-20%";
+    st.top = "-20%";
+    st.width = "140%";
+    st.height = "140%";
+    st.pointerEvents = "none";
+    st.zIndex = "0";
+    st.opacity = String(level.opacity);
+    st.background = "radial-gradient(closest-side at 50% 45%, var(--em-ambient, var(--em-muted, #888)) 0%, transparent 100%)";
+    // Whole half-cycles that end exactly with the video, so the glow never stretches the timeline.
+    var total = Math.max(cfg.total, tl.duration());
+    if (!(total > 0)) return el;
+    var cycles = Math.max(1, Math.round(total / level.period));
+    tl.fromTo(el, { xPercent: -level.shift, yPercent: -level.shift / 2, scale: 1 }, {
+      xPercent: level.shift, yPercent: level.shift / 2, scale: level.scale,
+      duration: total / cycles, ease: "sine.inOut", yoyo: true, repeat: cycles - 1
+    }, 0);
+    return el;
+  }
+
   /* ------------------------------------------------------------ stage audit */
   // The safe zone and the caption band are only a promise until something measures them. After the build the
   // kit seeks its own timeline every AUDIT_STEP seconds (and just before each beat ends, where the frames are
@@ -1462,6 +1531,7 @@
           fitCaptions(kit, kit._captions);
           animateCaptions(tl, kit._captions);
         }
+        kit._ambient = buildAmbient(kit, tl);
 
         // 4. Report holds, late subjects and unanimated shapes: advice for the author, never a switch for the gate.
         kit._checkSubjects(all);

@@ -3,7 +3,7 @@ name: explain-me
 description: "Use when the user asks for a visual explanation, says 'explain-me', 'show me how it works', 'explique visualmente', 'explica em vídeo', 'vídeo explicativo', 'vídeo vertical', 'para reels / shorts / tiktok', or needs a diagram, an illustrated mechanism, an interactive explainer, a narrated video, or plain terminology; also when they want it in their project's brand ('use a nossa marca', 'use o DESIGN.md'), and when teach-me requests the explanatory part of one lesson. Every word comes out in the language of the request. The caller owns quizzes, grading and progress records."
 metadata:
   author: Matheus Borges
-  version: 1.0.0
+  version: 1.1.0
 ---
 
 # Explain Me
@@ -32,7 +32,7 @@ Turn one mechanism into an explanation the learner can inspect and explain back,
      1. `explain.mjs doctor`. If Python or Kokoro is missing, run `explain.mjs setup`. `setup` cannot install `ffmpeg` or `espeak-ng`: give the user the command that `doctor` prints. If the language has no Kokoro voice, make a silent video with an `.srt` and say so.
      2. `explain.mjs new --slug <slug> --lang <tag> [--orientation landscape|portrait] [--design <path>] [--dest <dir>]`. Portrait is 1080 x 1920 with a Safe Zone and Burned Captions by default.
      3. Write `script.json`: one narration sentence and one `subject` per Beat. Run `explain.mjs voice <run>` to get each Beat's length.
-     4. Write the STAGE and SCENE regions of `project/index.html` with 3b1b Kit primitives only. Run `voice` again after any change to a narration or a subject. Then run `explain.mjs check <run>` and fix every error. `render` refuses to run until `check` passes (Motion Gate).
+     4. Write the STAGE and SCENE regions of `project/index.html` with 3b1b Kit primitives only. When `new` prints a `motion:` line, the design carries a motion identity: compose with its personality and signature, and leave `ease` off the calls so the kit applies the brand's role eases. Run `voice` again after any change to a narration or a subject. Then run `explain.mjs check <run>` and fix every error. `render` refuses to run until `check` passes (Motion Gate).
      5. `explain.mjs render <run>`. Open every PNG in `<run>/frames/`: an entrance frame and a settled frame per Beat. Fix and re-render when the frame cuts text, objects overlap, content enters the caption band, or a frame is empty.
    - For other formats, run `explain.mjs new --slug <slug> --lang <tag> --format <svg|html|text|mermaid|image>`. Write the artefact into the Run folder it prints. For `svg` and `html`, the folder holds `tokens.css` to inline.
 5. **Take feedback.** Style feedback ("mais lento", "fundo mais claro", "slower") changes the Design Spec. Propose a diff to the active spec: the explicit or Brand Spec if the Run used one, else `<home>/DESIGN.md`. Apply it only after the user says yes. Then re-render. Never edit the shipped default. Content feedback edits only the Run.

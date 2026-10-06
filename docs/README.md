@@ -34,5 +34,6 @@ Each skill **may** have one, and there is no required shape. A page earns its pl
 
 | Skill | Page |
 | --- | --- |
+| [`motion-identity`](../skills/motion-identity/) | [proofs](motion-identity/README.md): what a proof plays, the evidence attached to PR #64, and the layout defect it found |
 | [`handoff`](../deprecated/handoff/) *(deprecated)* | [mechanism](handoff/mechanism.md) — the six phases, the three owner gates, the session graph, and what was built (now retired) |
 | Experiments | [index](experiments/README.md) — versioned trials that are not part of any skill |

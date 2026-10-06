@@ -23,6 +23,7 @@ motion:
   beatGapSec: 0.3
   tailSec: 1.0
   ease: "power2.inOut"
+  ambient: none
   durations: { draw: 1.2, write: 0.9, morph: 1.0, move: 1.2, camera: 1.5, indicate: 0.6, count: 1.0, grow: 0.6, fade: 0.5 }
   preferred:
     - { primitive: morph, note: "transform one object into the next instead of cutting" }

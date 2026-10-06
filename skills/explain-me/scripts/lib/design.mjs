@@ -21,7 +21,18 @@ export const HEX_RE = /^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{4}|[0-9a-fA-F]{6}|[0-9a-f
 
 const TOP_LEVEL_KEYS = ["name", "colors", "typography", "motion", "rules", "layout", "captions", "narration", "images"];
 const TYPOGRAPHY_ROLES = ["display", "body", "mono"];
-const MOTION_KEYS = ["gate", "maxStaticSec", "leadInSec", "beatGapSec", "tailSec", "ease", "durations", "preferred", "examples"];
+const MOTION_KEYS = ["gate", "maxStaticSec", "leadInSec", "beatGapSec", "tailSec", "ease", "durations", "preferred", "examples", "personality", "eases", "ambient", "signature"];
+// The motion identity keys. personality names one archetype; eases give one GSAP ease per role (a missing role
+// uses motion.ease); ambient is the background life behind the stage; signature is the brand's own move.
+export const MOTION_PERSONALITIES = ["playful", "premium", "corporate", "energetic"];
+export const EASE_ROLES = ["enter", "exit", "emphasis"];
+export const AMBIENT_LEVELS = ["none", "subtle", "lively"];
+// GSAP ease names (with optional parameters). GSAP silently falls back to its default for a name it does not
+// know, so a CSS name such as ease-out-back would ship as the wrong curve. The same rule lives in
+// motion-identity's spec.mjs; its tests compare the two.
+const GSAP_EASE_FAMILIES = ["none", "linear", "power0", "power1", "power2", "power3", "power4", "quad", "cubic", "quart", "quint", "strong", "back", "bounce", "circ", "elastic", "expo", "sine", "steps"];
+const GSAP_EASE_RE = new RegExp(`^(?:${GSAP_EASE_FAMILIES.join("|")})(?:\\.(?:in|out|inOut))?(?:\\(\\s*-?\\d*\\.?\\d+(?:\\s*,\\s*-?\\d*\\.?\\d+)*\\s*\\))?$`);
+export const isGsapEase = (name) => typeof name === "string" && GSAP_EASE_RE.test(name.trim());
 const RULE_KEYS = ["centralObject", "hud", "cardsAsLayout", "maxWordsOnScreen"];
 const NARRATION_KEYS = ["speed", "voices"];
 const LAYOUT_KEYS = ["safe", "captions"];
@@ -169,8 +180,8 @@ export function absolutisePaths(data, dir) {
   return out;
 }
 
-// What the run changed against the shipped default: every `rules.*` value, motion.maxStaticSec and every
-// `captions.burn.*` switch.
+// What the run changed against the shipped default: every `rules.*` value, motion.maxStaticSec,
+// motion.ambient and every `captions.burn.*` switch.
 export function diffOverrides(merged, base) {
   const out = [];
   const rules = isPlainObject(merged?.rules) ? merged.rules : {};
@@ -181,6 +192,9 @@ export function diffOverrides(merged, base) {
   const mv = merged?.motion?.maxStaticSec;
   const bv = base?.motion?.maxStaticSec;
   if (mv !== undefined && mv !== bv) out.push({ key: "motion.maxStaticSec", default: bv === undefined ? null : bv, value: mv });
+  const ma = merged?.motion?.ambient;
+  const ba = base?.motion?.ambient ?? "none";
+  if (ma !== undefined && ma !== ba) out.push({ key: "motion.ambient", default: ba, value: ma });
   const burn = isPlainObject(merged?.captions?.burn) ? merged.captions.burn : {};
   for (const k of Object.keys(burn)) {
     const def = base?.captions?.burn?.[k];
@@ -307,10 +321,30 @@ export function validateSpec(spec, { fileExists = (p) => fs.existsSync(p) } = {}
       if (m[k] !== undefined && !(isNum(m[k]) && m[k] >= 0)) err(`motion.${k}`, "must be a number of seconds, 0 or more");
     }
     if (m.ease !== undefined && (typeof m.ease !== "string" || m.ease.trim() === "")) err("motion.ease", "must be a non-empty GSAP ease name");
+    else if (m.ease !== undefined && !isGsapEase(m.ease)) warn("motion.ease", `${JSON.stringify(m.ease)} is not a GSAP ease name; GSAP would use its default (power1.out)`);
     if (expectMap(m.durations, "motion.durations")) {
       for (const [k, v] of Object.entries(m.durations)) {
         if (!KIT_PRIMITIVES.includes(k)) warn(`motion.durations.${k}`, `not a kit primitive (${KIT_PRIMITIVES.join(", ")})`);
         if (!(isNum(v) && v > 0)) err(`motion.durations.${k}`, "must be a number of seconds greater than 0");
+      }
+    }
+    if (m.personality !== undefined) {
+      if (typeof m.personality !== "string" || m.personality.trim() === "") err("motion.personality", "must be a string such as playful");
+      else if (!MOTION_PERSONALITIES.includes(m.personality)) warn("motion.personality", `not one of the archetypes (${MOTION_PERSONALITIES.join(", ")}); agents read it as a note, nothing else does`);
+    }
+    if (expectMap(m.eases, "motion.eases")) {
+      for (const [k, v] of Object.entries(m.eases)) {
+        if (!EASE_ROLES.includes(k)) warn(`motion.eases.${k}`, `not a role (${EASE_ROLES.join(", ")}); nothing reads it`);
+        if (typeof v !== "string" || v.trim() === "") err(`motion.eases.${k}`, "must be a non-empty GSAP ease name such as back.out(1.6)");
+        else if (!isGsapEase(v)) warn(`motion.eases.${k}`, `${JSON.stringify(v)} is not a GSAP ease name; GSAP would use its default (power1.out)`);
+      }
+    }
+    if (m.ambient !== undefined && !AMBIENT_LEVELS.includes(m.ambient)) err("motion.ambient", `must be one of ${AMBIENT_LEVELS.join(", ")}, got ${JSON.stringify(m.ambient)}`);
+    if (m.signature !== undefined) {
+      if (!isPlainObject(m.signature)) err("motion.signature", `must be a map with name and note, got ${typeName(m.signature)}`);
+      else {
+        if (typeof m.signature.name !== "string" || m.signature.name.trim() === "") err("motion.signature.name", "must be a non-empty string");
+        if (m.signature.note !== undefined && typeof m.signature.note !== "string") err("motion.signature.note", "must be a string");
       }
     }
     if (m.preferred !== undefined) {
@@ -481,6 +515,25 @@ export function tokensCss(data) {
 export function frameMd(data, body) {
   const yaml = stringifyYaml(data);
   return `---\n${yaml}---\n${body ? `\n${body}\n` : ""}`;
+}
+
+// An ambient level other than none puts a drifting glow behind the stage (kit.js).
+export function hasAmbient(motion) {
+  return isPlainObject(motion) && typeof motion.ambient === "string" && motion.ambient !== "none" && AMBIENT_LEVELS.includes(motion.ambient);
+}
+
+// One line for the agent: the motion identity a run resolved, or null when the design names none of it.
+export function motionIdentityLine(motion) {
+  if (!isPlainObject(motion)) return null;
+  const parts = [];
+  if (typeof motion.personality === "string") parts.push(`personality ${motion.personality}`);
+  if (isPlainObject(motion.eases)) {
+    const roles = EASE_ROLES.filter((r) => typeof motion.eases[r] === "string").map((r) => `${r} ${motion.eases[r]}`);
+    if (roles.length) parts.push(`eases ${roles.join(", ")}`);
+  }
+  if (typeof motion.ambient === "string") parts.push(`ambient ${motion.ambient}`);
+  if (isPlainObject(motion.signature) && typeof motion.signature.name === "string") parts.push(`signature "${motion.signature.name}"`);
+  return parts.length ? parts.join("; ") : null;
 }
 
 // The slice of the design that ends up in explain-data.js (what kit.js reads at runtime).

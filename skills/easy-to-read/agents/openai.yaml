@@ -1,0 +1,3 @@
+interface:
+  display_name: "Easy to read"
+  short_description: "Plain language (STE-lite, English and Brazilian Portuguese profiles) for every reply and document, checked by a linter"

@@ -9,3 +9,4 @@ Each trial is one directory, named `YYYY-MM-DD-<subject>-vN`. A new encoding, a 
 | Trial | Status | What it decided |
 | --- | --- | --- |
 | [2026-09-21-cua-s1-forms-v1](2026-09-21-cua-s1-forms-v1/README.md) | pending — not in the skill | The published form checkpoint runs. The checkbox encoding used for E1/E3 does not show transferable signal. No scorer is wired into handoff or shunt. |
+| [2026-10-06-pr-review-evidence-v1](2026-10-06-pr-review-evidence-v1/README.md) | preparation — no skills ship | Prepares a C01 evaluation of PR packets in plain language. Synthetic cases test the graders. Scope decisions, human calibration, and a protected holdout remain open. |

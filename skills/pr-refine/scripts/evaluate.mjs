@@ -31,7 +31,7 @@ function validateDataset(dataset) {
     check(typeof c.id === 'string' && c.id && !ids.has(c.id), 'duplicate or missing case id');
     ids.add(c.id);
     check(typeof c.family_id === 'string' && c.family_id, 'missing family');
-    check(['development', 'calibration', 'holdout'].includes(c.split), 'invalid split');
+    check(['development', 'validation', 'test'].includes(c.split), 'invalid split');
     check(!familySplits.has(c.family_id) || familySplits.get(c.family_id) === c.split, 'family crosses splits');
     familySplits.set(c.family_id, c.split);
     check(c.provenance && typeof c.provenance.kind === 'string', 'missing provenance');
@@ -44,18 +44,18 @@ function validateDataset(dataset) {
 
 export function evaluate(dataset, run, root = '.') {
   validateDataset(dataset);
-  check(run.version === 1 && ['development', 'calibration', 'holdout'].includes(run.phase), 'invalid run');
+  check(run.version === 1 && ['development', 'validation', 'test'].includes(run.phase), 'invalid run');
   check(typeof run.synthetic === 'boolean' && typeof run.candidate_revision === 'string' && run.candidate_revision, 'missing run provenance');
   check(typeof run.model === 'string' && run.model && sha(run.prompt_sha256), 'missing model or prompt hash');
   check(Array.isArray(run.observations), 'missing observations');
   const cases = new Map(dataset.cases.map(c => [c.id, c]));
-  if (run.phase === 'holdout') {
+  if (run.phase === 'test') {
     check(run.custody?.unseen_attested === true, 'missing holdout attestation');
     artifact(run.custody.manifest, root);
-    check(Array.isArray(run.development_family_ids) && Array.isArray(run.calibration_family_ids), 'missing split history');
-    const exposed = new Set([...run.development_family_ids, ...run.calibration_family_ids]);
-    check(dataset.cases.filter(c => c.split === 'holdout').every(c => !exposed.has(c.family_id)), 'holdout overlap');
-    check(dataset.cases.filter(c => c.split === 'holdout').every(c => c.provenance.kind !== 'authored-synthetic-public'), 'public fixture cannot be holdout');
+    check(Array.isArray(run.development_family_ids) && Array.isArray(run.validation_family_ids), 'missing split history');
+    const exposed = new Set([...run.development_family_ids, ...run.validation_family_ids]);
+    check(dataset.cases.filter(c => c.split === 'test').every(c => !exposed.has(c.family_id)), 'holdout overlap');
+    check(dataset.cases.filter(c => c.split === 'test').every(c => c.provenance.kind !== 'authored-synthetic-public'), 'public fixture cannot be holdout');
   }
   const seen = new Set(), exposures = new Set(), arms = { A: [], B: [], C: [] };
   for (const o of run.observations) {

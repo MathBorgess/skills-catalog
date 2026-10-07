@@ -40,9 +40,10 @@ It delivered a packet and a proposal with unverified evaluation gates.
 Its three documents passed the actual bundled linter.
 That is one observed synthetic behavior, not an estimated accuracy or speed gain.
 The run exposed a proposal-only ambiguity; the instruction now names that completion path.
+
 The [packet](forward-synthetic/packet.md), [proposal](forward-synthetic/proposal.md), and [lesson](forward-synthetic/lesson.md) preserve the actual synthetic outputs.
 Their [provenance](forward-synthetic/provenance.json) records hashes and measurement limits.
-The raw trace stays in private external storage because it contains local installation paths.
+The raw trace stays in private external storage because it contains paths from the local installation.
 
 ## Evidence gates
 

@@ -9,3 +9,4 @@ Each trial is one directory, named `YYYY-MM-DD-<subject>-vN`. A new encoding, a 
 | Trial | Status | What it decided |
 | --- | --- | --- |
 | [2026-09-21-cua-s1-forms-v1](2026-09-21-cua-s1-forms-v1/README.md) | pending — not in the skill | The published form checkpoint runs. The checkbox encoding used for E1/E3 does not show transferable signal. No scorer is wired into handoff or shunt. |
+| [2026-10-06-pr-review-evidence-v1](2026-10-06-pr-review-evidence-v1/README.md) | prepared trial — operators on branch | Evaluates PR Present and PR Refine through synthetic grader canaries and private real-data acquisition. Reward approval, human calibration, and protected final testing remain open. |

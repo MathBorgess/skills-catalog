@@ -26,6 +26,12 @@ jobs:
       - name: Check catalog, plugin, and README
         run: node scripts/check-catalog.mjs
 
+      - name: Check PR evidence trial graders
+        run: |
+          node docs/experiments/2026-10-06-pr-review-evidence-v1/evaluate.test.mjs
+          node scripts/check-pr-present-copies.mjs
+          node scripts/pr-review-capture.test.mjs
+
       - name: Require a version bump when skills/ changes
         if: github.event_name == 'pull_request'
         run: node scripts/check-version-bump.mjs

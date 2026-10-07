@@ -95,6 +95,8 @@ Two kinds of skills live in this catalog:
 | [`teach-me`](skills/teach-me/) | 1.2.0 | operator | Runs one study session against a wiki that already exists: a phone-sized HTML lesson plus a session note and error log. Not for bootstrapping an empty wiki — that is study-wiki. |
 | [`skills-evaluate`](skills/skills-evaluate/) | 0.2.0 | operator | Reads the metrics the other skills leave in the OS temp dir, the maintainer sketchpad and open issues; compares the last run with the recent median, diagnoses root causes, checks each skill against its own scope, and proposes improvements to the skill or to its observability. |
 | [`easy-to-read`](skills/easy-to-read/) | 1.0.0 | operator | Once activated, keeps every text it writes for you in plain language for the rest of the session — chat replies, documents, notes, summaries, PR and issue bodies — under STE-lite plus the profile of the text's language (ASD-STE100 for English; ABNT NBR ISO 24495-1 and the Senado style for Brazilian Portuguese; the core alone for other languages). Lints documents and long replies with a zero-dependency linter before they ship, and never rewrites code, commands, paths, identifiers or quotes. Canonical home of the writing rules explain-me ships as byte copies. |
+| [`pr-present`](skills/pr-present/) | 0.0.0 | operator | Presents one PR in plain language with a fixed review point, traceable claims, check limits, material risks, and a useful path through the diff. |
+| [`pr-refine`](skills/pr-refine/) | 0.0.0 | operator | Improves PR presentation instructions through targeted questions, development and validation evidence, a protected final test, and lessons with scope. Reward policy stays proposed until the owner approves it. |
 
 ### Experiments
 
@@ -115,7 +117,7 @@ The following skills are **deprecated** and no longer maintained or accessible i
 
 How a skill works under the hood, for whoever maintains it, is in [`docs/`](docs/) — written for people, never loaded by a model.
 
-After install, start a session and type `/domain-modeling`, `/study-wiki`, `/teach-me`, `/explain-me`, `/motion-identity`, `/easy-to-read`, `/skills-evaluate`, or `/still-cursor-living-day`, or just say what you want — the skill's `description` is what makes the model reach for it on its own.
+After install, start a session and type `/domain-modeling`, `/study-wiki`, `/teach-me`, `/explain-me`, `/motion-identity`, `/easy-to-read`, `/skills-evaluate`, `/pr-present`, `/pr-refine`, or `/still-cursor-living-day`, or just say what you want — the skill's `description` is what makes the model reach for it on its own.
 
 **Improving the skills**
 

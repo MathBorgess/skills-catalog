@@ -1,0 +1,17 @@
+{
+  "kind": "one-independent-synthetic-forward-run",
+  "raw_trace_location": "private external store; not a human review dataset",
+  "observed": "packet/proposal/lesson generation and actual plain-language lint",
+  "not_measured": [
+    "review time",
+    "decision accuracy",
+    "model-judge calibration",
+    "benefit of the instruction candidate"
+  ],
+  "artifacts": {
+    "packet.md": "a427ff6c580b8495c3513fbd993db0e8e74aaf803976ad7c73cef117a8a23dfb",
+    "fixture.txt": "e157b5880653670f3ba70aa6e6ba46a6a7037aa8ca69fafba90dc758f152d35b",
+    "proposal.md": "01eab4d43647babf813520c44587f7009ca601a75beda5af4d38ed32c07562e1",
+    "lesson.md": "f222915061e60995e0a8c0c73ee2e286188b56d0429319b4b575d68a0b1c4ae8"
+  }
+}

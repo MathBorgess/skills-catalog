@@ -1,6 +1,6 @@
 # Prettify workflow design
 
-**Status:** all interview choices resolved; consolidated workflow awaits final confirmation before implementation. This document describes a proposed operator skill, not a shipped workflow.
+**Status:** implemented on `codex/prettify-catalog` for [MAT-265](https://linear.app/borgesmathai/issue/MAT-265/criar-prettify-design-guiado-por-designmd-do-briefing-a-entrega); [PR #67](https://github.com/MathBorgess/skills-catalog/pull/67) is open for review. The runnable workflow is [the skill entrypoint](../../skills/prettify/SKILL.md); the design notes below explain its decisions.
 
 ## Accepted decisions
 
@@ -13,7 +13,7 @@
 - Require resources according to the current task, not the entire resource set on every run.
 - Follow briefing → low fidelity → high fidelity → delivery. Let the human explicitly skip stages, with a short explanation of the reduced control over the result.
 
-## Proposed stage behavior
+## Implemented stage behavior
 
 | Stage | Work | Human checkpoint | Evidence |
 | --- | --- | --- | --- |
@@ -22,7 +22,7 @@
 | High fidelity | Apply the accepted identity, assets, typography, color, spacing and purposeful motion | Review the rendered direction and request concrete corrections | Rendered previews with the design decisions they exercise |
 | Delivery | Produce the agreed final artifact, inspect it in its intended context, and package the result | Accept the final artifact; unresolved findings remain explicit | Files, inspection findings, question result and visual assessment |
 
-Low fidelity should leave room for change: structure and hierarchy must be clear without giving unfinished choices the authority of a finished visual. For photography, propose crop, subject arrangement and art direction through sketches or rough compositions. For carousels, explore sequence and per-slide hierarchy. A text description alone is not a visual checkpoint.
+Low fidelity leaves room for change: structure and hierarchy are clear without giving unfinished choices the authority of a finished visual. For photography, explore crop, subject arrangement and art direction through sketches or rough compositions. For carousels, explore sequence and per-slide hierarchy. A text description alone is not a visual checkpoint.
 
 High fidelity is a reviewable representation near the intended final appearance. Delivery adds the agreed usable artifact and its evidence. A user who requests direct delivery from low fidelity skips the high-fidelity review checkpoint; the agent still applies the design reference and verifies the final result.
 
@@ -64,12 +64,10 @@ For web, inspect relevant viewport sizes and exercise the main interaction plus 
 
 Report the question result as answered or inconclusive, with the evidence used. Report visual assessment against `DESIGN.md` and the chosen direction separately. Technical checks alone do not prove taste or task success; human visual approval alone does not establish behavioral correctness.
 
-Proposed project artifacts live in `.prettify/<slug>/`: `BRIEF.md` records the assignment, `DECISIONS.md` records reference acceptance, chosen directions and explicit skips, `EVIDENCE.md` records observations and the two result types. `low/` and `high/` contain produced previews; create each directory only when it has content. A missing spec is proposed as `DESIGN.proposed.md` in that run folder. Final files use the project's normal locations, or an agreed output folder for static pieces. No absolute machine paths or private project examples belong in the public skill. Canonical brand decisions stay in the existing `DESIGN.md`.
+Project artifacts live in `.prettify/<slug>/`: `BRIEF.md` records the assignment, `DECISIONS.md` records reference acceptance, chosen directions and explicit skips, and `EVIDENCE.md` records observations and the two result types. `low/` and `high/` contain produced previews; create each directory only when it has content. A missing spec is proposed as `DESIGN.proposed.md` in that run folder. Final files use the project's normal locations, or an agreed output folder for static pieces. No absolute machine paths or private project examples belong in the public skill. Canonical brand decisions stay in the existing `DESIGN.md`.
 
-The entry skill should remain short and ordered. References would cover briefing/design approval, staged exploration, task-specific resource checks and delivery inspection. One job connects all formats: take a visual idea from an explicit question through reviewable stages to an agreed artifact.
+The entry skill is short and ordered. Its references cover briefing/design approval, staged exploration, task-specific resource checks and delivery inspection. One job connects all formats: take a visual idea from an explicit question through reviewable stages to an agreed artifact.
 
-## Final review and implementation boundary
+## Implementation boundary
 
-All interview choices are resolved. The proposed file destinations and execution details above are included in the final review, so the human can correct the whole design before implementation. The skill will be an operator, named `prettify`, with its entry workflow in English, on-demand references and Codex picker metadata. Preserve the repository's default invocation policy. Any deterministic resource probing or evidence-format validation belongs in zero-dependency Node ESM scripts; creative decisions remain in instructions. Do not vendor external recipe collections.
-
-After the human confirms the shared understanding, create the skill, register it in the existing README catalog and plugin manifest, leave its unpublished metadata at `0.0.0`, bump the package/plugin version as required, run catalog checks, and open a pull request against `main`. Do not merge or publish the project output as part of delivery. A real end-to-end pilot would validate tool integration separately from catalog packaging checks.
+This branch implements the operator in English with on-demand references and Codex picker metadata, using the catalog's default model-invoked policy. Its zero-dependency Node ESM helper checks manifest structure and local file presence; a pass does not authenticate human decisions, prove tool execution, or establish visual quality. Creative decisions stay in the workflow. The skill remains at `0.0.0` until publication; this branch sets the package/plugin version to `2.8.0` and registers the skill in the README and plugin ship list. Catalog checks validate packaging; pilot findings are reported separately from those checks.

@@ -6,7 +6,7 @@ import path from "node:path";
 import crypto from "node:crypto";
 
 const errors = [];
-const err = (code, message, file = null) => errors.push({ code, path: file, message });
+const err = (code, message, file = null) => errors.push({ code, path: typeof file === "string" ? file : null, message });
 const obj = (o) => o && typeof o === "object" && !Array.isArray(o);
 const has = (o, required, optional = []) => obj(o) && required.every((k) => Object.hasOwn(o, k)) && Object.keys(o).every((k) => [...required, ...optional].includes(k));
 const nonempty = (v) => typeof v === "string" && v.trim().length > 0;

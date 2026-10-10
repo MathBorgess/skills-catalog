@@ -4,7 +4,11 @@ Record the working brief in `.prettify/<slug>/BRIEF.md`. Phrase the prototype qu
 
 Read the full existing `DESIGN.md`, including its frontmatter and referenced assets. Preserve its schema and unrelated sections. Separate established guidance from reference observations, proposals, and unknowns; cite concrete sources for extracted decisions.
 
-When `DESIGN.md` is absent, place a proposed draft in the run folder. Show the material change before writing it to the project's durable spec. Obtain one of these explicit choices:
+When `DESIGN.md` is absent, inspect any references the user supplied and representative incumbent project visuals before drafting. If neither exists, find and inspect an appropriate primary visual/design source tied to the audience or use case; cite its URL or local path and the relevant observation. Do not require a named gallery, force an unrelated brand, or copy a source's composition. If you cannot inspect a suitable source, keep the affected decisions unknown and ask for a reference before presenting them as sourced guidance.
+
+In the draft, label each decision as sourced, proposed, or unknown. Cite the source for sourced details; separate your own interpretation from what you observed. Existing project visuals are evidence of current project truth, not proof of owner approval for a new durable design rule.
+
+Place the proposed draft in the run folder. Show the material change before writing it to the project's durable spec. Obtain one of these explicit choices:
 
 - **Reject:** do not use the rejected proposal. Revise it for review or stop if no direction is agreed.
 - **Use for this piece:** apply it only to this run; leave `DESIGN.md` unchanged.
@@ -27,10 +31,10 @@ Use this compact starting shape for a missing-spec proposal, adapting only where
 ## Open decisions
 ```
 
-In `Reference decisions`, label each item as sourced, proposed, or unknown and include its source. Put only supported or accepted values in `Visual tokens`; mark the rest unknown. Keep the proposal in the run folder until the owner chooses to include the shown change durably.
+In `Reference decisions`, label each item as sourced, proposed, or unknown and include its source where applicable. Put only supported or accepted values in `Visual tokens`; mark the rest unknown. Keep the proposal in the run folder until the owner chooses to include the shown change durably.
 
 Impeccable's `init`, `document`, and redesign playbooks may write `DESIGN.md`. Treat generated changes as proposals: run them on an isolated copy when practical, inspect the resulting diff, and show the exact change to the owner. If the tool would write directly to the authority file and cannot be safely isolated, do not run that writing operation there. Apply only the change the owner explicitly chose to include.
 
 Preserve existing design fields used by other consumers. In particular, UI motion in CSS units such as milliseconds or CSS easing must not overwrite video motion values expressed in seconds or GSAP easing names. Add UI-scoped values only when the project's schema supports them and the owner approves; do not rename or repurpose existing keys.
 
-Record the disposition and resulting design authority in `.prettify/<slug>/DECISIONS.md`. In the run manifest, map rejection to `rejected` and stop; map piece-only acceptance to `piece-only` with no durable update. For a new durable `DESIGN.md`, record no original file and use the explicit approved-creation update receipt. For an existing file, preserve its original snapshot and require an approved update receipt only when the user elects to change it. Never infer consent from silence, a skipped stage, or approval of the finished artifact.
+Record the disposition and resulting design authority in `.prettify/<slug>/DECISIONS.md`. If the owner requests a machine-readable manifest, map rejection to `rejected` and stop; map piece-only acceptance to `piece-only` with no durable update. For a new durable `DESIGN.md`, record no original file and use the explicit approved-creation update receipt. For an existing file, preserve its original snapshot and require an approved update receipt only when the user elects to change it. Never infer consent from silence, a skipped stage, or approval of the finished artifact.

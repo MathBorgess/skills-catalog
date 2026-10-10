@@ -1,8 +1,8 @@
 # Prototype and prettify: source investigation
 
-**Observed:** 2026-10-10. **Status:** investigation and proposed design; no skill ships.
+**Observed:** 2026-10-10. **Status:** the investigation's bounded source evidence informed `prettify`, implemented on the MAT-265 branch; [PR #67](https://github.com/MathBorgess/skills-catalog/pull/67) is open for review. The branch includes [the skill entrypoint](../../skills/prettify/SKILL.md); it is not yet published on `main`. This note preserves what was inspected and what remains unverified.
 
-This study asks how references, agent instructions and supporting tools can help an agent produce an appealing prototype under a shared `DESIGN.md`. The user selected a complete workflow covering interactive web interfaces and static pieces, including thumbnails, photos and Instagram carousels. It separates implementation mechanics from evidence that a design is effective. The remaining workflow decisions are subject to the design interview.
+This study examined how references, agent instructions and supporting tools could help an agent produce a prototype under a shared `DESIGN.md`. The resulting operator covers interactive web interfaces and static pieces, including thumbnails, photos and Instagram carousels. It separates implementation mechanics from evidence that a design is effective. The source observations below remain bounded by the evidence table.
 
 ## Evidence boundary
 
@@ -38,7 +38,7 @@ Useful design constraints from [UI.md](https://github.com/mattpocock/skills/blob
 
 The entry skill explicitly skips polish and production machinery. [LOGIC.md](https://github.com/mattpocock/skills/blob/49dd158d1076134a641b33efb035946536778336/skills/engineering/prototype/LOGIC.md#L39) still asks for restrained visual clarity. Therefore, “skip polish” is not a requirement to make an unreadable artifact; it protects the learning goal from expanding into production work.
 
-**Proposed adaptation:** retain the validation question and observable state while applying a bounded visual treatment. Keep the original baseline available so appeal cannot silently replace evidence about the idea. This adaptation is not an upstream rule and has not been accepted in the interview.
+**Implemented adaptation:** the skill retains the validation question and observable state while applying a bounded visual treatment. It keeps question results separate from visual assessment. This is the catalog's workflow decision, not an upstream rule or evidence that the treatment improves outcomes.
 
 ## Impeccable: context, focused judgment and mechanical checks
 
@@ -81,7 +81,9 @@ The catalog already defines [Design Spec and Brand Spec](../../GLOSSARY.md) and 
 
 A new consumer should preserve existing frontmatter and sections. UI motion values use a different runtime from GSAP-based video primitives; CSS milliseconds/easings must not silently overwrite video seconds/GSAP names. Token extraction, spec resolution and adapters are design questions still open. No second catalog index or competing brand-spec file has been created.
 
-## Proposed workflow, not accepted
+## Implemented workflow contract
+
+The flow below is implemented in [`prettify`](../../skills/prettify/SKILL.md). It represents its contracts, not evidence of measured design improvement.
 
 ```mermaid
 flowchart LR
@@ -97,7 +99,7 @@ Three results should remain distinguishable: what the prototype taught us, wheth
 
 Potential `DESIGN.md` concerns to discuss: audience and intended impression; reference decisions with provenance; hierarchy and density; visual tokens; interaction states and purposeful motion; responsive behavior; reduced-motion behavior; explicit forbidden patterns. These are proposed concerns, not a new parser schema or shipped template.
 
-## Interview frontier
+## Resolved workflow decisions
 
 | Decision | Recommendation | State |
 | --- | --- | --- |
@@ -111,9 +113,9 @@ Potential `DESIGN.md` concerns to discuss: audience and intended impression; ref
 | Web delivery | Implemented and navigable interface in the project | Accepted by user: implemented interface |
 | Reference approval | Separate acceptance for one artifact from durable inclusion in `DESIGN.md` | Accepted by user: use and inclusion are separate choices |
 
-The accepted stage model and its proposed execution details are recorded in [workflow.md](workflow.md). All nine interview decisions have answers; final confirmation of the consolidated workflow is pending before implementation. No ADR records an unmade decision. The glossary records accepted workflow terms and the distinction between question result and visual assessment.
+The accepted stage model is recorded in [workflow.md](workflow.md) and implemented in the skill. The MAT-265 issue tracks the request and [PR #67](https://github.com/MathBorgess/skills-catalog/pull/67) carries the catalog implementation for review. The glossary records the workflow terms and the distinction between question result and visual assessment.
 
-For static pieces, a proposed prototype is a set of visual variants holding the message and intended audience constant. The comparison would concern composition, legibility and intended impression rather than application state. Photos, thumbnails and carousels also need medium-specific rules: image direction/crop, display scale and slide sequence. This interpretation and the image-generation/editing tool boundary still need the interview; no production workflow for those media was tested here.
+For static pieces, the skill uses visual variants holding the message and intended audience constant. The comparison concerns composition, legibility and intended impression rather than application state. Photos, thumbnails and carousels use medium-specific considerations: image direction/crop, display scale and slide sequence. No production pilot for those media has been completed as part of this source investigation.
 
 ## What remains unverified
 
@@ -121,4 +123,5 @@ For static pieces, a proposed prototype is a set of visual variants holding the 
 - Runtime interpretation of a shared spec across the installed providers.
 - A controlled comparison of baseline and treated prototypes.
 - User-task outcomes and owner preference on actual rendered artifacts.
-- A runnable catalog skill, packaging, checks and pull request: these follow the interview rather than this research document.
+- End-to-end behavior of the catalog skill on a real project, beyond structural tests and synthetic fixtures.
+- Whether the staged workflow improves design quality, task outcomes, user preference, or time.

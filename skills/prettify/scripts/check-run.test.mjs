@@ -67,6 +67,29 @@ try {
   }
   {
     const f = fixture();
+    fs.writeFileSync(path.join(f.project, "DESIGN.md"), "# Changed without approval\n");
+    const r = run(f.manifestPath);
+    assert.equal(r.status, 1);
+    assert(r.output.errors.some((e) => e.code === "DESIGN_HASH_MISMATCH"), "an existing DESIGN edit without an update receipt blocks completion");
+  }
+  {
+    const f = fixture(({ manifest }) => {
+      manifest.dependencies[0].status = "missing";
+      manifest.dependencies[0].receipt = "receipts/missing-dependency.json";
+    });
+    f.put("receipts/missing-dependency.json", { decision: "missing", reason: "The required editor is unavailable.", evidence: ["No usable editor capability was found."] });
+    const r = run(f.manifestPath);
+    assert.equal(r.status, 1);
+    assert(r.output.errors.some((e) => e.code === "DEPENDENCY_BLOCKED"), "a required missing dependency blocks completion even with its receipt");
+  }
+  {
+    const f = fixture(({ manifest }) => { manifest.design.decision = "rejected"; });
+    const r = run(f.manifestPath);
+    assert.equal(r.status, 1);
+    assert(r.output.errors.some((e) => e.code === "DESIGN_REJECTED"));
+  }
+  {
+    const f = fixture();
     f.manifest.design.original = null;
     f.manifest.design.decision = "piece-only";
     fs.writeFileSync(f.manifestPath, JSON.stringify(f.manifest));

@@ -8,6 +8,8 @@ Ask the user to choose, combine, or revise the alternatives. Record the chosen d
 
 The use of structured alternatives adapts UI exploration ideas from [Matt Pocock's prototype skill](https://github.com/mattpocock/skills/tree/49dd158d1076134a641b33efb035946536778336/skills/engineering/prototype); the staged review and delivery rules here are specific to `prettify`.
 
+Low-fidelity code may be disposable when that is the fastest way to compare directions or expose an answer to the question. Treat it as evidence for the decision, not as the final web deliverable. Carry the accepted direction into the project's normal implementation and make that result navigable and inspectable; do not leave the user with only a throwaway prototype.
+
 ## High fidelity
 
 Apply the chosen direction using the accepted design authority, real content, assets, typography, color, spacing, and purposeful motion. Show a rendered preview in the relevant context. Ask for concrete defects or changes and preserve already accepted choices during refinement. A direct move from low fidelity to delivery skips this review checkpoint; it does not authorize inventing approval.

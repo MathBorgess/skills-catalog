@@ -6,9 +6,10 @@ import path from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
-const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
-const cli = path.join(repo, "skills/prettify/scripts/check-run.mjs");
+const cli = fileURLToPath(new URL("./check-run.mjs", import.meta.url));
 const temp = fs.mkdtempSync(path.join(os.tmpdir(), "prettify-cli-"));
+const callerCwd = path.join(temp, "caller-cwd");
+fs.mkdirSync(callerCwd);
 let n = 0;
 
 function fixture(mutator = () => {}) {
@@ -52,7 +53,7 @@ function fixture(mutator = () => {}) {
 }
 
 function run(manifestPath) {
-  const result = spawnSync(process.execPath, [cli, manifestPath], { encoding: "utf8" });
+  const result = spawnSync(process.execPath, [cli, manifestPath], { encoding: "utf8", cwd: callerCwd });
   let output;
   try { output = JSON.parse(result.stdout); } catch { assert.fail(`CLI did not emit JSON: ${result.stdout}\n${result.stderr}`); }
   return { ...result, output };
@@ -64,6 +65,15 @@ try {
     const r = run(f.manifestPath);
     assert.equal(r.status, 0);
     assert.deepEqual(r.output, { ok: true, complete: true, errors: [] });
+  }
+  {
+    const f = fixture();
+    f.manifest.stages.briefing.receipt = { unexpected: "path" };
+    fs.writeFileSync(f.manifestPath, JSON.stringify(f.manifest));
+    const r = run(f.manifestPath);
+    assert.equal(r.status, 1);
+    assert(r.output.errors.some((e) => e.code === "RECEIPT_MISSING"));
+    assert(r.output.errors.every((e) => e.path === null || typeof e.path === "string"), "malformed path values never escape the public JSON schema");
   }
   {
     const f = fixture();

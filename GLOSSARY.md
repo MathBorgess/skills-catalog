@@ -246,6 +246,44 @@ _Avoid_: preview, mockup, sample video
 The few lines of a motion identity written for a HyperFrames `BRIEF.md`, the only channel through which the footage workflows hear the brand.
 _Avoid_: summary, prompt snippet
 
+### Prototype Exploration
+
+**Prototype**:
+A temporary artifact used to answer an explicit design question, with the relevant alternatives or state visible to the person exploring it.
+_Avoid_: production implementation, visual mockup (when the question requires interaction)
+
+**Prettify**:
+The complete workflow connecting a prototype's question, its creation or reuse, and an intentional visual treatment under a shared design spec.
+_Avoid_: cosmetic pass (alone; prettify also owns the prototype exploration)
+
+**Question Result**:
+The evidence-based answer to the question a prototype was built to explore, including an inconclusive answer when the evidence is insufficient.
+_Avoid_: visual approval, runnable artifact (neither alone answers the question)
+
+**Visual Assessment**:
+The judgment of a rendered artifact's visual decisions against its design spec and intended impression.
+_Avoid_: question result, detector score (neither alone establishes visual appeal)
+
+**Briefing**:
+The definition of a visual assignment's question, audience, message or task, constraints and intended artifact.
+_Avoid_: design spec (the assignment and the durable visual identity are different concepts)
+
+**Low Fidelity**:
+A visual exploration of structure, hierarchy and sequence that leaves detailed appearance open to change.
+_Avoid_: unfinished high-fidelity design, text-only direction
+
+**High Fidelity**:
+A reviewable visual representation close to the intended final appearance, following the chosen direction and design spec.
+_Avoid_: delivery (visual review and a usable final artifact are different milestones)
+
+**Stage Skip**:
+The human's explicit choice to bypass an intermediate design checkpoint, accepting less control before the result is delivered.
+_Avoid_: automatic approval, omitted verification
+
+**Reference Acceptance**:
+The human's decision to use a proposed visual reference for the current artifact, without by itself making that direction part of the durable design spec.
+_Avoid_: design spec update, permanent brand decision
+
 ## Deprecated Domains
 
 The domain languages for **Shunt** (outlines, excerpts, edit bypass, run wrapper, recover event) and **Handoff** (session, slot, graph gate, digest, supervisor, child, capabilities, gate run, verdict, risk level, attention matrix, revise round) have been moved to [deprecated/](deprecated/) alongside their retired skill implementations.

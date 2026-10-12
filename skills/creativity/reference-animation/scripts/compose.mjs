@@ -8,12 +8,15 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const bundledRegistry = path.resolve(here, "../references/registry.json");
+const spatialGuide = path.resolve(here, "../references/spatial-collections.md");
 const movementGuide = path.resolve(here, "../references/mindful-movement.md");
 const hash = (value) => createHash("sha256").update(value).digest("hex");
 const readJSON = (file) => JSON.parse(fs.readFileSync(file, "utf8"));
 const writeJSON = (file, value) => fs.writeFileSync(file, JSON.stringify(value, null, 2) + "\n");
 export const headings = ["Reference composition", "Work brief", "Author invariants", "Author overrides", "Base to authorship", "Expected result", "Object cast", "Motion score", "Animation plan", "Generation and inspection"];
-const legacyHeadings = headings.filter((h) => !["Author overrides", "Object cast", "Motion score"].includes(h));
+const schema2Headings = [...headings];
+headings.push("Exploration collection", "Spatial direction", "Authorship refinement");
+const legacyHeadings = schema2Headings.filter((h) => !["Author overrides", "Object cast", "Motion score"].includes(h));
 
 function inside(root, relative) {
   if (typeof relative !== "string" || !relative || path.isAbsolute(relative)) throw new Error("Expected a relative path");
@@ -45,31 +48,47 @@ function selectReferences(registryPath, ids) {
     const file = inside(path.dirname(registryPath), entry.profile);
     const bytes = fs.readFileSync(file);
     if (!bytes.length) throw new Error(`Empty profile: ${id}`);
-    return { ...entry, bytes, profile_sha256: hash(bytes) };
+    const resources = (entry.resources ?? []).map((relative) => {
+      const bytes = fs.readFileSync(inside(path.dirname(registryPath), relative));
+      if (!bytes.length) throw new Error(`Empty reference resource: ${relative}`);
+      return { path: relative, bytes, sha256: hash(bytes) };
+    });
+    return { ...entry, resources, bytes, profile_sha256: hash(bytes) };
   });
 }
 
-export function newRun({ design, references = ["apple-fluid", "disney-principles"], registry = bundledRegistry, tempRoot = os.tmpdir() }) {
+export function newRun({ design, references = ["apple-fluid", "disney-principles", "lottiefiles-motion-design"], stage = "exploration", registry = bundledRegistry, tempRoot = os.tmpdir() }) {
+  if (!["exploration", "refinement"].includes(stage)) throw new Error("Stage must be exploration or refinement");
   const source = fs.realpathSync(path.resolve(design));
   const bytes = fs.readFileSync(source);
   if (!bytes.length) throw new Error("Source design is empty");
   const selected = selectReferences(path.resolve(registry), references);
   const guideline = fs.readFileSync(movementGuide);
+  const spatial = fs.readFileSync(spatialGuide);
   const run = fs.mkdtempSync(path.join(tempRoot, "reference-animation-"));
   fs.mkdirSync(path.join(run, "references"));
   fs.mkdirSync(path.join(run, "guidelines"));
   fs.writeFileSync(path.join(run, "guidelines/mindful-movement.md"), guideline);
   const manifest = {
-    schema_version: 2, skill: "reference-animation", status: "draft",
+    schema_version: 3, stage, skill: "reference-animation", status: "draft",
     created: new Date().toISOString(), source_design: source,
     source_asset_base: path.dirname(source), source_sha256: hash(bytes),
     movement_guideline: { id: "mindful-movement", origin: "creative-brief", revision: "2026-10-12", snapshot: "guidelines/mindful-movement.md", sha256: hash(guideline) },
-    references: selected.map(({ bytes: profile, ...entry }) => {
-      const snapshot = `references/${entry.id}.md`;
+    spatial_guideline: { snapshot: "guidelines/spatial-collections.md", sha256: hash(spatial) },
+    references: selected.map(({ bytes: profile, resources, ...entry }) => {
+      const snapshot = `references/${entry.id}/${entry.profile}`;
+      fs.mkdirSync(path.dirname(path.join(run, snapshot)), { recursive: true });
       fs.writeFileSync(path.join(run, snapshot), profile);
-      return { ...entry, snapshot };
+      const snapshots = resources.map(({ path: resource, bytes, sha256 }) => {
+        const snapshot = `references/${entry.id}/${resource}`;
+        fs.mkdirSync(path.dirname(path.join(run, snapshot)), { recursive: true });
+        fs.writeFileSync(path.join(run, snapshot), bytes);
+        return { path: resource, snapshot, sha256 };
+      });
+      return { ...entry, snapshot, resources: snapshots };
     }),
   };
+  fs.writeFileSync(path.join(run, "guidelines/spatial-collections.md"), spatial);
   fs.writeFileSync(path.join(run, "SOURCE-DESIGN.md"), bytes);
   fs.writeFileSync(path.join(run, "DESIGN.md"), bytes);
   writeJSON(path.join(run, "run.json"), manifest);
@@ -78,22 +97,30 @@ export function newRun({ design, references = ["apple-fluid", "disney-principles
 
 function provenance(run) {
   const manifest = readJSON(path.join(run, "run.json"));
-  if (![1, 2].includes(manifest.schema_version) || manifest.skill !== "reference-animation") throw new Error("Unsupported run");
+  if (![1, 2, 3].includes(manifest.schema_version) || manifest.skill !== "reference-animation") throw new Error("Unsupported run");
   const snapshot = fs.readFileSync(path.join(run, "SOURCE-DESIGN.md"));
   if (hash(snapshot) !== manifest.source_sha256) throw new Error("Source snapshot changed");
   if (hash(fs.readFileSync(manifest.source_design)) !== manifest.source_sha256) throw new Error("Original design changed; create a new run from the current source");
   for (const ref of manifest.references) {
+    for (const resource of ref.resources ?? []) {
+      if (hash(fs.readFileSync(inside(run, resource.snapshot))) !== resource.sha256) throw new Error(`Reference resource changed: ${resource.path}`);
+    }
     if (hash(fs.readFileSync(inside(run, ref.snapshot))) !== ref.profile_sha256) throw new Error(`Reference snapshot changed: ${ref.id}`);
   }
-  if (manifest.schema_version === 2) {
+  if (manifest.schema_version >= 2) {
     const guide = manifest.movement_guideline;
     if (guide?.id !== "mindful-movement" || hash(fs.readFileSync(inside(run, guide.snapshot))) !== guide.sha256) throw new Error("Mindful Movement guideline missing or changed");
+  }
+  if (manifest.schema_version === 3) {
+    if (!["exploration", "refinement"].includes(manifest.stage)) throw new Error("Invalid run stage");
+    const guide = manifest.spatial_guideline;
+    if (!guide || hash(fs.readFileSync(inside(run, guide.snapshot))) !== guide.sha256) throw new Error("Spatial guideline missing or changed");
   }
   return { manifest, snapshot };
 }
 
 function checkProposal(text, schemaVersion) {
-  for (const heading of schemaVersion === 1 ? legacyHeadings : headings) {
+  for (const heading of schemaVersion === 1 ? legacyHeadings : schemaVersion === 2 ? schema2Headings : headings) {
     const parts = text.split(`## ${heading}\n`);
     if (parts.length !== 2 || !parts[1].split(/\n## /)[0].trim()) throw new Error(`Missing or empty composition section: ${heading}`);
   }
@@ -104,7 +131,7 @@ export function compose(run, proposal) {
   const { manifest, snapshot } = provenance(run);
   const text = fs.readFileSync(proposal, "utf8").replace(/\r\n/g, "\n");
   checkProposal(text, manifest.schema_version);
-  const working = Buffer.concat([snapshot, Buffer.from("\n\n<!-- Work-specific reference composition; original above is authoritative. -->\n\n" + text)]);
+  const working = Buffer.concat([snapshot, Buffer.from("\n\n<!-- Work-specific reference composition; source above preserves authorship; the composition records stage and explicit scoped author overrides. -->\n\n" + text)]);
   fs.writeFileSync(path.join(run, "DESIGN.md"), working);
   manifest.status = "composed";
   manifest.composition_sha256 = hash(text);
@@ -141,7 +168,7 @@ export function check(run) {
   return { ok: true, run, structural_checks: "passed", visual_assessment: "agent-recorded; not verified by this script", artifacts: delivery.artifacts };
 }
 
-const help = "compose.mjs new --design <source> [--references apple-fluid,disney-principles] [--registry <json>]\ncompose.mjs compose <run> --proposal <markdown>\ncompose.mjs check <run>";
+const help = "compose.mjs new --design <source> [--stage exploration|refinement] [--references apple-fluid,disney-principles,lottiefiles-motion-design] [--registry <json>]\ncompose.mjs compose <run> --proposal <markdown>\ncompose.mjs check <run>";
 function main(args) {
   if (!args.length || args.includes("--help")) return { usage: help };
   const command = args.shift();
@@ -150,7 +177,7 @@ function main(args) {
   if (command !== "new") run = args.shift();
   while (args.length) {
     const key = args.shift();
-    if (!["--design", "--references", "--registry", "--proposal"].includes(key) || !args.length || args[0].startsWith("--")) throw new Error(`Invalid option: ${key}`);
+    if (!["--design", "--stage", "--references", "--registry", "--proposal"].includes(key) || !args.length || args[0].startsWith("--")) throw new Error(`Invalid option: ${key}`);
     options[key.slice(2)] = args.shift();
   }
   if (command === "new" && options.design) return newRun({ ...options, references: options.references?.split(",") });

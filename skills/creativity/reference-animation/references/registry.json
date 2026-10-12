@@ -22,6 +22,22 @@
           "revision": "83597134ba8ff59838270f94d7ac7282ffa3b54d"
         }
       ]
+    },
+    {
+      "id": "lottiefiles-motion-design",
+      "profile": "lottiefiles-motion-design.md",
+      "resources": [
+        "lottiefiles-motion-design-source.md",
+        "lottiefiles-motion-design-coverage.json",
+        "lottiefiles-LICENSE.txt"
+      ],
+      "evidence_level": "documented-practice",
+      "sources": [
+        {
+          "url": "https://github.com/lottiefiles/motion-design-skill/tree/f9a8a041b85185ee4881b3471d3415e939aac772/skills/motion-design",
+          "revision": "f9a8a041b85185ee4881b3471d3415e939aac772"
+        }
+      ]
     }
   ]
 }

@@ -99,7 +99,7 @@ Domain design, agent workflow maintenance, and technical learning. These are ope
 
 ### Creativity
 
-Visual explanations, design, motion, and writing. These are operator skills; `motion-identity` defines how a brand moves, while `reference-animation` creates an animation for one work from successful design practices and the author's DESIGN.md.
+Visual explanations, design, motion, and writing. These are operator skills; `motion-identity` defines how a brand moves, while `reference-animation` explores dynamic spatial collections and then refines selected work toward the author's DESIGN.md.
 
 | Skill | Version | Kind | What it does |
 |---|---|---|---|
@@ -107,7 +107,7 @@ Visual explanations, design, motion, and writing. These are operator skills; `mo
 | [`prettify`](skills/creativity/prettify/) | 0.0.0 | operator | Guides a visual idea from a clear question through briefing, low-fidelity and high-fidelity review to an inspected web or static delivery, with explicit design decisions and task-specific dependencies. |
 | [`motion-identity`](skills/creativity/motion-identity/) | 1.0.0 | operator | Grills a brand's owner, round by round, into a motion identity — personality, one GSAP ease per role (enter, exit, emphasis), durations, ambient level, signature move, kinetic type and a never-list — and writes it into the brand's DESIGN.md, where HyperFrames and explain-me both read it; renders a short deterministic HyperFrames proof the owner approves by watching, and prints the block a HyperFrames BRIEF.md carries to the footage skills. Disney's principles, archetypes and timing adapted for video from LottieFiles' motion-design and GreenSock's gsap-skills. |
 | [`easy-to-read`](skills/creativity/easy-to-read/) | 1.0.0 | operator | Once activated, keeps every text it writes for you in plain language for the rest of the session — chat replies, documents, notes, summaries, PR and issue bodies — under STE-lite plus the profile of the text's language (ASD-STE100 for English; ABNT NBR ISO 24495-1 and the Senado style for Brazilian Portuguese; the core alone for other languages). Lints documents and long replies with a zero-dependency linter before they ship, and never rewrites code, commands, paths, identifiers or quotes. Canonical home of the writing rules explain-me ships as byte copies. |
-| [`reference-animation`](skills/creativity/reference-animation/) | 0.0.0 | operator | Creates Mindful Movement animations: intentional, elastic performers negotiate space, transfer energy and recover readable poses. Composes references into a temporary DESIGN.md with an object cast and causal motion score, respecting the original and explicit author overrides. Starts with Apple fluid design and Disney animation principles; accepts further documented references. |
+| [`reference-animation`](skills/creativity/reference-animation/) | 0.0.0 | operator | Explores living spatial collections, then refines selected scenes toward the author. Composes Apple, Disney, Mindful Movement and the complete LottieFiles motion-design reference into a temporary DESIGN.md with a cast, causal score and depth direction. Preserves authorship and scoped overrides; logos are not default protagonists. |
 
 ### Experiments
 

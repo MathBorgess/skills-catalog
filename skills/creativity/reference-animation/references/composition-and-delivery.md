@@ -1,6 +1,8 @@
 # Composition and delivery
 
-## Author precedence
+## Stage and author precedence
+
+Read [spatial collections](spatial-collections.md). New runs use schema 3 and explicitly select `exploration` (default) or `refinement`. Exploration optimizes the scene’s content, dynamics and depth; record styling deferred by the author. Refinement applies author choices to selected studies without flattening their central idea. Preserve source authorship in both stages.
 
 Read the complete source, not only its tokens. Follow supersession pointers before relying on editorial claims. Preserve recorded authorship; if no creator is named, leave it unknown. Distinguish the author of the original design from source/reference authors and the author of this skill.
 
@@ -15,7 +17,8 @@ Use the following headings in `composition.md`; body text follows the user's lan
 Status: preview; not approved as a brand identity.
 
 ## Work brief
-Subject, audience, message, dimensions, duration, FPS and destination.
+Stage, subject, audience, message, dimensions, duration, FPS and destination.
+In refinement, identify the selected exploration run and studies.
 Identify reversible proof defaults and separate them from brand tokens.
 
 ## Author invariants
@@ -44,6 +47,19 @@ Include focal/interacting objects; identify rigid protected assets and author co
 Record anticipation, propulsion, space negotiation/contact and recovery.
 Name transformation families and their physical/emotional purpose; avoid independent decoration.
 
+## Exploration collection
+Per study: title, central event, emotion, material, distinct spatial organization,
+energy transfer, output and readable resolution. For one work, record its single study.
+
+## Spatial direction
+Projection, coordinate system, camera, depth layers, light, occlusion/contact,
+and at least three consistent depth cues. State actual 3D versus 2.5D.
+For a deliberately flat brief, explain that choice rather than inventing depth.
+
+## Authorship refinement
+Retained source choices; choices explicitly deferred; proposed later mapping.
+In refinement, record applied changes, retained scene mechanism and remaining decisions.
+
 ## Animation plan
 Shots/key poses, timing, transitions, camera, image continuity and sound.
 Distinguish authored motion from proposed values filling genuine gaps.
@@ -52,13 +68,13 @@ Distinguish authored motion from proposed values filling genuine gaps.
 Route, real source assets, prompts/code, tooling and inspection criteria.
 ```
 
-For a validation request without a production brief, default to an eight-second silent landscape proof, 1280×720 at 30 FPS. Use existing brand wording or a clearly labelled demonstration line; do not invent an approved slogan or product claim. The caller can override every proof setting. Do not invoke `motion-identity` to rewrite the brand as part of creating this work.
+For a validation request without a production brief, default to an eight-second silent landscape proof per study, 1280×720 at 30 FPS. For a requested collection, use three distinct studies unless specified otherwise. Neutral exploration may omit text and marks. If wording is used, use existing brand wording or a clearly labelled demonstration line; do not invent an approved slogan or product claim. The caller can override every proof setting. Do not invoke `motion-identity` to rewrite the brand as part of creating this work.
 
 ## Generation routes
 
 Apply [Mindful Movement](mindful-movement.md) across every route. Code uses seekable trajectories, chosen pivots, bounded deformations and spring recovery; supporting groups react to proximity or contact. Image keyframes show preparation, peak deformation and recovered identity. Video prompts describe performers' intention, weight, friction, personal bubbles and causal reactions shot by shot. Preserve the author's rigid/deformable distinction throughout.
 
-Code is appropriate for typography, protected brand assets and precise geometric motion. Use local assets and fonts, deterministic seek, and a timeline that can export. Image models are appropriate for keyframes and new imagery; send actual visual references when needed. Video models are appropriate when available and useful; record their settings and inspect identity across time. A route may combine them. Availability is evidence to check, not an assumption. Keep a prompt log whenever a model is used, including unsuccessful generations.
+Code is appropriate for precise geometric motion, real 3D scenes, procedural materials and exact typography. Choose a renderer that makes depth, lighting and geometry coherent. Use local assets and fonts, deterministic seek, and a timeline that can export. Image models are appropriate for keyframes and new imagery; send actual visual references when needed. Video models are appropriate when available and useful; record their settings and inspect identity across time. A route may combine them. Availability is evidence to check, not an assumption. Keep a prompt log whenever a model is used, including unsuccessful generations.
 
 ## Delivery record
 
@@ -81,3 +97,5 @@ Write `delivery.json` in the run after inspection:
 ```
 
 Use run-relative paths. An animation artifact is playable HTML, MP4, WebM or GIF. A still frame alone does not satisfy generation. Keep private client/brand inputs and validation outputs outside this public catalog; only generic instructions and synthetic test fixtures belong here. `compose.mjs check` establishes provenance and file/record presence; it cannot judge style, read pixels, decode a video or prove playback. Perform those checks with actual rendering tools and human-facing evidence.
+
+When video archiving is requested, use the authorized account and destination. Verify uploaded names, MIME, size and folder readback, retaining returned IDs/URLs in the private run. Archive all retained final experiments; mark superseded exports clearly if they are also retained.

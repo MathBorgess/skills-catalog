@@ -1,6 +1,6 @@
 # Mindful Movement: objects as people
 
-Origin: the creative guideline supplied during this skill's design, 2026-10-12. This is the workflow's core directing method, not a claim of independently measured results. Load it for every work, including works with a custom reference registry. The original DESIGN.md wins over references; an explicit current author instruction may override a specific restriction when recorded for the work.
+Origin: the creative guideline supplied during this skill's design, 2026-10-12. This is the workflow's core directing method, not a claim of independently measured results. Read it for every work, including works with a custom registry, and apply relevant principles to the selected style. It does not require spatial objects or elastic deformation in every animation. The original DESIGN.md wins over references; an explicit current author instruction may override a specific restriction when recorded for the work.
 
 ## Cast objects, then choreograph relationships
 
@@ -29,7 +29,7 @@ Plan meaningful phases with times and relationships:
 4. **Meet and transfer energy.** Proximity can unfold a card; contact can compress it; an impact can release a letter group. The partner reacts to the encounter, not an unrelated timer. Intentional overlap belongs in the score; unexplained clipping is a defect.
 5. **Recover and depart.** Let secondary parts lag, recoil or settle. Restore readable type and coherent silhouettes. Exit together only when the relationship calls for it; preserve author-defined entry/exit logic.
 
-For code, derive a continuous, seekable timeline; avoid frame-dependent randomness. Spring response/damping, mass and friction are directing parameters until a renderer maps them to a specific simulation. For image/video models, describe the same phases, contact, pivots and shape invariants in shot prompts. A name such as “mindful” is insufficient on its own.
+For image/video models, describe phases, contact, pivots and shape invariants in shot prompts. Spring response/damping, mass and friction are directing descriptions, not promises of exact simulation control. This workflow does not generate animation through code. A name such as “mindful” is insufficient on its own.
 
 ## Transformation vocabulary
 

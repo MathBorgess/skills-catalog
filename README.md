@@ -99,7 +99,7 @@ Domain design, agent workflow maintenance, and technical learning. These are ope
 
 ### Creativity
 
-Visual explanations, design, motion, and writing. These are operator skills; `motion-identity` defines how a brand moves, while `reference-animation` explores dynamic spatial collections and then refines selected work toward the author's DESIGN.md.
+Visual explanations, design, motion, and writing. These are operator skills; `motion-identity` defines how a brand moves, while `co-direct-animation` co-directs films from authored DESIGN.md and a human briefing through reviewed Flow shots and final assembly.
 
 | Skill | Version | Kind | What it does |
 |---|---|---|---|
@@ -107,7 +107,7 @@ Visual explanations, design, motion, and writing. These are operator skills; `mo
 | [`prettify`](skills/creativity/prettify/) | 0.0.0 | operator | Guides a visual idea from a clear question through briefing, low-fidelity and high-fidelity review to an inspected web or static delivery, with explicit design decisions and task-specific dependencies. |
 | [`motion-identity`](skills/creativity/motion-identity/) | 1.0.0 | operator | Grills a brand's owner, round by round, into a motion identity — personality, one GSAP ease per role (enter, exit, emphasis), durations, ambient level, signature move, kinetic type and a never-list — and writes it into the brand's DESIGN.md, where HyperFrames and explain-me both read it; renders a short deterministic HyperFrames proof the owner approves by watching, and prints the block a HyperFrames BRIEF.md carries to the footage skills. Disney's principles, archetypes and timing adapted for video from LottieFiles' motion-design and GreenSock's gsap-skills. |
 | [`easy-to-read`](skills/creativity/easy-to-read/) | 1.0.0 | operator | Once activated, keeps every text it writes for you in plain language for the rest of the session — chat replies, documents, notes, summaries, PR and issue bodies — under STE-lite plus the profile of the text's language (ASD-STE100 for English; ABNT NBR ISO 24495-1 and the Senado style for Brazilian Portuguese; the core alone for other languages). Lints documents and long replies with a zero-dependency linter before they ship, and never rewrites code, commands, paths, identifiers or quotes. Canonical home of the writing rules explain-me ships as byte copies. |
-| [`reference-animation`](skills/creativity/reference-animation/) | 1.0.0 | operator | Creates spatial animation through an external TO-SPEC and four review gates: script/moodboard, animatic/styleframes, low resolution, final delivery. Translates approved images into descriptive renderer specs. Combines Apple, Disney, Mindful Movement and complete LottieFiles references; explores first and refines toward the author. |
+| [`co-direct-animation`](skills/creativity/co-direct-animation/) | 1.0.0 | operator | Co-directs animations from DESIGN.md and human briefing, preserving direction and decisions in an external TO-SPEC. Uses five human critique gates, user-chosen image tools and reviewed gflow video shots, then assembles the film. Replaces reference-animation. |
 
 ### Experiments
 
@@ -128,7 +128,7 @@ The following skills are **deprecated** and no longer maintained or accessible i
 
 How a skill works under the hood, for whoever maintains it, is in [`docs/`](docs/) — written for people, never loaded by a model.
 
-After install, start a session and type `/domain-modeling`, `/study-wiki`, `/teach-me`, `/explain-me`, `/motion-identity`, `/reference-animation`, `/easy-to-read`, `/skills-evaluate`, or `/still-cursor-living-day`, or just say what you want — the skill's `description` is what makes the model reach for it on its own.
+After install, start a session and type `/domain-modeling`, `/study-wiki`, `/teach-me`, `/explain-me`, `/motion-identity`, `/co-direct-animation`, `/easy-to-read`, `/skills-evaluate`, or `/still-cursor-living-day`, or just say what you want — the skill's `description` is what makes the model reach for it on its own.
 
 **Improving the skills**
 

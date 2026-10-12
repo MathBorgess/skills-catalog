@@ -246,6 +246,28 @@ _Avoid_: preview, mockup, sample video
 The few lines of a motion identity written for a HyperFrames `BRIEF.md`, the only channel through which the footage workflows hear the brand.
 _Avoid_: summary, prompt snippet
 
+### Animation Direction
+
+**Co-direction**:
+A collaborative creative process in which an agent proposes reference-informed animation direction, translates the authored brief into reviewable work and critiques the result, while the human makes the required creative decisions.
+_Avoid_: automatic art direction, generation success
+
+**Creative Gate**:
+A review boundary at which a human decides on an exact version of a creative packet and gives explicit criticism, including an explicit statement that nothing needs changing. Both records are required unless the human expressly overrides that requirement for a stated scope.
+_Avoid_: technical inspection, generation success, generic permission to continue
+
+**Creative Criticism**:
+The human's explicit account of what works, what does not and what should be refined in a submitted creative revision. It is separate from the decision to accept or revise that work.
+_Avoid_: approval, automated quality score
+
+**Work Acceptance**:
+The human's acceptance of a submitted film or study against its brief. It does not establish a permanent brand motion identity.
+_Avoid_: brand approval, structural validation
+
+**Visual Attempt**:
+One submitted image or video generation and its resulting candidate or failure report. A replacement generation is a new attempt; retrieving the output of the same submission is not.
+_Avoid_: complete creative gate, automatic retry
+
 ### Prototype Exploration
 
 **Prototype**:

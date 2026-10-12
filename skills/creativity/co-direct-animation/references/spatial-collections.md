@@ -1,8 +1,8 @@
 # Spatial collections: explore, then refine
 
-Build an interesting change of state before applying brand polish. Exploration produces several distinct scenes whose appeal comes from relationships, material and spatial transformation. A collection is not the same choreography recolored three times. Default to three short studies when the user requests a collection without a count; vary material, spatial organization and energy transfer.
+Use this reference when the selected animation direction is spatial; it is not the required genre for every film. Build an interesting change of state before applying brand polish. Exploration produces several distinct scenes whose appeal comes from relationships, material and spatial transformation. A collection is not the same choreography recolored three times. Default to three short studies when the user requests a collection without a count; vary material, spatial organization and energy transfer.
 
-Follow [the production workflow](production-workflow.md) and external TO-SPEC for small validation deliveries. Proposed collection size is not authorization to render every study to completion: advance selected studies through the agreed gates.
+Follow [the production workflow](production-workflow.md) and external TO-SPEC for small validation deliveries. Proposed collection size is not authorization to generate every study to completion: advance selected studies through the agreed gates.
 
 ## Two stages, one source
 
@@ -16,7 +16,7 @@ Do not use a logo as the main object unless specifically requested for that work
 
 Specify a coordinate system, perspective/orthographic projection, camera path, foreground/midground/background, light direction, material response and contact/occlusion behavior. In perspective, size and parallax must agree with depth. A camera move should reveal a relation or form; it must not disguise an inactive scene. Keep a stable reference plane or architectural cue when useful.
 
-Actual 3D or carefully staged 2.5D can work; label the chosen technique honestly. Use at least three mutually consistent depth cues: parallax, occlusion, projected scale, perspective, cast/contact shadows, shading, atmospheric separation or focus. Do not claim physically accurate rendering for painted shadows. Avoid a flat card grid decorated with arbitrary blur as the default answer to a spatial brief.
+Describe generated 3D-like or 2.5D-like appearance honestly; do not claim underlying scene geometry from video pixels. Use at least three mutually consistent depth cues: parallax, occlusion, projected scale, perspective, cast/contact shadows, shading, atmospheric separation or focus. Do not claim physically accurate rendering for painted shadows. Avoid a flat card grid decorated with arbitrary blur as the default answer to a spatial brief.
 
 Alive means responsive: neighbors yield, fields propagate through material, lighter parts follow heavier parts, compression stores energy, recovery changes the arrangement. Separate primary group movement, secondary elastic response and quiet environmental motion. Give negative space and rest a role.
 

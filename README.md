@@ -59,11 +59,11 @@ Pick the skills you want and which coding agents to install them on. Add `-g` fo
 npm run link
 ```
 
-Symlinks every skill into `~/.claude/skills`, `~/.cursor/skills`, `~/.codex/skills`, `~/.agents/skills`, and `~/.gemini/config/skills`. Not the end-user installer.
+Symlinks every categorized skill into `~/.claude/skills`, `~/.cursor/skills`, `~/.codex/skills`, `~/.agents/skills`, and `~/.gemini/config/skills`. Not the end-user installer.
 
-Because those are symlinks into this working tree, **a `git pull` refreshes the content of every linked skill on its own** — the link points at the file that just changed. The one thing a pull cannot do by itself is link a skill that did not exist before, or drop one that was removed: that only happens when the script runs again.
+Because those are symlinks into this working tree, **a `git pull` refreshes the content of every linked skill on its own** — the link points at the file that just changed. The one thing a pull cannot do by itself is link a skill that did not exist before, drop one that was removed, or repair a link to a moved folder: that only happens when the script runs again.
 
-So `npm run link` also points this clone's `core.hooksPath` at `.githooks` (only if nothing else claims it). From then on, `.githooks/post-merge` runs after a `git pull` on `main` and re-links **when that pull added or removed a skill**, staying silent otherwise:
+So `npm run link` also points this clone's `core.hooksPath` at `.githooks` (only if nothing else claims it). From then on, `.githooks/post-merge` runs after a `git pull` on `main` and re-links **when that pull added, removed, or moved a skill**, staying silent otherwise:
 
 ```
 skills-catalog: 1 skill(s) added or removed in this pull — local links refreshed.
@@ -80,30 +80,42 @@ Two things it deliberately does not cover: a pull on a branch other than `main`,
 
 ## Catalog
 
+The folders and tables separate `engineering`, `creativity`, and `experiments`. Installation and invocation still use the leaf skill name, without a category prefix. Learning workflows sit with engineering; writing sits with creativity.
+
 Two kinds of skills live in this catalog:
 - **Operators**: Generic, reusable workflows run to get work done across projects on work that keeps arriving.
 - **Experiments**: Specific, non-generic skills designed to test and measure agent behavior under fixed constraints or specific hypotheses, leaving a measurable finding behind.
 
-### Operators
+### Engineering
+
+Domain design, agent workflow maintenance, and technical learning. These are operator skills.
 
 | Skill | Version | Kind | What it does |
 |---|---|---|---|
-| [`domain-modeling`](skills/domain-modeling/) | 1.0.0 | operator | Actively builds and sharpens a project's domain model, ubiquitous language, and glossary during design; records ADRs for hard-to-reverse architectural decisions. |
-| [`study-wiki`](skills/study-wiki/) | 1.0.0 | operator | Interviews you about the certifications you are chasing, then builds and operates a personal study repository: a knowledge graph of notes, a question bank, an error log, and a daily study loop that injects questions, grades your answers, and records where you are weak. |
-| [`explain-me`](skills/explain-me/) | 1.1.1 | operator | Creates one visual explanation, in the language you asked in, with controlled-writing text, diagrams, images, interactive HTML or a narrated video, landscape or portrait for Reels/Shorts/TikTok (HyperFrames motion, local Kokoro voice), styled from an editable, brand-able DESIGN.md; teach-me retains quizzes and progress records. |
-| [`prettify`](skills/prettify/) | 0.0.0 | operator | Guides a visual idea from a clear question through briefing, low-fidelity and high-fidelity review to an inspected web or static delivery, with explicit design decisions and task-specific dependencies. |
-| [`motion-identity`](skills/motion-identity/) | 1.0.0 | operator | Grills a brand's owner, round by round, into a motion identity — personality, one GSAP ease per role (enter, exit, emphasis), durations, ambient level, signature move, kinetic type and a never-list — and writes it into the brand's DESIGN.md, where HyperFrames and explain-me both read it; renders a short deterministic HyperFrames proof the owner approves by watching, and prints the block a HyperFrames BRIEF.md carries to the footage skills. Disney's principles, archetypes and timing adapted for video from LottieFiles' motion-design and GreenSock's gsap-skills. |
-| [`teach-me`](skills/teach-me/) | 1.2.0 | operator | Runs one study session against a wiki that already exists: a phone-sized HTML lesson plus a session note and error log. Not for bootstrapping an empty wiki — that is study-wiki. |
-| [`skills-evaluate`](skills/skills-evaluate/) | 0.2.0 | operator | Reads the metrics the other skills leave in the OS temp dir, the maintainer sketchpad and open issues; compares the last run with the recent median, diagnoses root causes, checks each skill against its own scope, and proposes improvements to the skill or to its observability. |
-| [`easy-to-read`](skills/easy-to-read/) | 1.0.0 | operator | Once activated, keeps every text it writes for you in plain language for the rest of the session — chat replies, documents, notes, summaries, PR and issue bodies — under STE-lite plus the profile of the text's language (ASD-STE100 for English; ABNT NBR ISO 24495-1 and the Senado style for Brazilian Portuguese; the core alone for other languages). Lints documents and long replies with a zero-dependency linter before they ship, and never rewrites code, commands, paths, identifiers or quotes. Canonical home of the writing rules explain-me ships as byte copies. |
+| [`domain-modeling`](skills/engineering/domain-modeling/) | 1.0.0 | operator | Actively builds and sharpens a project's domain model, ubiquitous language, and glossary during design; records ADRs for hard-to-reverse architectural decisions. |
+| [`study-wiki`](skills/engineering/study-wiki/) | 1.0.0 | operator | Interviews you about the certifications you are chasing, then builds and operates a personal study repository: a knowledge graph of notes, a question bank, an error log, and a daily study loop that injects questions, grades your answers, and records where you are weak. |
+| [`teach-me`](skills/engineering/teach-me/) | 1.2.0 | operator | Runs one study session against a wiki that already exists: a phone-sized HTML lesson plus a session note and error log. Not for bootstrapping an empty wiki — that is study-wiki. |
+| [`skills-evaluate`](skills/engineering/skills-evaluate/) | 0.2.0 | operator | Reads the metrics the other skills leave in the OS temp dir, the maintainer sketchpad and open issues; compares the last run with the recent median, diagnoses root causes, checks each skill against its own scope, and proposes improvements to the skill or to its observability. |
+
+### Creativity
+
+Visual explanations, design, motion, and writing. These are operator skills; `motion-identity` defines how a brand moves, while `reference-animation` explores dynamic spatial collections and then refines selected work toward the author's DESIGN.md.
+
+| Skill | Version | Kind | What it does |
+|---|---|---|---|
+| [`explain-me`](skills/creativity/explain-me/) | 1.1.1 | operator | Creates one visual explanation, in the language you asked in, with controlled-writing text, diagrams, images, interactive HTML or a narrated video, landscape or portrait for Reels/Shorts/TikTok (HyperFrames motion, local Kokoro voice), styled from an editable, brand-able DESIGN.md; teach-me retains quizzes and progress records. |
+| [`prettify`](skills/creativity/prettify/) | 0.0.0 | operator | Guides a visual idea from a clear question through briefing, low-fidelity and high-fidelity review to an inspected web or static delivery, with explicit design decisions and task-specific dependencies. |
+| [`motion-identity`](skills/creativity/motion-identity/) | 1.0.0 | operator | Grills a brand's owner, round by round, into a motion identity — personality, one GSAP ease per role (enter, exit, emphasis), durations, ambient level, signature move, kinetic type and a never-list — and writes it into the brand's DESIGN.md, where HyperFrames and explain-me both read it; renders a short deterministic HyperFrames proof the owner approves by watching, and prints the block a HyperFrames BRIEF.md carries to the footage skills. Disney's principles, archetypes and timing adapted for video from LottieFiles' motion-design and GreenSock's gsap-skills. |
+| [`easy-to-read`](skills/creativity/easy-to-read/) | 1.0.0 | operator | Once activated, keeps every text it writes for you in plain language for the rest of the session — chat replies, documents, notes, summaries, PR and issue bodies — under STE-lite plus the profile of the text's language (ASD-STE100 for English; ABNT NBR ISO 24495-1 and the Senado style for Brazilian Portuguese; the core alone for other languages). Lints documents and long replies with a zero-dependency linter before they ship, and never rewrites code, commands, paths, identifiers or quotes. Canonical home of the writing rules explain-me ships as byte copies. |
+| [`reference-animation`](skills/creativity/reference-animation/) | 1.0.0 | operator | Creates spatial animation through an external TO-SPEC and four review gates: script/moodboard, animatic/styleframes, low resolution, final delivery. Translates approved images into descriptive renderer specs. Combines Apple, Disney, Mindful Movement and complete LottieFiles references; explores first and refines toward the author. |
 
 ### Experiments
 
-Specific, non-generic skills designed to test, probe, and measure agent behavior under controlled variables:
+Shipped workflows with a fixed hypothesis, measurement, and exit condition. These live in `skills/experiments/`; unshipped trials remain in `docs/experiments/`.
 
 | Skill | Version | Kind | What it does |
 |---|---|---|---|
-| [`still-cursor-living-day`](skills/still-cursor-living-day/) | 0.0.0 | experiment | Runs one image collection end to end under a fixed axis: twelve frames of the same MacBook, display off, carried through a day across places, distances and angles, with one white arrow on the same pixel of its screen in every frame, sized by the perspective the laptop is seen in. The generator never draws the cursor — asked for one, image models put it anywhere at any size — so the panel is generated blank, its four corners are marked in a local page, and a zero-dependency script projects the arrow onto it by homography. It refuses a plan that breaks the restriction, drifts out of the panel's reflectivity band, holds a frame nobody would miss, never leaves one room, or asks a generator for a cursor; gates the twelve briefs in one hash-locked approval; dispatches the generations in parallel (GPT-Image, Gemini, a CLI child, or a manual drop); refuses a panel too small, occluded or drawn on to carry the arrow; and runs a two-pass LLM-as-judge — blind first, which reorders the day into a Kendall tau — that proposes and never regenerates. Ships a guard hook that seals the plan while the blind pass is open. |
+| [`still-cursor-living-day`](skills/experiments/still-cursor-living-day/) | 0.0.0 | experiment | Runs one image collection end to end under a fixed axis: twelve frames of the same MacBook, display off, carried through a day across places, distances and angles, with one white arrow on the same pixel of its screen in every frame, sized by the perspective the laptop is seen in. The generator never draws the cursor — asked for one, image models put it anywhere at any size — so the panel is generated blank, its four corners are marked in a local page, and a zero-dependency script projects the arrow onto it by homography. It refuses a plan that breaks the restriction, drifts out of the panel's reflectivity band, holds a frame nobody would miss, never leaves one room, or asks a generator for a cursor; gates the twelve briefs in one hash-locked approval; dispatches the generations in parallel (GPT-Image, Gemini, a CLI child, or a manual drop); refuses a panel too small, occluded or drawn on to carry the arrow; and runs a two-pass LLM-as-judge — blind first, which reorders the day into a Kendall tau — that proposes and never regenerates. Ships a guard hook that seals the plan while the blind pass is open. |
 
 ### Deprecated
 
@@ -116,7 +128,7 @@ The following skills are **deprecated** and no longer maintained or accessible i
 
 How a skill works under the hood, for whoever maintains it, is in [`docs/`](docs/) — written for people, never loaded by a model.
 
-After install, start a session and type `/domain-modeling`, `/study-wiki`, `/teach-me`, `/explain-me`, `/motion-identity`, `/easy-to-read`, `/skills-evaluate`, or `/still-cursor-living-day`, or just say what you want — the skill's `description` is what makes the model reach for it on its own.
+After install, start a session and type `/domain-modeling`, `/study-wiki`, `/teach-me`, `/explain-me`, `/motion-identity`, `/reference-animation`, `/easy-to-read`, `/skills-evaluate`, or `/still-cursor-living-day`, or just say what you want — the skill's `description` is what makes the model reach for it on its own.
 
 **Improving the skills**
 
@@ -131,7 +143,7 @@ Paste the contents of the skill's `SKILL.md` as the opening message and let the 
 ## Anatomy of a skill in this catalog
 
 ```
-skills/<name>/
+skills/<category>/<name>/
   SKILL.md             # frontmatter (name, description) + the workflow, top to bottom
   agents/openai.yaml   # Codex picker metadata
   references/          # the depth — loaded on demand, not up front
@@ -164,9 +176,9 @@ Skills contributed by other people keep their own author in `metadata.author`; a
 ### Add a skill
 
 1. Read `AGENTS.md` and one existing skill end to end.
-2. Create `skills/<name>/SKILL.md` and `skills/<name>/agents/openai.yaml`.
+2. Create `skills/<category>/<name>/SKILL.md` and `skills/<category>/<name>/agents/openai.yaml`.
 3. Add a row to the catalog table above at version `0.0.0`.
-4. Append `"./skills/<name>"` to `.claude-plugin/plugin.json` → `skills`.
+4. Append `"./skills/<category>/<name>"` to `.claude-plugin/plugin.json` → `skills`.
 5. Run `npm run check` and fix anything it reports.
 6. Open a pull request against `main`. Do not push to `main`.
 

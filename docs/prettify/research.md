@@ -1,6 +1,6 @@
 # Prototype and prettify: source investigation
 
-**Observed:** 2026-10-10. **Status:** the investigation's bounded source evidence informed `prettify`, implemented on the MAT-265 branch; [PR #67](https://github.com/MathBorgess/skills-catalog/pull/67) is open for review. The branch includes [the skill entrypoint](../../skills/prettify/SKILL.md); it is not yet published on `main`. This note preserves what was inspected and what remains unverified.
+**Observed:** 2026-10-10. **Status:** the investigation's bounded source evidence informed `prettify`, implemented on the MAT-265 branch; [PR #67](https://github.com/MathBorgess/skills-catalog/pull/67) is open for review. The branch includes [the skill entrypoint](../../skills/creativity/prettify/SKILL.md); it is not yet published on `main`. This note preserves what was inspected and what remains unverified.
 
 This study examined how references, agent instructions and supporting tools could help an agent produce a prototype under a shared `DESIGN.md`. The resulting operator covers interactive web interfaces and static pieces, including thumbnails, photos and Instagram carousels. It separates implementation mechanics from evidence that a design is effective. The source observations below remain bounded by the evidence table; subsequent implementation checks and controlled runs are recorded in [validation.md](validation.md).
 
@@ -77,13 +77,13 @@ The [skill index and routing rules](https://github.com/Jakubantalik/transitions.
 
 ## Existing catalog compatibility
 
-The catalog already defines [Design Spec and Brand Spec](../../GLOSSARY.md) and implements [motion-identity](../../skills/motion-identity/SKILL.md) and [explain-me's design contract](../../skills/explain-me/references/design-spec.md). [ADR 0004](../../.agents/adr/0004-motion-identity-over-imports.md) records why motion identity belongs in one brand spec rather than imported overlapping skills.
+The catalog already defines [Design Spec and Brand Spec](../../GLOSSARY.md) and implements [motion-identity](../../skills/creativity/motion-identity/SKILL.md) and [explain-me's design contract](../../skills/creativity/explain-me/references/design-spec.md). [ADR 0004](../../.agents/adr/0004-motion-identity-over-imports.md) records why motion identity belongs in one brand spec rather than imported overlapping skills.
 
 A new consumer should preserve existing frontmatter and sections. UI motion values use a different runtime from GSAP-based video primitives; CSS milliseconds/easings must not silently overwrite video seconds/GSAP names. Token extraction, spec resolution and adapters are design questions still open. No second catalog index or competing brand-spec file has been created.
 
 ## Implemented workflow contract
 
-The flow below is implemented in [`prettify`](../../skills/prettify/SKILL.md). It represents its contracts, not evidence of measured design improvement.
+The flow below is implemented in [`prettify`](../../skills/creativity/prettify/SKILL.md). It represents its contracts, not evidence of measured design improvement.
 
 ```mermaid
 flowchart LR

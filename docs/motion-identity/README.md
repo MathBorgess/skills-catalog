@@ -1,6 +1,6 @@
 # Motion identity proofs: what they play, and the evidence for PR #64
 
-For whoever maintains [`motion-identity`](../../skills/motion-identity/SKILL.md). It covers what `motion.mjs proof` plays, how the motion tests attached to [PR #64](https://github.com/MathBorgess/skills-catalog/pull/64) were produced, and the layout defect they found. The run contract is [`references/delivery.md`](../../skills/motion-identity/references/delivery.md); this page does not repeat it.
+For whoever maintains [`motion-identity`](../../skills/creativity/motion-identity/SKILL.md). It covers what `motion.mjs proof` plays, how the motion tests attached to [PR #64](https://github.com/MathBorgess/skills-catalog/pull/64) were produced, and the layout defect they found. The run contract is [`references/delivery.md`](../../skills/creativity/motion-identity/references/delivery.md); this page does not repeat it.
 
 | Part | Status |
 | --- | --- |
@@ -11,7 +11,7 @@ For whoever maintains [`motion-identity`](../../skills/motion-identity/SKILL.md)
 
 ## What a proof plays
 
-[`scripts/lib/proof.mjs`](../../skills/motion-identity/scripts/lib/proof.mjs) plans every time and ease from the spec alone. [`assets/proof.html`](../../skills/motion-identity/assets/proof.html) only runs the plan. In order:
+[`scripts/lib/proof.mjs`](../../skills/creativity/motion-identity/scripts/lib/proof.mjs) plans every time and ease from the spec alone. [`assets/proof.html`](../../skills/creativity/motion-identity/assets/proof.html) only runs the plan. In order:
 
 1. A 0.3 s lead-in, so the first motion is not a jump cut.
 2. The headline words enter one by one, in reading order. Each comes from where no word is yet, in the archetype's pattern (`CHOREOGRAPHY[personality].from` → `.to`), on `eases.enter`, staggered by the archetype's word stagger.
@@ -35,15 +35,15 @@ The frames are taken at those moments: `entrance`, `settled`, `emphasis`, `moved
 | premium | `premium` | `power3.out` / `power2.in` / `power2.out`; `sine.inOut` | `none` | `#F4F1EA`, `#1C1B19`, `#2F4A3A` | Liberation Serif 700 |
 | energetic | `energetic` | `expo.out` / `expo.in` / `back.out(3)`; `power3.inOut` | `lively` | `#0E0E10`, `#FFFFFF`, `#C8FF2E` | Inter 900 |
 
-The premium and energetic durations are the rows for their archetype in [`personality-and-timing.md`](../../skills/motion-identity/references/personality-and-timing.md). The playful signature is the ribbon example in `delivery.md`, plus one stroke-width swell on `eases.emphasis`. Each spec passed `motion.mjs check` and `explain.mjs design check` before its proof ran.
+The premium and energetic durations are the rows for their archetype in [`personality-and-timing.md`](../../skills/creativity/motion-identity/references/personality-and-timing.md). The playful signature is the ribbon example in `delivery.md`, plus one stroke-width swell on `eases.emphasis`. Each spec passed `motion.mjs check` and `explain.mjs design check` before its proof ran.
 
 ```bash
 export PRODUCER_HEADLESS_SHELL_PATH=<chrome-headless-shell>
-node skills/motion-identity/scripts/motion.mjs proof <scratch>/playful/DESIGN.md --text "Make it move" \
+node skills/creativity/motion-identity/scripts/motion.mjs proof <scratch>/playful/DESIGN.md --text "Make it move" \
   --sub "a short proof of the motion" --orientation portrait --signature <scratch>/playful/signature.js --dest <scratch>/playful-portrait
-node skills/motion-identity/scripts/motion.mjs proof <scratch>/premium/DESIGN.md --text "Quiet, precise craft" \
+node skills/creativity/motion-identity/scripts/motion.mjs proof <scratch>/premium/DESIGN.md --text "Quiet, precise craft" \
   --sub "A sample studio for considered objects" --orientation landscape --dest <scratch>/premium-landscape
-node skills/motion-identity/scripts/motion.mjs proof <scratch>/energetic/DESIGN.md --text "Push the pace" \
+node skills/creativity/motion-identity/scripts/motion.mjs proof <scratch>/energetic/DESIGN.md --text "Push the pace" \
   --sub "A sample training app for short, hard sessions" --orientation portrait --dest <scratch>/energetic-portrait
 ```
 
@@ -78,7 +78,7 @@ The first energetic render passed `hyperframes check` with 0 errors and 0 warnin
 HyperFrames sees the headline as one text block, so it cannot see one word run into another. A Playwright probe seeked each page every 1/30 s and measured every word's glyph ink, mapped through its live transform. It found two causes:
 
 1. **The emphasis reach was not reserved.** The layout fitted words at rest. The emphasis scales one word to the archetype's peak, and an overshooting ease goes past that peak: `back.out(3)` reaches 1.25 of its tween, so energetic's 1.22 becomes 1.275. The word ran into its neighbor and past the safe box: 65 px into the right edge zone of a portrait frame, where the platform's buttons sit.
-2. **The exit crossed words still on screen.** "Last word first" ([`choreography-and-type.md`](../../skills/motion-identity/references/choreography-and-type.md)) means the last word leaves while the others wait. Energetic sent each word left by 90% of its own width, over the word before it. Playful sent each word up, so a bottom line rose into the line above.
+2. **The exit crossed words still on screen.** "Last word first" ([`choreography-and-type.md`](../../skills/creativity/motion-identity/references/choreography-and-type.md)) means the last word leaves while the others wait. Energetic sent each word left by 90% of its own width, over the word before it. Playful sent each word up, so a bottom line rose into the line above.
 
 The fix changes geometry only. Peaks, eases, directions and the order stay as the references set them.
 
@@ -120,12 +120,12 @@ What the probe still reports is only motion past an edge:
 German has no Kokoro voice, so the run is silent and the timing comes from 150 words per minute. The run used the playful sample spec. Its stage is the placeholder, plus one dot.
 
 ```bash
-EXPLAIN_ME_HOME=<scratch>/em-home node skills/explain-me/scripts/explain.mjs new --slug kit-proof --lang de --design <scratch>/playful/DESIGN.md
+EXPLAIN_ME_HOME=<scratch>/em-home node skills/creativity/explain-me/scripts/explain.mjs new --slug kit-proof --lang de --design <scratch>/playful/DESIGN.md
 # b01: draw #subject, write #subject-label, at(1.6) indicate #subject, at(2.4) camera { zoom: 1.1 }
 # b02: grow #dot, at(0.8) fade #subject-label { out: true }, at(1.4) indicate #dot, at(2.2) camera { reset: true }
-EXPLAIN_ME_HOME=<scratch>/em-home node skills/explain-me/scripts/explain.mjs voice <run>
-EXPLAIN_ME_HOME=<scratch>/em-home node skills/explain-me/scripts/explain.mjs check <run>    # hyperframes check: 0 errors, 0 warnings
-EXPLAIN_ME_HOME=<scratch>/em-home node skills/explain-me/scripts/explain.mjs render <run>   # 10.6 s, rendered in 17.1 s, silent
+EXPLAIN_ME_HOME=<scratch>/em-home node skills/creativity/explain-me/scripts/explain.mjs voice <run>
+EXPLAIN_ME_HOME=<scratch>/em-home node skills/creativity/explain-me/scripts/explain.mjs check <run>    # hyperframes check: 0 errors, 0 warnings
+EXPLAIN_ME_HOME=<scratch>/em-home node skills/creativity/explain-me/scripts/explain.mjs render <run>   # 10.6 s, rendered in 17.1 s, silent
 ```
 
 `new` printed the resolved line `motion: personality playful; eases enter back.out(1.6), exit power3.in, emphasis back.out(2.2); ambient subtle; signature "ribbon sweep"`, and one override (`motion.ambient: "none" -> "subtle"`). The browser read each tween's ease off the registered timeline:
@@ -133,7 +133,7 @@ EXPLAIN_ME_HOME=<scratch>/em-home node skills/explain-me/scripts/explain.mjs ren
 | At | Call | Target | Ease in the browser | Role it should take |
 | --- | --- | --- | --- | --- |
 | 0.5 s | `draw` (0.9 s) | `#subject` | `back.out(1.6)` | `eases.enter` |
-| 1.4 s | `write` | `#subject-label` characters | `power1.out` | none: `write` fades each character, and `ease` has no effect on it ([`video-motion.md`](../../skills/explain-me/references/video-motion.md)) |
+| 1.4 s | `write` | `#subject-label` characters | `power1.out` | none: `write` fades each character, and `ease` has no effect on it ([`video-motion.md`](../../skills/creativity/explain-me/references/video-motion.md)) |
 | 2.1 s | `indicate` | `#subject` | `back.out(2.2)` | `eases.emphasis` |
 | 2.9 s | `camera { zoom }` (1.6 s) | `#stage` | `power2.inOut` | `ease` |
 | 4.8 s | `grow` (0.6 s) | `#dot` | `back.out(1.6)` | `eases.enter` |

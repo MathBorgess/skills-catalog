@@ -6,7 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"${CLAUDE_PLUGIN_ROOT}/skills/still-cursor-living-day/scripts/guard.mjs\""
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/skills/experiments/still-cursor-living-day/scripts/guard.mjs\""
           }
         ]
       }

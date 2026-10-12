@@ -1,6 +1,6 @@
 # Prettify workflow design
 
-**Status:** implemented on `codex/prettify-catalog` for [MAT-265](https://linear.app/borgesmathai/issue/MAT-265/criar-prettify-design-guiado-por-designmd-do-briefing-a-entrega); [PR #67](https://github.com/MathBorgess/skills-catalog/pull/67) is open for review. The runnable workflow is [the skill entrypoint](../../skills/prettify/SKILL.md); the design notes below explain its decisions.
+**Status:** implemented on `codex/prettify-catalog` for [MAT-265](https://linear.app/borgesmathai/issue/MAT-265/criar-prettify-design-guiado-por-designmd-do-briefing-a-entrega); [PR #67](https://github.com/MathBorgess/skills-catalog/pull/67) is open for review. The runnable workflow is [the skill entrypoint](../../skills/creativity/prettify/SKILL.md); the design notes below explain its decisions.
 
 ## Accepted decisions
 

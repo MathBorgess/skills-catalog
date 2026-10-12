@@ -23,11 +23,8 @@ jobs:
         with:
           node-version: 22
 
-      - name: Check catalog, plugin, and README
-        run: node scripts/check-catalog.mjs
-
-      - name: Check prettify run manifest CLI
-        run: node skills/prettify/scripts/check-run.test.mjs
+      - name: Check catalog, plugin, workflows and layout migration
+        run: npm run check
 
       - name: Require a version bump when skills/ changes
         if: github.event_name == 'pull_request'

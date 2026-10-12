@@ -40,20 +40,22 @@ npx skills add npm:@mathborgess/skills-catalog
 npm run link
 ```
 
-That symlinks `skills/*` into `~/.claude/skills`, `~/.cursor/skills`, `~/.codex/skills`, `~/.agents/skills`, and `~/.gemini/config/skills`.
+That symlinks `skills/<category>/*` into `~/.claude/skills`, `~/.cursor/skills`, `~/.codex/skills`, `~/.agents/skills`, and `~/.gemini/config/skills`.
 
 Canonical wording for those commands is [`.agents/install-block.md`](.agents/install-block.md): change that file first, then `README.md`. Changes reach `main` only through pull requests — do not push to `main`.
 
 ## Layout
 
 ```
-skills/<skill-name>/
+skills/<category>/<skill-name>/
   SKILL.md              # required — frontmatter + the workflow
   agents/openai.yaml    # required — Codex picker metadata
   references/*.md       # optional — depth loaded on demand
   scripts/*.mjs         # optional — deterministic steps, zero dependencies
 hooks/hooks.json        # plugin root — hooks any skill here ships
 ```
+
+Categories are `engineering`, `creativity` (operator skills), and `experiments` (shipped experiment skills). Keep categories in README.md and filesystem paths aligned.
 
 One skill per directory. Directory name is the skill name: lowercase, hyphenated, no version suffix.
 
@@ -120,10 +122,10 @@ Invocation rules: [`.agents/invocation.md`](.agents/invocation.md). Default is m
 ## Adding a skill
 
 1. Read this file and one existing skill end to end before writing.
-2. Create `skills/<name>/SKILL.md` against the rules above.
-3. Add `skills/<name>/agents/openai.yaml` (`interface.display_name`, `interface.short_description`).
+2. Create `skills/<category>/<name>/SKILL.md` against the rules above.
+3. Add `skills/<category>/<name>/agents/openai.yaml` (`interface.display_name`, `interface.short_description`).
 4. Add a row to the catalog table in `README.md` at version `0.0.0`, naming its kind — `operator` or `experiment`. A skill missing from that table is a skill nobody will find. Leave the number at `0.0.0` until the commit that publishes it to `main`.
-5. Append `"./skills/<name>"` to the `skills` array in `.claude-plugin/plugin.json`.
+5. Append `"./skills/<category>/<name>"` to the `skills` array in `.claude-plugin/plugin.json`.
 6. Keep reference files to one concern each, named by what they answer (`question-loop.md`, not `part-3.md`).
 7. Run `npm run check`. It must pass before you report the skill added.
 8. Open a pull request against `main`. Do not push to `main`. Direct pushes are blocked.

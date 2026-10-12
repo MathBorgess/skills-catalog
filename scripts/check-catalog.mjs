@@ -9,11 +9,19 @@ import { fileURLToPath } from "node:url";
 
 const repo = join(dirname(fileURLToPath(import.meta.url)), "..");
 const skillsDir = join(repo, "skills");
-const names = readdirSync(skillsDir).filter((name) =>
-  existsSync(join(skillsDir, name, "SKILL.md")),
+const categories = ["engineering", "creativity", "experiments"];
+const paths = categories.flatMap((category) =>
+  readdirSync(join(skillsDir, category)).filter((name) =>
+    existsSync(join(skillsDir, category, name, "SKILL.md")),
+  ).map((name) => `${category}/${name}`),
 );
+const names = paths.map((p) => p.split("/").at(-1));
 
 const errors = [];
+if (new Set(names).size !== names.length) errors.push("Skill names must be unique across categories");
+for (const entry of readdirSync(skillsDir)) {
+  if (!categories.includes(entry)) errors.push(`Unexpected skills/ entry: ${entry}`);
+}
 
 const pkg = JSON.parse(readFileSync(join(repo, "package.json"), "utf8"));
 const plugin = JSON.parse(
@@ -35,38 +43,39 @@ if (plugin.name !== "skills-catalog") {
 }
 
 const listed = new Set(plugin.skills ?? []);
-for (const name of names) {
-  const rel = `./skills/${name}`;
+for (const skillPath of paths) {
+  const name = skillPath.split("/").at(-1);
+  const rel = `./skills/${skillPath}`;
   if (!listed.has(rel)) errors.push(`plugin.json missing ${rel}`);
 
-  const skill = readFileSync(join(skillsDir, name, "SKILL.md"), "utf8");
+  const skill = readFileSync(join(skillsDir, skillPath, "SKILL.md"), "utf8");
   const fmName = skill.match(/^name:\s*(\S+)/m)?.[1];
   if (fmName !== name) {
     errors.push(`${name}/SKILL.md frontmatter name "${fmName}" != directory`);
   }
 
   const version = skill.match(/^\s+version:\s*['"]?([0-9]+\.[0-9]+\.[0-9]+)/m)?.[1];
-  const catalogLink = "[`" + name + "`](skills/" + name + "/)";
+  const catalogLink = "[`" + name + "`](skills/" + skillPath + "/)";
   if (!readme.includes(catalogLink)) {
     errors.push("README.md catalog missing " + catalogLink);
   } else if (version) {
     const escaped = version.replace(/\./g, "\\.");
     const row = new RegExp(
-      "\\[`" + name + "`\\]\\(skills/" + name + "/\\)\\s*\\|\\s*" + escaped + "\\s*\\|",
+      "\\[`" + name + "`\\]\\(skills/" + skillPath + "/\\)\\s*\\|\\s*" + escaped + "\\s*\\|",
     );
     if (!row.test(readme)) {
       errors.push("README.md version for " + name + " is not " + version);
     }
   }
 
-  if (!existsSync(join(skillsDir, name, "agents", "openai.yaml"))) {
+  if (!existsSync(join(skillsDir, skillPath, "agents", "openai.yaml"))) {
     errors.push(`${name} missing agents/openai.yaml`);
   }
 }
 
 for (const rel of listed) {
   const name = rel.replace(/^\.\/skills\//, "");
-  if (!names.includes(name)) errors.push(`plugin.json lists missing ${rel}`);
+  if (!paths.includes(name)) errors.push(`plugin.json lists missing ${rel}`);
 }
 
 const marketplacePlugin = marketplace.plugins?.[0];

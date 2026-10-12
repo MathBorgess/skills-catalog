@@ -4,6 +4,7 @@ set -euo pipefail
 REPO="$(cd "$(dirname "$0")/.." && pwd)"
 
 cd "$REPO"
-for skill_md in skills/*/SKILL.md; do
+for skill_md in skills/*/*/SKILL.md; do
+  [ -f "$skill_md" ] || continue
   printf '%s\n' "$skill_md"
 done | sort

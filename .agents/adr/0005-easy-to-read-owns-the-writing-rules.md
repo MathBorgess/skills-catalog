@@ -10,7 +10,7 @@ Three facts limit where the rules can live:
 
 - **A skill must install alone.** skills.sh can install one skill. A plugin install puts each skill in its own folder. A path such as `../easy-to-read/scripts/ste-lint.mjs` is missing when only one skill is there. Also, [`.agents/invocation.md`](../invocation.md) does not allow deep cross-references between skills.
 - **explain-me's scripts import the linter.** `explain.mjs voice` loads `ste-lint.mjs` from its own folder (`lazyLint`). `explain.mjs new` prints a lint command with that path. `explain.test.mjs` imports the file. If the file moves out, the CLI, its output and its tests break.
-- **The rules are general.** STE-lite and the profiles say almost nothing about explanations. The only exceptions are a few words: "every explanation", "the requester language", and a path under `skills/explain-me`.
+- **The rules are general.** STE-lite and the profiles say almost nothing about explanations. The only exceptions are a few words: "every explanation", "the requester language", and a path under `skills/creativity/explain-me`.
 
 ## Considered options
 
@@ -22,7 +22,7 @@ Three facts limit where the rules can live:
 
 ## Decision
 
-`skills/easy-to-read/` is the canonical home of six files. Three are references: `references/ste-lite.md`, `references/profile-en.md` and `references/profile-pt-br.md`. Three are scripts: `scripts/ste-lint.mjs`, `scripts/profiles/en.mjs` and `scripts/profiles/pt-br.mjs`. The explain-me skill ships a byte copy of each file, at the same relative path.
+`skills/creativity/easy-to-read/` is the canonical home of six files. Three are references: `references/ste-lite.md`, `references/profile-en.md` and `references/profile-pt-br.md`. Three are scripts: `scripts/ste-lint.mjs`, `scripts/profiles/en.mjs` and `scripts/profiles/pt-br.mjs`. The explain-me skill ships a byte copy of each file, at the same relative path.
 
 `easy-to-read/scripts/ste-lint.test.mjs` holds the full suite of the linter and a contract test. The contract test fails when a copy differs. It skips when no explain-me folder sits next to easy-to-read.
 

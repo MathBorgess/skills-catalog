@@ -1,7 +1,7 @@
 {
   "name": "skills-catalog",
-  "version": "2.8.0",
-  "description": "Matheus Borges's agent skills: study wikis, visual explanations, guided web and static design workflows (prettify), brand motion identities for HyperFrames and explain-me videos, plain-language writing for every reply and document (easy-to-read), teaching sessions, domain modeling, skills-evaluate (turn run metrics into improvements), and still-cursor-living-day (plan, generate and judge a twelve-frame image collection under one axis). Inspired by Matt Pocock's skills packaging.",
+  "version": "2.9.0",
+  "description": "Agent skills organized into engineering, creativity and experiments, including animation composed from references while preserving the author's DESIGN.md.",
   "author": {
     "name": "Matheus Borges",
     "url": "https://github.com/MathBorgess"
@@ -22,17 +22,19 @@
     "motion-identity",
     "easy-to-read",
     "plain-language",
-    "prettify"
+    "prettify",
+    "reference-animation"
   ],
   "skills": [
-    "./skills/domain-modeling",
-    "./skills/study-wiki",
-    "./skills/teach-me",
-    "./skills/skills-evaluate",
-    "./skills/still-cursor-living-day",
-    "./skills/explain-me",
-    "./skills/motion-identity",
-    "./skills/easy-to-read",
-    "./skills/prettify"
+    "./skills/engineering/domain-modeling",
+    "./skills/engineering/study-wiki",
+    "./skills/engineering/teach-me",
+    "./skills/engineering/skills-evaluate",
+    "./skills/experiments/still-cursor-living-day",
+    "./skills/creativity/explain-me",
+    "./skills/creativity/motion-identity",
+    "./skills/creativity/easy-to-read",
+    "./skills/creativity/prettify",
+    "./skills/creativity/reference-animation"
   ]
 }

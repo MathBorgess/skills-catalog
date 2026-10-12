@@ -1,0 +1,27 @@
+{
+  "schema_version": 1,
+  "references": [
+    {
+      "id": "apple-fluid",
+      "profile": "apple-fluid.md",
+      "evidence_level": "documented-practice",
+      "sources": [
+        {
+          "url": "https://github.com/emilkowalski/skills/blob/2d228630ba1446365f614a108cb8252f1feda202/skills/apple-design/SKILL.md",
+          "revision": "2d228630ba1446365f614a108cb8252f1feda202"
+        }
+      ]
+    },
+    {
+      "id": "disney-principles",
+      "profile": "disney-principles.md",
+      "evidence_level": "documented-practice",
+      "sources": [
+        {
+          "url": "https://github.com/dylantarre/animation-principles/tree/83597134ba8ff59838270f94d7ac7282ffa3b54d",
+          "revision": "83597134ba8ff59838270f94d7ac7282ffa3b54d"
+        }
+      ]
+    }
+  ]
+}

@@ -25,7 +25,7 @@ base="$(git rev-parse --quiet --verify ORIG_HEAD 2>/dev/null || true)"
 [ -n "$base" ] || exit 0
 
 # A skill added or removed is the case the symlinks cannot absorb on their own.
-churn="$(git diff --name-only --diff-filter=ADR "$base" HEAD -- 'skills/*/SKILL.md' 2>/dev/null || true)"
+churn="$(git diff --name-only --diff-filter=ADR "$base" HEAD -- ':(glob)skills/**/SKILL.md' 2>/dev/null || true)"
 [ -n "$churn" ] || exit 0
 
 repo="$(git rev-parse --show-toplevel)"

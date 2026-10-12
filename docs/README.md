@@ -6,8 +6,8 @@ That separation is the point, and it is why `docs/` is not a folder inside `skil
 
 | Tree | Reader | Purpose |
 | --- | --- | --- |
-| `skills/<name>/SKILL.md` | a model, at the moment of triggering | the workflow it performs |
-| `skills/<name>/references/*.md` | a model, on demand **while executing** | depth a step needs to be carried out |
+| `skills/<category>/<name>/SKILL.md` | a model, at the moment of triggering | the workflow it performs |
+| `skills/<category>/<name>/references/*.md` | a model, on demand **while executing** | depth a step needs to be carried out |
 | `docs/<name>/*.md` | a person | how the thing works and why it is built that way |
 
 A model loading `references/` is mid-run and will act on what it reads. So a reference may only contain what is true of the shipped skill right now — a design that is planned, a mechanism that is half built, or a diagram of the target state all invite a model to call something that does not exist. Those belong here instead.
@@ -34,7 +34,9 @@ Each skill **may** have one, and there is no required shape. A page earns its pl
 
 | Skill | Page |
 | --- | --- |
-| [`motion-identity`](../skills/motion-identity/) | [proofs](motion-identity/README.md): what a proof plays, the evidence attached to PR #64, and the layout defect it found |
+| [`motion-identity`](../skills/creativity/motion-identity/) | [proofs](motion-identity/README.md): what a proof plays, the evidence attached to PR #64, and the layout defect it found |
 | [`handoff`](../deprecated/handoff/) *(deprecated)* | [mechanism](handoff/mechanism.md) — the six phases, the three owner gates, the session graph, and what was built (now retired) |
 | Experiments | [index](experiments/README.md) — versioned trials that are not part of any skill |
-| [`prettify`](../skills/prettify/) | [source investigation](prettify/research.md), [workflow design](prettify/workflow.md), and [validation evidence](prettify/validation.md) — implemented on the MAT-265 branch; see [MAT-265](https://linear.app/borgesmathai/issue/MAT-265/criar-prettify-design-guiado-por-designmd-do-briefing-a-entrega) and [PR #67](https://github.com/MathBorgess/skills-catalog/pull/67) |
+| [`prettify`](../skills/creativity/prettify/) | [source investigation](prettify/research.md), [workflow design](prettify/workflow.md), and [validation evidence](prettify/validation.md) — implemented on the MAT-265 branch; see [MAT-265](https://linear.app/borgesmathai/issue/MAT-265/criar-prettify-design-guiado-por-designmd-do-briefing-a-entrega) and [PR #67](https://github.com/MathBorgess/skills-catalog/pull/67) |
+
+| [`reference-animation`](../skills/creativity/reference-animation/) | [composition, migration and validation scope](reference-animation/README.md) |

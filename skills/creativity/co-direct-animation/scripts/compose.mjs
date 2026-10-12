@@ -58,8 +58,9 @@ function selectReferences(registryPath, ids) {
   });
 }
 
-export function newRun({ design, brief, references = ["apple-fluid", "disney-principles", "lottiefiles-motion-design"], stage = "exploration", registry = bundledRegistry, tempRoot = os.tmpdir() }) {
+export function newRun({ design, brief, references = ["apple-fluid", "disney-principles", "lottiefiles-motion-design"], stage = "exploration", videoReviewMode = "complete-video", registry = bundledRegistry, tempRoot = os.tmpdir() }) {
   if (!["exploration", "refinement"].includes(stage)) throw new Error("Stage must be exploration or refinement");
+  if (!["complete-video", "per-attempt"].includes(videoReviewMode)) throw new Error("Video review mode must be complete-video or per-attempt");
   const source = fs.realpathSync(path.resolve(design));
   const bytes = fs.readFileSync(source);
   if (!bytes.length) throw new Error("Source design is empty");
@@ -75,7 +76,7 @@ export function newRun({ design, brief, references = ["apple-fluid", "disney-pri
   fs.mkdirSync(path.join(run, "guidelines"));
   fs.writeFileSync(path.join(run, "guidelines/mindful-movement.md"), guideline);
   const manifest = {
-    schema_version: 4, stage, skill: "co-direct-animation", status: "draft",
+    schema_version: 4, stage, skill: "co-direct-animation", status: "draft", video_review_mode: videoReviewMode,
     source_brief: sourceBrief, brief_sha256: hash(briefBytes),
     created: new Date().toISOString(), source_design: source,
     source_asset_base: path.dirname(source), source_sha256: hash(bytes),
@@ -188,7 +189,7 @@ export function check(run) {
   return { ok: true, run, structural_checks: "passed", reviews: reviews.final, visual_assessment: "agent-recorded; not verified by this script", artifacts: delivery.artifacts };
 }
 
-const help = "compose.mjs new --design <source> --brief <human-brief.md> [--stage exploration|refinement] [--references apple-fluid,disney-principles,lottiefiles-motion-design] [--registry <json>]\ncompose.mjs compose <run> --proposal <markdown>\ncompose.mjs check <run>";
+const help = "compose.mjs new --design <source> --brief <human-brief.md> [--stage exploration|refinement] [--video-review-mode complete-video|per-attempt] [--references apple-fluid,disney-principles,lottiefiles-motion-design] [--registry <json>]\ncompose.mjs compose <run> --proposal <markdown>\ncompose.mjs check <run>";
 function main(args) {
   if (!args.length || args.includes("--help")) return { usage: help };
   const command = args.shift();
@@ -197,10 +198,10 @@ function main(args) {
   if (command !== "new") run = args.shift();
   while (args.length) {
     const key = args.shift();
-    if (!["--design", "--brief", "--stage", "--references", "--registry", "--proposal"].includes(key) || !args.length || args[0].startsWith("--")) throw new Error(`Invalid option: ${key}`);
+    if (!["--design", "--brief", "--stage", "--video-review-mode", "--references", "--registry", "--proposal"].includes(key) || !args.length || args[0].startsWith("--")) throw new Error(`Invalid option: ${key}`);
     options[key.slice(2)] = args.shift();
   }
-  if (command === "new" && options.design) return newRun({ ...options, references: options.references?.split(",") });
+  if (command === "new" && options.design) return newRun({ ...options, videoReviewMode: options["video-review-mode"], references: options.references?.split(",") });
   if (command === "compose" && run && options.proposal) return compose(run, options.proposal);
   if (command === "check" && run) return check(run);
   throw new Error(help);

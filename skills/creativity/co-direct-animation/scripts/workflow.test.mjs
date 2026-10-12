@@ -10,8 +10,8 @@ const temp = fs.mkdtempSync(path.join(os.tmpdir(), "co-direct-contract-"));
 const design = path.join(temp, "DESIGN.md"), brief = path.join(temp, "brief.md");
 fs.writeFileSync(design, "# Synthetic author\nKeep the circle recognizable.\n");
 fs.writeFileSync(brief, "# Synthetic brief\nAn illustrated circle offers a square a place to rest.\n");
-function fixture() {
-  const { run } = newRun({ design, brief, tempRoot: temp });
+function fixture(videoReviewMode = "per-attempt") {
+  const { run } = newRun({ design, brief, tempRoot: temp, videoReviewMode });
   fs.writeFileSync(path.join(run, "TO-SPEC.md"), "# Synthetic context\nPlan, decisions and next step are recorded here.\n");
   const proposal = path.join(run, "composition.md");
   fs.writeFileSync(proposal, headings.map(h => `## ${h}\nSynthetic direction; no real film or approval.\n`).join("\n"));
@@ -21,14 +21,14 @@ function fixture() {
 function response(key, decision = "accept", criticism = "Nothing to change in this synthetic fixture.") {
   return { key, actor: "human", decision, criticism, next_attempt: decision === "accept" ? "continue-plan" : { gate: "motion-preview", shot: "shot-01" }, evidence: { source: "synthetic-user-message", quote: "Synthetic fixture only; no real human approval is asserted." } };
 }
-function gate(run, name, dependencies = []) {
+function gate(run, name, dependencies = [], videoShots) {
   const artifact = `${name}.md`;
   fs.writeFileSync(path.join(run, artifact), `Synthetic ${name} packet`);
-  const p = submit(run, { gate: name, revision: "v1", artifacts: [artifact], dependencies });
+  const p = submit(run, { gate: name, revision: "v1", artifacts: [artifact], dependencies, ...(videoShots ? { video_shots: videoShots } : {}) });
   review(run, response(p.key));
   return p;
 }
-function planning(run) { return gates.slice(0, 3).map(g => gate(run, g)); }
+function planning(run, videoShots) { return gates.slice(0, 3).map(g => gate(run, g, [], g === "storyboard" ? videoShots : undefined)); }
 const request = { shot: "shot-01", mode: "i2v", model: "veo-lite", aspect: "16:9", duration: 8, profile: "fixture-profile", project: "fixture-project", inputs: ["frame.png"], prompt: 'An "illustrated" circle; $(touch SHOULD_NOT_EXIST)' };
 const mp4 = Buffer.from([0, 0, 0, 20, 102, 116, 121, 112, 105, 115, 111, 109, 0, 0, 0, 0]);
 function fake({ mutate = x => x, noFile = false } = {}) {
@@ -180,9 +180,91 @@ try {
   assert.throws(() => startAttempt(overrideRun, { type: "image", provider: "gpt-image", gate: "frames", shot: "another", prompt: "Another input" }), /human scope/);
   assert.ok(startAttempt(overrideRun, { type: "image", provider: "gpt-image", gate: "frames", shot: "style", prompt: "Corrected input" }));
 
+  const defaultRun = newRun({ design, brief, tempRoot: temp }).run;
+  assert.equal(read(path.join(defaultRun, "run.json")).video_review_mode, "complete-video");
+  assert.throws(() => newRun({ design, brief, tempRoot: temp, videoReviewMode: "automatic-retry" }), /review mode/);
+  const batchRun = fixture("complete-video");
+  gate(batchRun, "moodboard"); gate(batchRun, "frames");
+  fs.writeFileSync(path.join(batchRun, "storyboard.md"), "Synthetic ordered storyboard");
+  for (const video_shots of [undefined, [], ["shot-01", "shot-01"], ["shot-01", ""]]) {
+    assert.throws(() => submit(batchRun, { gate: "storyboard", revision: "v1", artifacts: ["storyboard.md"], video_shots }), /ordered, distinct/);
+  }
+  gate(batchRun, "storyboard", [], ["shot-01", "shot-02", "shot-03"]);
+  fs.writeFileSync(path.join(batchRun, "frame.png"), "Synthetic continuity input");
+  const batchBackend = fake();
+  await assert.rejects(() => generate(batchRun, { ...request, shot: "shot-02" }, { executor: batchBackend.executor }), /first accepted/);
+  assert.equal(batchBackend.calls.length, 0);
+  const first = await generate(batchRun, request, { executor: batchBackend.executor });
+  assert.equal(first.status, "generated");
+  for (const shot of ["shot-01", "shot-03", "unplanned"]) {
+    await assert.rejects(() => generate(batchRun, { ...request, shot }, { executor: batchBackend.executor }), /previous visual attempt|outside the accepted storyboard/);
+  }
+  assert.equal(batchBackend.calls.length, 4, "unreviewed retries, skipped shots and variations never reach the CLI");
+  const second = await generate(batchRun, { ...request, shot: "shot-02", dependencies: [first.id] }, { executor: batchBackend.executor });
+  assert.equal(second.status, "generated", "next planned shot can bind an unreviewed current video as continuity input");
+  assert.equal(batchBackend.calls.length, 8);
+  assert.equal(status(batchRun).attempts[0].review, "pending");
+  assert.equal(status(batchRun).attempts[0].aggregate_review, "pending-complete-video");
+  assert.throws(() => finalReadiness(batchRun), /motion-preview/);
+  gate(batchRun, "motion-preview", [first.id]);
+  assert.throws(() => finalReadiness(batchRun), /Review\/resolve/, "aggregate review cannot omit an unreviewed video attempt");
+  // These are record fixtures, not real playable media or creative inspection evidence.
+  fs.writeFileSync(path.join(batchRun, "complete-animation.mp4"), mp4);
+  fs.writeFileSync(path.join(batchRun, "complete-inspection.md"), "Synthetic complete-video inspection record only");
+  const complete = submit(batchRun, { gate: "motion-preview", revision: "v2", artifacts: ["complete-animation.mp4", "complete-inspection.md"], dependencies: [first.id, second.id] });
+  review(batchRun, response(complete.key));
+  assert.deepEqual(finalReadiness(batchRun).generated.map(a => a.id), [first.id, second.id]);
+  assert.deepEqual(status(batchRun).attempts.map(a => [a.review, a.aggregate_review]), [["pending", "accept"], ["pending", "accept"]], "aggregate acceptance never fabricates individual human reviews");
+  const batchClip = path.join(batchRun, `attempts/${first.id}/output.mp4`), batchBytes = fs.readFileSync(batchClip);
+  fs.writeFileSync(batchClip, "Changed generated clip");
+  assert.equal(status(batchRun).gates["motion-preview"], "stale");
+  assert.throws(() => finalReadiness(batchRun), /stale/);
+  fs.writeFileSync(batchClip, batchBytes);
+  const batchManifestPath = path.join(batchRun, "run.json"), batchManifest = read(batchManifestPath);
+  fs.writeFileSync(batchManifestPath, JSON.stringify({ ...batchManifest, video_review_mode: "per-attempt" }));
+  assert.throws(() => status(batchRun), /policy changed/);
+  fs.writeFileSync(batchManifestPath, JSON.stringify(batchManifest));
+
+  review(batchRun, { ...response(second.review_key, "reject", "Stop this synthetic sequence."), next_attempt: "stop" });
+  const stoppedAfterReview = fake();
+  await assert.rejects(() => generate(batchRun, { ...request, shot: "shot-03" }, { executor: stoppedAfterReview.executor }), /human scope/);
+  assert.equal(stoppedAfterReview.calls.length, 0, "an explicit stop overrides automatic continuation");
+  assert.equal(status(batchRun).gates["motion-preview"], "stale", "a source rejection invalidates aggregate acceptance");
+  review(batchRun, response(second.review_key));
+  await assert.rejects(() => generate(batchRun, request, { executor: stoppedAfterReview.executor }), /Continue-plan/);
+  assert.equal(stoppedAfterReview.calls.length, 0, "continue-plan does not authorize a retry or skipped order");
+
+  for (const outcome of ["failed", "blocked", "uncertain"]) {
+    const stoppedRun = fixture("complete-video"); planning(stoppedRun, ["shot-01", "shot-02"]);
+    const pending = startAttempt(stoppedRun, { type: "video", provider: "gflow", gate: "motion-preview", shot: "shot-01", prompt: "Synthetic failed request" });
+    finishAttempt(stoppedRun, pending.id, { status: outcome, note: `Synthetic ${outcome}; no creative result` });
+    const stoppedBackend = fake();
+    await assert.rejects(() => generate(stoppedRun, { ...request, shot: "shot-02" }, { executor: stoppedBackend.executor }), /previous visual attempt/);
+    assert.equal(stoppedBackend.calls.length, 0, `${outcome} never authorizes the next planned video`);
+    if (outcome !== "uncertain") {
+      gate(stoppedRun, "motion-preview", [pending.id]);
+      assert.throws(() => finalReadiness(stoppedRun), /gflow video provenance/, "failed receipts may be covered but cannot supply video provenance");
+      review(stoppedRun, response(read(path.join(stoppedRun, "workflow.json")).current[pending.id]));
+      await assert.rejects(() => generate(stoppedRun, { ...request, shot: "shot-02" }, { executor: stoppedBackend.executor }), /Continue-plan/);
+      assert.equal(stoppedBackend.calls.length, 0, "accepting a failure report does not authorize an unscoped replacement");
+    }
+  }
+  const imageBoundaryRun = fixture("complete-video"); planning(imageBoundaryRun, ["shot-01"]);
+  const unreviewedImage = startAttempt(imageBoundaryRun, { type: "image", provider: "gpt-image", gate: "frames", shot: "style", prompt: "Synthetic unreviewed image" });
+  fs.writeFileSync(path.join(imageBoundaryRun, "style.png"), "Synthetic image");
+  finishAttempt(imageBoundaryRun, unreviewedImage.id, { status: "generated", note: "Synthetic image only", artifacts: ["style.png"] });
+  assert.throws(() => startAttempt(imageBoundaryRun, { type: "video", provider: "gflow", gate: "motion-preview", shot: "shot-01", prompt: "Synthetic video" }), /previous visual attempt/, "complete-video policy never bypasses image review");
+  assert.throws(() => gate(imageBoundaryRun, "motion-preview", [unreviewedImage.id]), /prerequisite/);
+  const legacyRun = fixture(); planning(legacyRun);
+  const legacyManifestPath = path.join(legacyRun, "run.json"), legacyStatePath = path.join(legacyRun, "workflow.json");
+  const legacyManifest = read(legacyManifestPath), legacyState = read(legacyStatePath);
+  delete legacyManifest.video_review_mode; delete legacyState.video_review_mode;
+  fs.writeFileSync(legacyManifestPath, JSON.stringify(legacyManifest)); fs.writeFileSync(legacyStatePath, JSON.stringify(legacyState));
+  assert.equal(status(legacyRun).video_review_mode, "per-attempt", "existing runs without the new field retain individual review");
+
   assert.throws(() => argumentsFor({ ...request, duration: 10 }, "out", ["a"]), /duration/);
   assert.throws(() => argumentsFor({ ...request, mode: "r2v", model: "veo-quality" }, "out", ["a"]), /Reference/);
   const actualSpawn = await execute(process.execPath, ["-e", "process.stdout.write(JSON.stringify(process.argv.slice(1)))", "--", request.prompt]);
   assert.deepEqual(JSON.parse(actualSpawn.stdout), [request.prompt], "literal prompt survives real spawn without shell evaluation");
-  console.log("ok: five revision-bound gates, critique/rejection/recovery, one-attempt reviews and gflow adapter fixtures (not live Flow)");
+  console.log("ok: revision-bound gates, complete-video coverage, ordered generation, per-attempt compatibility and gflow adapter fixtures (not live Flow)");
 } finally { fs.rmSync(temp, { recursive: true, force: true }); }

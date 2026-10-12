@@ -74,13 +74,15 @@ Distinguish authored motion from proposed values filling genuine gaps.
 Route, real source assets, approved-image STYLEFRAME-SPEC paths/revisions, prompts/input assets, tooling, attempt receipts, human responses and inspection criteria.
 ```
 
-Do not impose a technical proof default before checking model/account capabilities and the human brief. Collections propose distinct concepts; they do not authorize generation past per-attempt review. Neutral exploration can omit marks/text. Use authored wording or clearly labelled demonstration wording; do not invent an approved slogan. Keep permanent motion identity with motion-identity.
+Do not impose a technical proof default before checking model/account capabilities and the human brief. Collections propose distinct concepts; they do not authorize unplanned generations or bypass the run's recorded review policy and budget. Neutral exploration can omit marks/text. Use authored wording or clearly labelled demonstration wording; do not invent an approved slogan. Keep permanent motion identity with motion-identity.
 
 ## Generation route
 
 Generate animation through [gflow](gflow-integration.md), shot by shot after the three visual planning gates. The chosen image tool supplies reviewed frames; inspect and translate them using the descriptive handoff. Carry intention, preparation, causal response, shape/identity constraints and readable recovery into prompts, without pretending descriptive physics are a simulation control.
 
 Code supports records, inspection, archiving and assembling generated clips, including cuts, agent-managed audio, static captions/text/marks and color finishing. It does not generate object animation or replace an unavailable video model. Retain all attempts and their settings, including failures, outside the public catalog.
+
+Check file integrity, decoding, native measurements and provenance per clip. In the default complete-video mode, join the planned animation and perform one creative inspection before editorial assembly and finishing; do not inspect or review clips individually. Record concrete reference principles in the edit choices. Preserve sound consistent with the brief. Verify finishing/export changes without repeating the creative pass; new generation or significant visual changes require a new complete-video revision.
 
 ## Delivery record
 
@@ -96,15 +98,15 @@ Write delivery.json only for a complete inspected film:
   ],
   "inspection": {
     "status": "inspected",
-    "method": "<actual full-film playback, frame coverage and decoding/spec checks, including limits>",
+    "method": "<one complete-animation creative inspection before finishing; targeted finishing checks and full export decoding/spec checks, including limits>",
     "findings": ["<observed narrative, continuity, constraints, sound and repairs>"]
   },
   "limitations": []
 }
 ```
 
-Use run-relative paths and reviewed gflow video source attempt IDs. New animation artifacts must be MP4 or WebM; HTML can be a moodboard/viewer, not animation production provenance. The structural checker requires four accepted planning/preview gate records and reviewed gflow source attempts. After final human decision and criticism on the exact film/QA revision, set status to accepted. Work acceptance does not approve permanent brand motion identity.
+Use run-relative paths and gflow video source attempt IDs covered by the accepted complete preview, or individually accepted under per-attempt mode. New animation artifacts must be MP4 or WebM; HTML can be a moodboard/viewer, not animation production provenance. The structural checker requires four accepted planning/preview gate records (including scoped overrides) and exact covered gflow source attempts. Preserve the human's explicit delegation to finished-film approval without inventing individual clip responses. After final human decision and criticism on the exact film/QA revision, set status to accepted. Work acceptance does not approve permanent brand motion identity.
 
-The checker validates source/profile snapshots, composition, file/record presence and review/dependency consistency. MP4 headers and declarations alone do not prove decoding, actual native specifications, visual success or editorial fidelity. Perform complete playback and technical checks separately; keep evidence and limitations precise. Schema 1–3 reference-animation runs retain their earlier preview/HTML record checks for historical reading only; create a new schema 4 run to resume this production route.
+The checker validates source/profile snapshots, composition, file/record presence and review/dependency consistency. MP4 headers and declarations alone do not prove decoding, actual native specifications, visual success or editorial fidelity. Keep the single complete-video creative inspection separate from technical checks and report its limits precisely. Schema 1–3 reference-animation runs retain their earlier preview/HTML record checks for historical reading only; create a new schema 4 run to resume this production route.
 
 When archiving is authorized, preserve all retained videos and review assets, verify names/MIME/size/destination and readback, and retain returned IDs/URLs privately. Mark superseded retained work without deleting it silently. Do not upload private source documents merely because generated media archiving was requested.

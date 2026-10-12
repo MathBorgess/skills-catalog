@@ -9,7 +9,8 @@ Source DESIGN.md path/revision/hash and authorship:
 Saved human briefing path/revision/hash:
 Composed DESIGN.md and composition.md:
 Reference profiles/revisions, source attribution and evidence levels:
-Current gate, latest reviewed visual attempt and next action:
+Current gate, latest attempt/complete-video review and next action:
+Video review policy: complete-video (default) or explicitly requested per-attempt; immutable run.json value:
 Image tool chosen by human, capabilities and decision evidence:
 Human reviewer; precise later overrides and their evidence:
 
@@ -43,6 +44,7 @@ Account/host controls observed; CLI catalog versus successful-generation evidenc
 Input modes/models/durations/reference caps actually available:
 Missing capability and its effect on the current packet:
 Numeric spending budget and observed usage, without automatic retry authority:
+Budget scope/counting rule across image/video/extension calls; attempts remaining:
 
 ## Direction, frames and shot plan
 
@@ -56,6 +58,7 @@ Spatial/depth direction when relevant; explain deliberately flat composition:
 |---|---|---|---|---|---|---|
 
 Storyboard packet/revision and continuity between shots:
+Ordered video_shots included in that packet; next authorized shot:
 
 ## Steps and generation attempts
 
@@ -65,7 +68,7 @@ Storyboard packet/revision and continuity between shots:
 | Attempt ID/shot | Tool/model requested | Exact prompt/input paths/hashes | Requested settings | Reported request/IDs | Native output/inspection | Human response/revision | Disposition |
 |---|---|---|---|---|---|---|---|
 
-Record every attempt, including failures. Review each visual attempt before the next generation. Preserve the human's next-attempt scope or stop decision, operation/download uncertainty, separate recovery steps and any explicit human decision to abandon an uncertain submission. Prompt seeds, model versions or remote settings not exposed are unknown, not invented.
+Record every attempt, including failures. Review images individually. With complete-video policy, check each generated video's file/decoding/duration/provenance, continue only to the next accepted planned shot, and inspect the whole animation once before editing/finishing. Leave individual video human responses unrecorded and bind exact attempt keys in the complete preview. Preserve any explicit per-attempt policy, next-attempt scope or stop decision. Failed, blocked or uncertain calls stop the sequence; record separate recovery steps and explicit scoped instructions before replacement. Prompt seeds, model versions or remote settings not exposed are unknown, not invented.
 
 ## Five human gate packets
 
@@ -78,6 +81,7 @@ Record every attempt, including failures. Review each visual attempt before the 
 | final | | | | | | planned |
 
 Acceptance requires decision plus criticism, including an explicit 'nothing to change'. Generic continue/silence/technical checks are not approval. Record scoped overrides separately. Link immutable spec snapshots and copied review artifacts. Preserve prior responses without attributing agent assessments to the human.
+Record explicit delegation to finished-film approval and its affected intermediate gates; do not claim the human reviewed unseen clips.
 
 ## Change and dependency log
 
@@ -87,9 +91,11 @@ Acceptance requires decision plus criticism, including an explicit 'nothing to c
 ## Assembly, inspection and archive
 
 Source clip/attempt IDs and edit decisions:
+Complete-animation preview path/hash, covered attempt keys and single creative inspection before finishing:
+Reference principle → concrete pacing/focus/recovery choice → observed effect or remaining limit:
 Agent-managed audio sources/settings, timing and findings:
 Cuts, static overlays/captions/marks and color finishing:
-Complete playback/frame coverage; actual visual findings and limits:
+Complete-video findings and limits; targeted checks of new finishing changes:
 Final decoding/spec measurements and audio checks:
 Delivery.json and final review revision:
 Authorized archive scope/destination, retained assets, returned IDs and verified readback:

@@ -29,8 +29,12 @@ const text = value => typeof value === "string" && value.trim().length > 0;
 function load(run) {
   const manifest = read(path.join(run, "run.json"));
   if (manifest.schema_version !== 4 || manifest.skill !== "co-direct-animation") throw new Error("Workflow requires a new schema 4 run; legacy runs are read-only under their earlier contract");
+  const mode = manifest.video_review_mode ?? "per-attempt";
+  if (!["complete-video", "per-attempt"].includes(mode)) throw new Error("Invalid video review mode");
   const file = path.join(run, "workflow.json");
-  return fs.existsSync(file) ? read(file) : { schema_version: 1, current: {}, packets: {}, attempts: [] };
+  const state = fs.existsSync(file) ? read(file) : { schema_version: 1, video_review_mode: mode, current: {}, packets: {}, attempts: [] };
+  if ((state.video_review_mode ?? "per-attempt") !== mode) throw new Error("Video review policy changed during an existing run; preserve its recorded policy and use scoped human overrides");
+  return state;
 }
 function change(run, action) {
   run = fs.realpathSync(run);
@@ -67,8 +71,7 @@ function effective(run, state, key, seen = new Set()) {
   seen.add(key);
   for (const d of p.dependencies) {
     if (state.current[d.id] !== d.key || !effective(run, state, d.key, new Set(seen))) return false;
-    const decision = state.packets[d.key].review?.decision;
-    if (!["accept", "override"].includes(decision)) return false;
+    if (!dependencyDecisionReady(state, p.gate, d.id)) return false;
   }
   return true;
 }
@@ -76,17 +79,31 @@ function accepted(run, state, id) {
   const key = state.current[id];
   return effective(run, state, key) && ["accept", "override"].includes(state.packets[key].review?.decision);
 }
+function dependencyDecisionReady(state, parentGate, id) {
+  const p = state.packets[state.current[id]];
+  if (["accept", "override"].includes(p?.review?.decision)) return true;
+  const a = state.attempts.find(a => a.id === id);
+  return state.video_review_mode === "complete-video" && parentGate === "motion-preview" && !p?.review &&
+    p?.kind === "attempt" && a?.request.type === "video" && ["generated", "blocked", "failed"].includes(a.status);
+}
+function dependencyReady(run, state, gate, id) {
+  return effective(run, state, state.current[id]) && dependencyDecisionReady(state, gate, id);
+}
 function dependencies(run, state, gate, extra = []) {
   const index = gateIndex(gate);
   const ids = [...new Set([...(index ? [`gate-${gates[index - 1]}`] : []), ...extra])];
   return ids.map(id => {
-    if (!accepted(run, state, id)) throw new Error(`Pending or stale prerequisite: ${id}`);
+    if (!dependencyReady(run, state, gate, id)) throw new Error(`Pending or stale prerequisite: ${id}`);
     return { id, key: state.current[id] };
   });
 }
 function packet(run, state, input) {
   if (!/^[a-z0-9][a-z0-9-]*$/.test(input.id) || !text(input.revision)) throw new Error("Packet needs stable id and revision");
   gateIndex(input.gate);
+  if (input.kind !== "attempt" && input.gate === "storyboard" && state.video_review_mode === "complete-video" &&
+      (!Array.isArray(input.video_shots) || !input.video_shots.length || input.video_shots.some(s => !text(s)) || new Set(input.video_shots).size !== input.video_shots.length)) {
+    throw new Error("Complete-video storyboard needs ordered, distinct video_shots");
+  }
   if (!Array.isArray(input.artifacts) || !input.artifacts.length) throw new Error("Packet needs concrete artifacts");
   const spec = inside(run, "TO-SPEC.md");
   if (!fs.existsSync(spec) || !fs.readFileSync(spec, "utf8").trim()) throw new Error("Write external TO-SPEC.md first");
@@ -97,6 +114,7 @@ function packet(run, state, input) {
   });
   const base = { id: input.id, revision: input.revision, gate: input.gate, kind: input.kind ?? "gate", artifacts: sources,
     dependencies: input.dependencyRecords ?? dependencies(run, state, input.gate, input.dependencies), spec_sha256: sha(fs.readFileSync(spec)) };
+  if (input.video_shots) base.video_shots = input.video_shots;
   const key = sha(JSON.stringify(base));
   if (state.packets[key]) { state.current[base.id] = key; return { key, ...state.packets[key] }; }
   const dir = inside(run, `reviews/${input.id}/${key}`);
@@ -151,13 +169,30 @@ export function startAttempt(run, request) {
       if (request.provider !== "gflow" || request.gate !== "motion-preview") throw new Error("Video generation requires gflow after storyboard review");
     } else if (request.type !== "image" || !["moodboard", "frames", "storyboard"].includes(request.gate)) throw new Error("Unsupported visual attempt type/gate");
     const deps = dependencies(run, state, request.gate, request.dependencies);
+    const videoPlan = state.packets[state.current["gate-storyboard"]]?.video_shots;
+    if (request.type === "video" && state.video_review_mode === "complete-video") {
+      if (!videoPlan?.includes(request.shot)) throw new Error("Video shot is outside the accepted storyboard video_shots");
+      const storyboardKey = state.current["gate-storyboard"];
+      const planned = state.attempts.filter(a => a.request.type === "video" && a.dependencies.some(d => d.id === "gate-storyboard" && d.key === storyboardKey));
+      if (!planned.length && request.shot !== videoPlan[0]) throw new Error("Start with the first accepted video shot");
+    }
     const last = state.attempts.at(-1);
     if (last) {
       const key = state.current[last.id], p = state.packets[key];
-      if (!intact(run, p, key) || !p?.review) throw new Error(`Review the previous visual attempt first: ${last.id}`);
-      if (last.status === "uncertain" && !(p.review.decision === "override" && p.review.waive.includes("uncertain-submission"))) throw new Error("Recover uncertain submission before replacement; explicit scoped human override required to abandon it");
-      const next = p.review.next_attempt;
-      if (next === "stop" || (next !== "continue-plan" && (next?.gate !== request.gate || next?.shot !== request.shot))) throw new Error("Next visual attempt is outside the recorded human scope");
+      if (!intact(run, p, key)) throw new Error(`Review the previous visual attempt first: ${last.id}`);
+      if (!p.review) {
+        const following = state.video_review_mode === "complete-video" && request.type === "video" && last.request.type === "video" &&
+          last.status === "generated" && effective(run, state, key) && videoPlan[videoPlan.indexOf(last.request.shot) + 1] === request.shot;
+        if (!following) throw new Error(`Review the previous visual attempt first: ${last.id}; only the next planned video shot may proceed without individual review`);
+      } else {
+        if (last.status === "uncertain" && !(p.review.decision === "override" && p.review.waive.includes("uncertain-submission"))) throw new Error("Recover uncertain submission before replacement; explicit scoped human override required to abandon it");
+        const next = p.review.next_attempt;
+        if (next === "stop" || (next !== "continue-plan" && (next?.gate !== request.gate || next?.shot !== request.shot))) throw new Error("Next visual attempt is outside the recorded human scope");
+        if (state.video_review_mode === "complete-video" && request.type === "video" && last.request.type === "video" && next === "continue-plan" &&
+            (last.status !== "generated" || videoPlan[videoPlan.indexOf(last.request.shot) + 1] !== request.shot)) {
+          throw new Error("Continue-plan permits only the next successful planned video shot; replacement needs a scoped human instruction");
+        }
+      }
     }
     const id = `attempt-${String(state.attempts.length + 1).padStart(4, "0")}`;
     const dir = inside(run, `attempts/${id}`);
@@ -170,7 +205,7 @@ export function startAttempt(run, request) {
     });
     fs.mkdirSync(path.join(dir, "inputs"), { recursive: true });
     for (const input of inputs) fs.copyFileSync(inside(run, input.path), inside(run, input.snapshot));
-    const record = { id, status: "started", request: { ...request, inputs }, dependencies: deps, created_at: new Date().toISOString() };
+    const record = { id, status: "started", video_review_mode: state.video_review_mode ?? "per-attempt", request: { ...request, inputs }, dependencies: deps, created_at: new Date().toISOString() };
     fs.copyFileSync(inside(run, "TO-SPEC.md"), path.join(dir, "TO-SPEC.md"));
     write(path.join(dir, "request.json"), record);
     record.request_sha256 = sha(fs.readFileSync(path.join(dir, "request.json")));
@@ -187,7 +222,7 @@ export function verifyAttempt(run, id, { prerequisites = false } = {}) {
     const target = inside(run, file);
     if (!fs.existsSync(target) || sha(fs.readFileSync(target)) !== expected) throw new Error(`Attempt receipt/input changed: ${file}`);
   }
-  if (prerequisites && a.dependencies.some(d => state.current[d.id] !== d.key || !accepted(run, state, d.id))) throw new Error("Attempt prerequisites changed before submission");
+  if (prerequisites && a.dependencies.some(d => state.current[d.id] !== d.key || !dependencyReady(run, state, a.request.gate, d.id))) throw new Error("Attempt prerequisites changed before submission");
   return a;
 }
 export function finishAttempt(run, id, outcome) {
@@ -214,16 +249,21 @@ export function finishAttempt(run, id, outcome) {
 }
 export function status(run) {
   const state = load(run);
-  return { gates: Object.fromEntries(gates.map(g => {
+  const preview = state.packets[state.current["gate-motion-preview"]];
+  return { video_review_mode: state.video_review_mode ?? "per-attempt", gates: Object.fromEntries(gates.map(g => {
     const id = `gate-${g}`, key = state.current[id], p = state.packets[key];
     return [g, !p ? "planned" : !effective(run, state, key) ? "stale" : p.review?.decision ?? "pending"];
-  })), attempts: state.attempts.map(a => ({ id: a.id, status: a.status, key: state.current[a.id], validity: !state.current[a.id] ? "unfinished" : effective(run, state, state.current[a.id]) ? "current" : "stale", review: state.packets[state.current[a.id]]?.review?.decision ?? "pending" })) };
+  })), attempts: state.attempts.map(a => ({ id: a.id, status: a.status, key: state.current[a.id], validity: !state.current[a.id] ? "unfinished" : effective(run, state, state.current[a.id]) ? "current" : "stale", review: state.packets[state.current[a.id]]?.review?.decision ?? "pending", aggregate_review: state.video_review_mode === "complete-video" && a.request.type === "video" ? (accepted(run, state, "gate-motion-preview") && preview.dependencies.some(d => d.id === a.id && d.key === state.current[a.id]) ? preview.review.decision : "pending-complete-video") : null })) };
 }
 export function finalReadiness(run) {
   const state = load(run);
   for (const g of gates.slice(0, 4)) if (!accepted(run, state, `gate-${g}`)) throw new Error(`Pending or stale gate: ${g}`);
-  if (state.attempts.some(a => !state.packets[state.current[a.id]]?.review || a.status === "started" || (a.status === "uncertain" && !state.packets[state.current[a.id]].review?.waive?.includes("uncertain-submission")))) throw new Error("Review/resolve visual attempts before final delivery");
-  const generated = state.attempts.filter(a => a.request.type === "video" && a.request.provider === "gflow" && a.status === "generated" && accepted(run, state, a.id));
+  const preview = state.packets[state.current["gate-motion-preview"]];
+  const covered = a => state.video_review_mode === "complete-video" && a.request.type === "video" &&
+    ["generated", "blocked", "failed"].includes(a.status) && effective(run, state, state.current[a.id]) &&
+    preview.dependencies.some(d => d.id === a.id && d.key === state.current[a.id]);
+  if (state.attempts.some(a => (!state.packets[state.current[a.id]]?.review && !covered(a)) || a.status === "started" || (a.status === "uncertain" && !state.packets[state.current[a.id]]?.review?.waive?.includes("uncertain-submission")))) throw new Error("Review/resolve visual attempts before final delivery");
+  const generated = state.attempts.filter(a => a.request.type === "video" && a.request.provider === "gflow" && a.status === "generated" && (accepted(run, state, a.id) || covered(a)));
   if (!generated.length) throw new Error("Delivery needs reviewed gflow video provenance");
   return { generated, previewPacket: state.packets[state.current["gate-motion-preview"]], finalPacket: state.packets[state.current["gate-final"]], final: accepted(run, state, "gate-final") ? "accepted-record" : "pending-human-review" };
 }

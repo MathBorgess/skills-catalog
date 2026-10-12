@@ -8,6 +8,14 @@ Mindful Movement treats objects as performers with intention, an emotional pivot
 
 Apple fluid design, Disney's animation principles and LottieFiles motion design are the default external profiles. LottieFiles contributes a full distillation plus all 17 original Markdown documents (1,628 lines), pinned coverage hashes and its MIT license. UI timing, attention rules, spring units and performance claims are explicitly adapted for spatial films. These are documented practices, not measured outcomes for a new work. Additional documented, observed or measured references use the same registry schema without changing the composing workflow. A one-off registry is accepted separately from the installed skill.
 
+## Production workflow
+
+Every work starts with an external `TO-SPEC.md` describing the film and execution plan before visual production. The original DESIGN.md retains authorship; the temporary composed DESIGN.md follows the current spec. Four review packets progress from script/moodboard to animatic/styleframes, full low-resolution film and final delivery. Exploration/refinement remain authorship stages, independent of those gates.
+
+The default hybrid styleframe route uses image models for direction and the production renderer for the hardest-frame proof. Every approved image receives an external `STYLEFRAME-SPEC.md` with objective, composition, inventory, materials, lighting, camera, must-have content and exclusions. The render-writing model receives the actual image plus this description; observations and implementation hypotheses are kept distinct. Image approval, narrative timing and production feasibility are separate recorded decisions inside gate 2.
+
+The workflow records review owners, persistent delegation, exact submitted revisions and affected dependencies. It repairs technical defects without repeated permission and only reopens gates affected by changes. The four gates come from the requested production process; they do not require a fifth approval for writing an image description. The existing structural script does not enforce these gates or verify creative acceptance. Stage-only deliveries report their actual scope. Requested archives include all retained experiment videos, including animatics, tests, low-resolution and finals.
+
 ## Layout migration
 
 The catalog now stores operators under `skills/engineering/` and `skills/creativity/`, and shipped experiment skills under `skills/experiments/`. Unshipped trials remain in `docs/experiments/`. The leaf folder remains the skill name used for invocation and installation. README.md remains the sole catalog index; the plugin manifest contains explicit categorized paths.

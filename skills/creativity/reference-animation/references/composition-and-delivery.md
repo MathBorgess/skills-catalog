@@ -1,5 +1,11 @@
 # Composition and delivery
 
+## Production contract
+
+Follow [the four-gate production workflow](production-workflow.md). Before producing visuals, write the external `TO-SPEC.md` from [its template](to-spec-template.md); it describes this film and guides its plan. Link the current spec revision in `## Work brief` below. Update the composition when accepted spec decisions change. Approved model images require external descriptive handoffs under [styleframe handoff](styleframe-handoff.md). Keep project specs, images and decisions outside the public catalog.
+
+The structural checker retains its existing scope: it does not verify gate approval or to-spec completeness. For gates 1/2, deliver their stage artifacts without manufacturing a final `delivery.json`; run the final delivery check when a complete playable delivery package exists.
+
 ## Stage and author precedence
 
 Read [spatial collections](spatial-collections.md). New runs use schema 3 and explicitly select `exploration` (default) or `refinement`. Exploration optimizes the scene’s content, dynamics and depth; record styling deferred by the author. Refinement applies author choices to selected studies without flattening their central idea. Preserve source authorship in both stages.
@@ -17,7 +23,7 @@ Use the following headings in `composition.md`; body text follows the user's lan
 Status: preview; not approved as a brand identity.
 
 ## Work brief
-Stage, subject, audience, message, dimensions, duration, FPS and destination.
+Current TO-SPEC path/revision, production gate, stage, subject, audience, message, dimensions, duration, FPS and destination.
 In refinement, identify the selected exploration run and studies.
 Identify reversible proof defaults and separate them from brand tokens.
 
@@ -65,7 +71,7 @@ Shots/key poses, timing, transitions, camera, image continuity and sound.
 Distinguish authored motion from proposed values filling genuine gaps.
 
 ## Generation and inspection
-Route, real source assets, prompts/code, tooling and inspection criteria.
+Route, real source assets, approved-image STYLEFRAME-SPEC paths/revisions, prompts/code, tooling and inspection criteria.
 ```
 
 For a validation request without a production brief, default to an eight-second silent landscape proof per study, 1280×720 at 30 FPS. For a requested collection, use three distinct studies unless specified otherwise. Neutral exploration may omit text and marks. If wording is used, use existing brand wording or a clearly labelled demonstration line; do not invent an approved slogan or product claim. The caller can override every proof setting. Do not invoke `motion-identity` to rewrite the brand as part of creating this work.
@@ -98,4 +104,4 @@ Write `delivery.json` in the run after inspection:
 
 Use run-relative paths. An animation artifact is playable HTML, MP4, WebM or GIF. A still frame alone does not satisfy generation. Keep private client/brand inputs and validation outputs outside this public catalog; only generic instructions and synthetic test fixtures belong here. `compose.mjs check` establishes provenance and file/record presence; it cannot judge style, read pixels, decode a video or prove playback. Perform those checks with actual rendering tools and human-facing evidence.
 
-When video archiving is requested, use the authorized account and destination. Verify uploaded names, MIME, size and folder readback, retaining returned IDs/URLs in the private run. Archive all retained final experiments; mark superseded exports clearly if they are also retained.
+When video archiving is requested, use the authorized account and destination. Verify uploaded names, MIME, size and folder readback, retaining returned IDs/URLs in the private run. Archive all retained experiment videos, including animatics, technique tests, low-resolution and final versions; mark superseded exports clearly if they are also retained.

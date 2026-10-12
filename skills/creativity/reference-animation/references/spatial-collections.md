@@ -2,6 +2,8 @@
 
 Build an interesting change of state before applying brand polish. Exploration produces several distinct scenes whose appeal comes from relationships, material and spatial transformation. A collection is not the same choreography recolored three times. Default to three short studies when the user requests a collection without a count; vary material, spatial organization and energy transfer.
 
+Follow [the production workflow](production-workflow.md) and external TO-SPEC for small validation deliveries. Proposed collection size is not authorization to render every study to completion: advance selected studies through the agreed gates.
+
 ## Two stages, one source
 
 `exploration` prioritizes content, dynamics and space. Keep the source DESIGN.md and its authorship intact, identify retained constraints, and record which styling decisions the author explicitly defers. Use neutral working forms and temporary aesthetic choices where authorized. A source snapshot is provenance, not proof of brand compliance. Never claim that exploration conforms to every token when refinement was postponed.

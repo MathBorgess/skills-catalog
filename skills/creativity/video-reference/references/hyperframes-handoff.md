@@ -1,5 +1,7 @@
 # HyperFrames handoff
 
+Load [production MANDATES](production-mandates.md) and include project-local `MANDATES.md` with any recovered context. The packet targets HyperFrames. Preserve all production rules alongside its timing and dependency data.
+
 Deliver a pinned direction packet with selected events, relationships, evidence, coverage and unknowns. Keep all behavior detail needed to rebuild the reference: typography, graphical construction, motion, audio and narrative correspondence. A markdown summary alone is insufficient when the structured events contain important timing.
 
 The editor maps confirmed intent to BRIEF.md, scene order to STORYBOARD.md, appearance to frame.md and behavior to compositions. Use current installed HyperFrames contracts during production. Do not generate an apparently approved BRIEF before HyperFrames initialization: that file acts as a no-repeat signal for its interview. Unknown creative choices remain open.

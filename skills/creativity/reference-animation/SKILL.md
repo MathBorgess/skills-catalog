@@ -3,7 +3,7 @@ name: reference-animation
 description: "Use when the user wants animations or dynamic spatial collections from design references: 'animação com referência', 'Apple e Disney', 'mindful movement', 'motion-design-skill', 'objetos elásticos', 'ambiente 3D vivo', 'explorar antes de refinar', 'temporary DESIGN.md for animation', 'to-spec', 'animatic e styleframes', or 'gates de validação'. Composes intentional objects, physical relationships and depth; generates and inspects studies, then refines selected work toward the author's DESIGN.md. Not for defining durable brand motion identity; motion-identity owns that job."
 metadata:
   author: Matheus Borges
-  version: 0.0.0
+  version: 1.0.0
 ---
 
 # Reference Animation

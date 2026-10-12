@@ -8,10 +8,12 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const bundledRegistry = path.resolve(here, "../references/registry.json");
+const movementGuide = path.resolve(here, "../references/mindful-movement.md");
 const hash = (value) => createHash("sha256").update(value).digest("hex");
 const readJSON = (file) => JSON.parse(fs.readFileSync(file, "utf8"));
 const writeJSON = (file, value) => fs.writeFileSync(file, JSON.stringify(value, null, 2) + "\n");
-export const headings = ["Reference composition", "Work brief", "Author invariants", "Base to authorship", "Expected result", "Animation plan", "Generation and inspection"];
+export const headings = ["Reference composition", "Work brief", "Author invariants", "Author overrides", "Base to authorship", "Expected result", "Object cast", "Motion score", "Animation plan", "Generation and inspection"];
+const legacyHeadings = headings.filter((h) => !["Author overrides", "Object cast", "Motion score"].includes(h));
 
 function inside(root, relative) {
   if (typeof relative !== "string" || !relative || path.isAbsolute(relative)) throw new Error("Expected a relative path");
@@ -52,12 +54,16 @@ export function newRun({ design, references = ["apple-fluid", "disney-principles
   const bytes = fs.readFileSync(source);
   if (!bytes.length) throw new Error("Source design is empty");
   const selected = selectReferences(path.resolve(registry), references);
+  const guideline = fs.readFileSync(movementGuide);
   const run = fs.mkdtempSync(path.join(tempRoot, "reference-animation-"));
   fs.mkdirSync(path.join(run, "references"));
+  fs.mkdirSync(path.join(run, "guidelines"));
+  fs.writeFileSync(path.join(run, "guidelines/mindful-movement.md"), guideline);
   const manifest = {
-    schema_version: 1, skill: "reference-animation", status: "draft",
+    schema_version: 2, skill: "reference-animation", status: "draft",
     created: new Date().toISOString(), source_design: source,
     source_asset_base: path.dirname(source), source_sha256: hash(bytes),
+    movement_guideline: { id: "mindful-movement", origin: "creative-brief", revision: "2026-10-12", snapshot: "guidelines/mindful-movement.md", sha256: hash(guideline) },
     references: selected.map(({ bytes: profile, ...entry }) => {
       const snapshot = `references/${entry.id}.md`;
       fs.writeFileSync(path.join(run, snapshot), profile);
@@ -72,18 +78,22 @@ export function newRun({ design, references = ["apple-fluid", "disney-principles
 
 function provenance(run) {
   const manifest = readJSON(path.join(run, "run.json"));
-  if (manifest.schema_version !== 1 || manifest.skill !== "reference-animation") throw new Error("Unsupported run");
+  if (![1, 2].includes(manifest.schema_version) || manifest.skill !== "reference-animation") throw new Error("Unsupported run");
   const snapshot = fs.readFileSync(path.join(run, "SOURCE-DESIGN.md"));
   if (hash(snapshot) !== manifest.source_sha256) throw new Error("Source snapshot changed");
   if (hash(fs.readFileSync(manifest.source_design)) !== manifest.source_sha256) throw new Error("Original design changed; create a new run from the current source");
   for (const ref of manifest.references) {
     if (hash(fs.readFileSync(inside(run, ref.snapshot))) !== ref.profile_sha256) throw new Error(`Reference snapshot changed: ${ref.id}`);
   }
+  if (manifest.schema_version === 2) {
+    const guide = manifest.movement_guideline;
+    if (guide?.id !== "mindful-movement" || hash(fs.readFileSync(inside(run, guide.snapshot))) !== guide.sha256) throw new Error("Mindful Movement guideline missing or changed");
+  }
   return { manifest, snapshot };
 }
 
-function checkProposal(text) {
-  for (const heading of headings) {
+function checkProposal(text, schemaVersion) {
+  for (const heading of schemaVersion === 1 ? legacyHeadings : headings) {
     const parts = text.split(`## ${heading}\n`);
     if (parts.length !== 2 || !parts[1].split(/\n## /)[0].trim()) throw new Error(`Missing or empty composition section: ${heading}`);
   }
@@ -93,7 +103,7 @@ export function compose(run, proposal) {
   run = fs.realpathSync(run);
   const { manifest, snapshot } = provenance(run);
   const text = fs.readFileSync(proposal, "utf8").replace(/\r\n/g, "\n");
-  checkProposal(text);
+  checkProposal(text, manifest.schema_version);
   const working = Buffer.concat([snapshot, Buffer.from("\n\n<!-- Work-specific reference composition; original above is authoritative. -->\n\n" + text)]);
   fs.writeFileSync(path.join(run, "DESIGN.md"), working);
   manifest.status = "composed";
@@ -112,7 +122,7 @@ export function check(run) {
   if (!manifest.design_sha256 || hash(design) !== manifest.design_sha256) throw new Error("Working design changed; compose it again");
   const proposal = fs.readFileSync(path.join(run, "composition.md"), "utf8");
   if (hash(proposal) !== manifest.composition_sha256) throw new Error("Composition changed; compose it again");
-  checkProposal(proposal);
+  checkProposal(proposal, manifest.schema_version);
   const delivery = readJSON(path.join(run, "delivery.json"));
   if (delivery.status !== "preview") throw new Error("This workflow delivers a preview, not brand approval");
   if (!Array.isArray(delivery.artifacts) || !delivery.artifacts.length) throw new Error("No delivery artifacts");

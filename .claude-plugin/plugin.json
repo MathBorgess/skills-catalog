@@ -1,6 +1,6 @@
 {
   "name": "skills-catalog",
-  "version": "3.0.0",
+  "version": "3.0.1",
   "description": "Agent skills organized into engineering, creativity and experiments, including animation composed from references while preserving the author's DESIGN.md.",
   "author": {
     "name": "Matheus Borges",
@@ -35,6 +35,7 @@
     "./skills/creativity/motion-identity",
     "./skills/creativity/easy-to-read",
     "./skills/creativity/prettify",
-    "./skills/creativity/co-direct-animation"
+    "./skills/creativity/co-direct-animation",
+    "./skills/creativity/video-reference"
   ]
 }

@@ -1,0 +1,3 @@
+interface:
+  display_name: "Video Reference"
+  short_description: "Distill local video references into layered HyperFrames direction"

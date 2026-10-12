@@ -62,7 +62,7 @@ Example curves from the source: smooth `(0.4,0,0.2,1)`, decisive `(0.2,0,0,1)`, 
 
 Material seeds: rigid/heavy bodies recover without rubber bounce; elastic bodies compress/recoil; fluid bodies lag and flow; paper bends along structure; gas disperses; glass retains rigidity. Upstream multipliers (metal 1.2×, rubber .8×, fluid 1.5×, paper 1×, gas 2×, glass .9×) illustrate contrast, not physics. In 3D, derive shadows from geometry/light; do not arbitrarily delay a cast shadow by 50 ms just because a UI recipe does.
 
-Choose a primary expressive property and only useful secondary ones. Position carries relations; scale suggests proximity/emphasis; rotation reveals orientation; opacity controls visibility; color carries context. Depth additionally needs a consistent projection, occlusion, light and ground/contact cues. Prefer transform/opacity for DOM animation; WebGL geometry/materials have different budgets. “GPU” never means unlimited objects or guaranteed frame rate. Measure the actual scene/device and separate offline export speed from interactive playback performance.
+Choose a primary expressive property and only useful secondary ones. Position carries relations; scale suggests proximity/emphasis; rotation reveals orientation; opacity controls visibility; color carries context. Depth additionally needs a consistent projection, occlusion, light and ground/contact cues. Upstream DOM/WebGL performance advice is reference data, not this workflow’s production route. Inspect actual generated motion and export/playback quality; do not substitute code animation.
 
 ## Pattern library translated
 
@@ -84,7 +84,7 @@ Adapt to destination and repetition: a frequently used control needs fast, restr
 
 Provide pause/replay/seek and a static or simple nonspatial reduced-motion presentation for interactive work. Suppress automatic spatial loops under reduced motion. Do not encode meaning solely in movement or color. Inspect readable silhouettes at final output size, continuity, anticipation, energy transfer, follow-through, resolution, performance and accessibility.
 
-Diagnose before adding effects: robotic → inspect timing/path/overlap; sluggish → shorten waiting and recovery; jarring → repair continuity and missing preparation; flat → inspect layers, occlusion and light; distracting → reduce competing events; generic → strengthen material and narrative; inconsistent → align related behaviors; dropped frames → profile geometry, painting, filters and overdraw. “More bounce” is not a universal repair.
+Diagnose before adding effects: robotic → inspect timing/path/overlap; sluggish → shorten waiting and recovery; jarring → repair continuity and missing preparation; flat → inspect layers, occlusion and light; distracting → reduce competing events; generic → strengthen material and narrative; inconsistent → align related behaviors; dropped frames → inspect decoded export timing and playback. “More bounce” is not a universal repair.
 
 ## Coverage map
 

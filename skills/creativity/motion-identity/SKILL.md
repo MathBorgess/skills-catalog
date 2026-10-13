@@ -1,9 +1,9 @@
 ---
 name: motion-identity
-description: "Use when the user wants to create, grill or evolve a brand's motion identity — how its videos move — inside the brand's DESIGN.md (or frame.md / design.md), so that HyperFrames videos and explain-me videos come out with the same captivating motion graphics: 'motion identity', 'motion graphics da marca', 'como a marca se move', 'quero vídeos que brilhem os olhos', 'deixa o vídeo mais dinâmico / encantador', 'princípios Disney', 'easing da marca', 'movimento no DESIGN.md', 'prepara o DESIGN.md para vídeo'; also when feedback on a finished video is about how things move ('muito quicado', 'saída lenta', 'too bouncy', 'feels flat'). Runs a grilling round by round, writes the motion keys and prose the video tools read, renders a short proof the owner approves by watching, and prints the block for a HyperFrames BRIEF.md. Not for making the video itself (HyperFrames or explain-me do that), nor for palette or type work with no motion in it."
+description: "Use when the user wants to create, grill or evolve a brand's motion identity — how its videos move — inside the brand's DESIGN.md (or frame.md / design.md), so that Remotion videos and explain-me videos come out with the same captivating motion graphics: 'motion identity', 'motion graphics da marca', 'como a marca se move', 'quero vídeos que brilhem os olhos', 'deixa o vídeo mais dinâmico / encantador', 'princípios Disney', 'easing da marca', 'movimento no DESIGN.md', 'prepara o DESIGN.md para vídeo'; also when feedback on a finished video is about how things move ('muito quicado', 'saída lenta', 'too bouncy', 'feels flat'). Runs a grilling round by round, writes the motion keys and prose the video tools read, renders a short proof the owner approves by watching, and prints the block for a Remotion REVIEW.md. Not for making the video itself (Remotion or explain-me do that), nor for palette or type work with no motion in it."
 metadata:
   author: Matheus Borges
-  version: 1.0.0
+  version: 2.0.0
 ---
 
 # Motion Identity
@@ -32,7 +32,7 @@ Build the motion layer of a brand spec, the **motion identity**, through a grill
 5. **Check.** Run `motion.mjs check <spec>` until it reports no error. If explain-me sits beside this skill, also run `explain.mjs design check <spec>`.
 6. **Prove it in motion.** Run `motion.mjs proof <spec> --text "<2 to 4 big words in the brand's voice>" --lang <tag> --orientation <the brand's main channel>`. Add `--signature <file.js>` to play the brand's own move (rules in [`references/delivery.md`](references/delivery.md)). Open every frame in `frames/`, the contact sheet and the video. Fix the spec or the signature and run the proof again when a word is cut, text overlaps, an ease reads wrong or the frame is empty. Then show the owner the sheet and the video. If the proof cannot render (no network, no browser), say so plainly and keep the status `draft`.
 7. **Approve or evolve.** When the owner approves what they watched, set `**Status:** approved on AAAA-MM-DD by <role>`. Feedback goes back to the round that owns it (the symptom table in [`references/grilling-rounds.md`](references/grilling-rounds.md)): propose the diff, apply it after a yes, and prove again. Feedback on a finished video changes the spec, never that video's code.
-8. **Hand off.** Run `motion.mjs brief <spec>` and give the block to whoever runs HyperFrames: it goes into the notes of `BRIEF.md`. Say how each tool reads the spec ([`references/delivery.md`](references/delivery.md)). explain-me takes `--design <spec>`. A HyperFrames project gets the spec at its root as a link, never a copy. `talking-head-recut` and `embedded-captions` hear the brand only through the brief.
+8. **Hand off.** Run `motion.mjs brief <spec>` and give the block to whoever runs Remotion: it goes into `REVIEW.md`. Say how each tool reads the spec ([`references/delivery.md`](references/delivery.md)). explain-me takes `--design <spec>`. The agent reads the linked spec and applies it in React; Remotion does not discover Markdown automatically.
 
 ## Done-check
 
@@ -43,4 +43,4 @@ Build the motion layer of a brand spec, the **motion identity**, through a grill
 - [ ] You opened every proof frame, the sheet and the video before the owner saw them. Or the delivery says why no proof rendered, and the status is `draft`.
 - [ ] The status is `approved` only after the owner watched the proof.
 - [ ] The Motion Gate is untouched: no `gate: off`, and `maxStaticSec` is above 0.
-- [ ] The delivery gives the brief block and how explain-me, HyperFrames and the footage skills each read the spec.
+- [ ] The delivery gives the brief block and how explain-me and the Remotion editor agent read and apply the spec.

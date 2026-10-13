@@ -8,7 +8,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { parse as parseYaml, YamlError } from "./yaml.mjs";
 
-// Same precedence HyperFrames and explain-me use to find a project's brand spec.
+// Same precedence Remotion and explain-me use to find a project's brand spec.
 export const PROJECT_SPEC_NAMES = ["frame.md", "design.md", "DESIGN.md"];
 export const KIT_PRIMITIVES = ["draw", "write", "morph", "move", "camera", "indicate", "count", "grow", "fade"];
 export const MOTION_PERSONALITIES = ["playful", "premium", "corporate", "energetic"];
@@ -272,7 +272,7 @@ export function checkIdentity(spec) {
   if (!section(body, "motion identity")) err("## Motion identity", "is missing: the intent, the principles in use and refused, kinetic type and the never-list");
   else if (!identityStatus(body)) err("## Motion identity", "needs a status line: **Status:** draft (why) or **Status:** approved on AAAA-MM-DD by <role>");
   const brief = briefLines(body);
-  if (!brief) err("## Brief block", `is missing: at most ${BRIEF_MAX_LINES} lines for a HyperFrames BRIEF.md`);
+  if (!brief) err("## Brief block", `is missing: at most ${BRIEF_MAX_LINES} lines for a Remotion REVIEW.md`);
   else if (brief.length > BRIEF_MAX_LINES) err("## Brief block", `has ${brief.length} lines; keep it to ${BRIEF_MAX_LINES}`);
   else if (brief.length === 0) err("## Brief block", "is empty");
   const allowed = new Set([...KIT_PRIMITIVES, "at"]);

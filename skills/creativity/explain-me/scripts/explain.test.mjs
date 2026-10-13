@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Tests for the explain-me driver. Run: node skills/creativity/explain-me/scripts/explain.test.mjs
-// No network and no HyperFrames calls: resolution is tested with injected fakes, the voice flow
+// No network and no Remotion calls: resolution is tested with injected fakes, the voice flow
 // with a fake synthesizer, the CLI with an empty PATH.
 
 import { spawnSync } from "node:child_process";
@@ -11,9 +11,9 @@ import { fileURLToPath } from "node:url";
 import { AMBIENT_LEVELS, EASE_ROLES, KIT_PRIMITIVES, MOTION_PERSONALITIES, deepMerge, diffOverrides, findProjectSpec, hasAmbient, isGsapEase, loadSpec, mergeProse, motionIdentityLine, resolveDesign, splitFrontmatter, splitSections, tokensCss, validateSpec } from "./lib/design.mjs";
 import { SLUG_RE, resolveRun, runStamp, skillHome, slugify, venvPython } from "./lib/home.mjs";
 import { commandLine, quoteArg, scriptRef } from "./lib/hints.mjs";
-import { firstJsonObject, hfEnv, lastJsonObject, summarizeCheck } from "./lib/hyperframes.mjs";
+import { firstJsonObject, hfEnv, lastJsonObject, summarizeCheck, synthesizeBeat } from "./lib/remotion.mjs";
 import { DEFAULT_LAYOUT, FRAME_SIZES, frameSize, normalizeOrientation, resolveLayout, runOrientation } from "./lib/orientation.mjs";
-import { compareSemver, espeakInstallHint, findNpxCacheCopies, findOnPath, inspectEspeak, resolveEspeak, resolveHyperframes, resolvePython } from "./lib/resolve.mjs";
+import { compareSemver, espeakInstallHint, findNpxCacheCopies, findOnPath, inspectEspeak, resolveEspeak, resolveRemotion, resolvePython } from "./lib/resolve.mjs";
 import { createRun, explanationLanguage, projectHash, readRun, appendMetrics, refreshDesign, scriptStaleness, sha256, starterExplanation, writeStarterExplanation } from "./lib/run.mjs";
 import { AUDIO_END, AUDIO_START, applyOrientation, audioTags, buildExplainData, buildMotionJson, buildSrt, buildTimeline, entranceFrameTime, estimateDuration, formatSrtTime, frameTime, htmlLangTag, inspectionFrames, kokoroLang, lintLang, motionWindowEnd, hasTokensRegion, rewriteAudioRegion, rewriteComposition, rewriteHtmlLang, rewriteRootDuration, rewriteRootSize, rewriteStagePlaceholder, rewriteTokensRegion, stageFrameMismatch, validateScript, voiceFor, wavDurationSec, wrapCaption } from "./lib/timeline.mjs";
 import { runVoice } from "./lib/voice.mjs";
@@ -498,9 +498,9 @@ assert("srt: a word longer than the width is cut", wrapCaption("a".repeat(100)).
   assertEq("motion.json: the window does not move with the tail (a longer tail changes nothing)", [motionWindowEnd(withTail), motionWindowEnd(withTail)], [7.25, 7.25]);
   assertEq("motion.json: the last beat is the one that counts, whatever the order of the list", motionWindowEnd([withTail[1], withTail[0]]), 7.25);
   assertEq("motion.json: duration is rounded to the millisecond", motionWindowEnd([{ id: "b01", start: 0.5, end: 3.4870000001 }]), 3.487);
-  assert("motion.json: no beats means no duration key (HyperFrames then uses the composition's length)", !("duration" in buildMotionJson([], { maxStaticSec: 2 })) && motionWindowEnd([]) === null);
+  assert("motion.json: no beats means no duration key (Remotion then uses the composition's length)", !("duration" in buildMotionJson([], { maxStaticSec: 2 })) && motionWindowEnd([]) === null);
   assert("motion.json: a beat without a usable end is ignored, and a list of them gives no duration", motionWindowEnd([{ id: "b01", start: 0.5 }, { id: "b02", start: 1, end: NaN }]) === null && motionWindowEnd([{ id: "b01", start: 0.5 }, { id: "b02", start: 1, end: 4 }]) === 4);
-  assert("motion.json: HyperFrames takes a positive finite duration, and every duration built here is one", [withTail, [{ id: "b01", start: 0.5, end: 1.5 }]].every((bs) => { const d = buildMotionJson(bs, {}).duration; return Number.isFinite(d) && d > 0; }));
+  assert("motion.json: Remotion takes a positive finite duration, and every duration built here is one", [withTail, [{ id: "b01", start: 0.5, end: 1.5 }]].every((bs) => { const d = buildMotionJson(bs, {}).duration; return Number.isFinite(d) && d > 0; }));
 
   const data = buildExplainData({ lang: "pt-BR", silent: false, total: 8.243, beats: beats.map((b, i) => ({ ...b, scene: "s1", dur: 1, subject: i ? "#fn" : "#table" })), design: { colors: { blue: "#fff" }, rules: { hud: false } } });
   const sandbox = { window: {} };
@@ -799,13 +799,13 @@ function fakeDeps({ files = {}, dirs = {}, exec, env = {}, platform = "linux", h
     calls,
   };
 }
-const npxPkg = (version) => JSON.stringify({ name: "hyperframes", version });
+const npxPkg = (version) => JSON.stringify({ name: "remotion", version });
 const cacheFiles = (root, entries) => {
   const files = {};
   const dirs = { [root]: Object.keys(entries) };
   for (const [entry, version] of Object.entries(entries)) {
-    files[`${root}/${entry}/node_modules/hyperframes/bin/hyperframes.mjs`] = "";
-    files[`${root}/${entry}/node_modules/hyperframes/package.json`] = npxPkg(version);
+    files[`${root}/${entry}/node_modules/@remotion/cli/remotion-cli.js`] = "";
+    files[`${root}/${entry}/node_modules/@remotion/cli/package.json`] = npxPkg(version);
   }
   return { files, dirs };
 };
@@ -817,43 +817,43 @@ assertEq("semver: ordering", [compareSemver("0.8.134", "0.8.105"), compareSemver
   const cache = cacheFiles("/home/u/.npm/_npx", { aaa: "0.8.105" });
   const { deps, calls } = fakeDeps({
     env: { PATH: "/bin:/opt/bin" },
-    files: { ...cache.files, "/opt/bin/hyperframes": "" },
+    files: { ...cache.files, "/opt/bin/remotion": "" },
     dirs: cache.dirs,
     exec: () => ({ status: 0, stdout: "0.9.1\n", stderr: "" }),
   });
-  const r = resolveHyperframes(deps);
-  assertEq("hyperframes: PATH beats the npx cache", [r.tier, r.command, r.version], ["path", "/opt/bin/hyperframes", "0.9.1"]);
-  assert("hyperframes: the --version probe runs quiet (no telemetry, no auto-update)", calls[0][0] === "/opt/bin/hyperframes" && calls[0][1] === "--version");
+  const r = resolveRemotion(deps);
+  assertEq("remotion: PATH beats the npx cache", [r.tier, r.command, r.version], ["path", "/opt/bin/remotion", "0.9.1"]);
+  assert("remotion: the --version probe runs quiet (no telemetry, no auto-update)", calls[0][0] === "/opt/bin/remotion" && calls[0][1] === "--version");
 }
 {
   // tier 2: highest cached copy, run with node
   const cache = cacheFiles("/home/u/.npm/_npx", { aaa: "0.8.105", bbb: "0.8.134", ccc: "0.7.0" });
   const { deps, calls } = fakeDeps({ env: { PATH: "/bin" }, ...cache });
-  const r = resolveHyperframes(deps);
-  assertEq("hyperframes: npx cache picks the highest version", [r.tier, r.version, r.command, r.prefixArgs], ["npx-cache", "0.8.134", "/usr/bin/node", ["/home/u/.npm/_npx/bbb/node_modules/hyperframes/bin/hyperframes.mjs"]]);
-  assert("hyperframes: reading the npx cache runs nothing", calls.length === 0);
-  assertEq("hyperframes: findNpxCacheCopies sorts newest first", findNpxCacheCopies(deps).map((c) => c.version), ["0.8.134", "0.8.105", "0.7.0"]);
+  const r = resolveRemotion(deps);
+  assertEq("remotion: npx cache picks the highest version", [r.tier, r.version, r.command, r.prefixArgs], ["npx-cache", "0.8.134", "/usr/bin/node", ["/home/u/.npm/_npx/bbb/node_modules/@remotion/cli/remotion-cli.js"]]);
+  assert("remotion: reading the npx cache runs nothing", calls.length === 0);
+  assertEq("remotion: findNpxCacheCopies sorts newest first", findNpxCacheCopies(deps).map((c) => c.version), ["0.8.134", "0.8.105", "0.7.0"]);
 }
 {
   // npm_config_cache is honoured; a corrupt entry is skipped
   const cache = cacheFiles("/custom/_npx", { good: "0.8.1" });
-  cache.files["/custom/_npx/bad/node_modules/hyperframes/bin/hyperframes.mjs"] = "";
-  cache.files["/custom/_npx/bad/node_modules/hyperframes/package.json"] = "{not json";
+  cache.files["/custom/_npx/bad/node_modules/@remotion/cli/remotion-cli.js"] = "";
+  cache.files["/custom/_npx/bad/node_modules/@remotion/cli/package.json"] = "{not json";
   cache.dirs["/custom/_npx"].push("bad");
   const { deps } = fakeDeps({ env: { PATH: "", npm_config_cache: "/custom" }, ...cache });
-  assertEq("hyperframes: npm_config_cache is searched and bad entries skipped", findNpxCacheCopies(deps).map((c) => c.version), ["0.8.1"]);
+  assertEq("remotion: npm_config_cache is searched and bad entries skipped", findNpxCacheCopies(deps).map((c) => c.version), ["0.8.1"]);
 }
 {
   // tier 3: latest only when nothing is installed
   const { deps, calls } = fakeDeps({ env: { PATH: "/bin" }, files: { "/bin/npx": "" } });
-  const r = resolveHyperframes(deps);
-  assertEq("hyperframes: npx@latest only when nothing is installed", [r.tier, r.command, r.prefixArgs, r.version], ["npx-latest", "/bin/npx", ["--yes", "hyperframes@latest"], null]);
-  assert("hyperframes: doctor-style resolution never runs npx", calls.length === 0);
+  const r = resolveRemotion(deps);
+  assertEq("remotion: npx cannot install implicitly", [r.tier, r.command, r.prefixArgs, r.version], ["npx-latest", "/bin/npx", ["--no-install", "remotion"], null]);
+  assert("remotion: doctor-style resolution never runs npx", calls.length === 0);
   const probing = fakeDeps({ env: { PATH: "/bin" }, files: { "/bin/npx": "" }, exec: () => ({ status: 0, stdout: "0.8.134", stderr: "" }) });
-  const p = resolveHyperframes(probing.deps, { probeNpx: true });
-  assertEq("hyperframes: probeNpx records the downloaded version", [p.tier, p.version], ["npx-latest", "0.8.134"]);
-  const none = resolveHyperframes(fakeDeps({ env: { PATH: "/bin" } }).deps);
-  assert("hyperframes: nothing installed and no npx is a clear failure", none.ok === false && /npx/.test(none.reason) && none.fix);
+  const p = resolveRemotion(probing.deps, { probeNpx: true });
+  assertEq("remotion: probeNpx records the downloaded version", [p.tier, p.version], ["npx-latest", "0.8.134"]);
+  const none = resolveRemotion(fakeDeps({ env: { PATH: "/bin" } }).deps);
+  assert("remotion: nothing installed and no npx is a clear failure", none.ok === false && /npx/.test(none.reason) && none.fix);
 }
 {
   // windows .cmd shim is run through its sibling script with node
@@ -861,17 +861,17 @@ assertEq("semver: ordering", [compareSemver("0.8.134", "0.8.105"), compareSemver
     platform: "win32",
     homedir: "C:\\Users\\u",
     env: { PATH: "C:\\npm", PATHEXT: ".EXE;.CMD" },
-    files: { "C:\\npm\\hyperframes.CMD": "", "C:\\npm\\node_modules\\hyperframes\\bin\\hyperframes.mjs": "" },
+    files: { "C:\\npm\\remotion.CMD": "", "C:\\npm\\node_modules\\@remotion\\cli\\remotion-cli.js": "" },
     exec: () => ({ status: 0, stdout: "0.8.105", stderr: "" }),
   });
-  const r = resolveHyperframes(deps);
-  assertEq("hyperframes: Windows shim runs through node and the package script", [r.tier, r.command, r.prefixArgs.length], ["path", "/usr/bin/node", 1]);
+  const r = resolveRemotion(deps);
+  assertEq("remotion: Windows shim runs through node and the package script", [r.tier, r.command, r.prefixArgs.length], ["path", "/usr/bin/node", 1]);
 }
 {
   const e = hfEnv({ PATH: "/bin" });
-  assertEq("env: quiet defaults set", [e.HYPERFRAMES_NO_TELEMETRY, e.HYPERFRAMES_NO_UPDATE_CHECK, e.HYPERFRAMES_NO_AUTO_INSTALL], ["1", "1", "1"]);
-  const keep = hfEnv({ HYPERFRAMES_NO_TELEMETRY: "0" }, { HYPERFRAMES_PYTHON: "/p" });
-  assertEq("env: a value the user already set is kept; extras are added", [keep.HYPERFRAMES_NO_TELEMETRY, keep.HYPERFRAMES_PYTHON], ["0", "/p"]);
+  assertEq("env: no invented editor flags", Object.keys(e), ["PATH"]);
+  const keep = hfEnv({ REMOTION_NO_TELEMETRY: "0" }, { EXPLAIN_ME_PYTHON: "/p" });
+  assertEq("env: a value the user already set is kept; extras are added", [keep.REMOTION_NO_TELEMETRY, keep.EXPLAIN_ME_PYTHON], ["0", "/p"]);
 }
 
 {
@@ -884,10 +884,10 @@ assertEq("semver: ordering", [compareSemver("0.8.134", "0.8.105"), compareSemver
   // env > python3 > venv
   kokoroOk.clear();
   kokoroOk.add("/envpy/bin/python").add("/bin/python3").add(venv);
-  let r = resolvePython(fakeDeps({ ...base, env: { PATH: "/bin", HYPERFRAMES_PYTHON: "/envpy/bin/python" } }).deps, { home });
-  assertEq("python: HYPERFRAMES_PYTHON wins when it has kokoro", [r.ok, r.tier, r.path], [true, "env", "/envpy/bin/python"]);
+  let r = resolvePython(fakeDeps({ ...base, env: { PATH: "/bin", EXPLAIN_ME_PYTHON: "/envpy/bin/python" } }).deps, { home });
+  assertEq("python: EXPLAIN_ME_PYTHON wins when it has kokoro", [r.ok, r.tier, r.path], [true, "env", "/envpy/bin/python"]);
   kokoroOk.delete("/envpy/bin/python");
-  r = resolvePython(fakeDeps({ ...base, env: { PATH: "/bin", HYPERFRAMES_PYTHON: "/envpy/bin/python" } }).deps, { home });
+  r = resolvePython(fakeDeps({ ...base, env: { PATH: "/bin", EXPLAIN_ME_PYTHON: "/envpy/bin/python" } }).deps, { home });
   assertEq("python: env without kokoro falls through to python3", [r.tier, r.path], ["python3", "/bin/python3"]);
   kokoroOk.delete("/bin/python3");
   r = resolvePython(fakeDeps(base).deps, { home });
@@ -950,7 +950,7 @@ fs.writeFileSync(path.join(fx, "kit.js"), "// kit");
 {
   const home = tmp("home1");
   const when = new Date(2026, 9, 5, 12, 0, 0);
-  const created = createRun({ home, slug: "tabela-hash", lang: "pt-BR", title: "T", designPath: path.join(dd, "brand", "DESIGN.md"), dest: path.join(home, "out"), assetsDir: fx, hyperframes: { tier: "npx-cache", version: "0.8.105" }, now: when });
+  const created = createRun({ home, slug: "tabela-hash", lang: "pt-BR", title: "T", designPath: path.join(dd, "brand", "DESIGN.md"), dest: path.join(home, "out"), assetsDir: fx, remotion: { tier: "npx-cache", version: "0.8.105" }, now: when });
   const { runDir, projectDir } = created;
   assertEq("run: folder is <home>/runs/<stamp>-<slug>", path.relative(home, runDir), path.join("runs", "20261005-120000-tabela-hash"));
   for (const f of ["run.json", "script.json", "project/index.html", "project/kit.js", "project/frame.md", "project/tokens.css", "project/assets/logo.svg"]) assert(`run: wrote ${f}`, fs.existsSync(path.join(runDir, f)));
@@ -958,7 +958,7 @@ fs.writeFileSync(path.join(fx, "kit.js"), "// kit");
   assert("run: index.html is the asset with the tokens inlined, kit.js is a copy", fs.readFileSync(path.join(projectDir, "index.html"), "utf8") === rewriteHtmlLang(rewriteTokensRegion(COMPOSITION, tokensCss), "pt-BR") && fs.readFileSync(path.join(projectDir, "kit.js"), "utf8") === "// kit");
   assert("run: new inlines the resolved tokens (brand color, no stale text)", fs.readFileSync(path.join(projectDir, "index.html"), "utf8").includes(`<style>\n${tokensCss}    </style>`) && tokensCss.includes("--em-blue: #0A84FF;") && !fs.readFileSync(path.join(projectDir, "index.html"), "utf8").includes("#stale"));
   const run = readRun(runDir);
-  assertEq("run.json: slug, lang, voice, dest, hyperframes", [run.slug, run.lang, run.voice, run.dest, run.hyperframes], ["tabela-hash", "pt-BR", "pf_dora", path.join(home, "out"), { tier: "npx-cache", version: "0.8.105" }]);
+  assertEq("run.json: slug, lang, voice, dest, remotion", [run.slug, run.lang, run.voice, run.dest, run.remotion], ["tabela-hash", "pt-BR", "pf_dora", path.join(home, "out"), { tier: "npx-cache", version: "0.8.105" }]);
   assertEq("run.json: design sources and overrides", [run.design.sources.length, run.design.overrides.map((o) => o.key)], [2, ["rules.hud", "motion.maxStaticSec"]]);
   const frame = splitFrontmatter(fs.readFileSync(path.join(projectDir, "frame.md"), "utf8"), "frame.md");
   assert("frame.md: resolved spec parses back, with merged prose and project-relative logo", frame.data.colors.blue === "#0A84FF" && frame.data.motion.maxStaticSec === 3 && frame.data.images[0].path === "assets/logo.svg" && frame.body.includes("Brand words.") && frame.body.includes("## Motion examples"));
@@ -973,7 +973,7 @@ fs.writeFileSync(path.join(fx, "kit.js"), "// kit");
   const miss = throwsWith(() => resolveRun(home, "no-such-slug"), /no run found/);
   assert("run: unknown slug is a clear error", miss.threw && miss.match, miss.message);
   const htmlRun = createRun({ home, slug: "slider", lang: "pt-BR", assetsDir: fx, format: "html", now: when });
-  assert("run: an html run has run.json and tokens.css but no HyperFrames project", htmlRun.projectDir === null && fs.existsSync(path.join(htmlRun.runDir, "tokens.css")) && !fs.existsSync(path.join(htmlRun.runDir, "project")) && readRun(htmlRun.runDir).format === "html");
+  assert("run: an html run has run.json and tokens.css but no Remotion project", htmlRun.projectDir === null && fs.existsSync(path.join(htmlRun.runDir, "tokens.css")) && !fs.existsSync(path.join(htmlRun.runDir, "project")) && readRun(htmlRun.runDir).format === "html");
   const textRun = createRun({ home, slug: "termos", lang: "en", assetsDir: fx, format: "text", now: when });
   assert("run: a text run has only run.json", !fs.existsSync(path.join(textRun.runDir, "tokens.css")) && readRun(textRun.runDir).format === "text");
   const badFormat = throwsWith(() => createRun({ home, slug: "x", lang: "en", assetsDir: fx, format: "gif" }), /invalid --format/);
@@ -1292,7 +1292,21 @@ fs.writeFileSync(path.join(fx, "kit.js"), "// kit");
 }
 
 // ---------------------------------------------------------------------------
-// 6. CLI (spawned with an empty PATH: no hyperframes, no network)
+// Direct Kokoro boundary: no editor CLI, no implicit weights download, exact voice/language preserved.
+{
+ const calls=[];
+ const deps={homedir:"/home/u",env:{PATH:"/bin"},fs:{existsSync:()=>false},exec:(...args)=>{calls.push(args);return {status:0,stdout:JSON.stringify({ok:true,durationSeconds:1.25,sampleRate:24000,langApplied:"pt-br"}),stderr:"",error:null};}};
+ const request={textFile:"/tmp/narration.txt",out:"/tmp/voice.wav",voice:"pf_dora",lang:"pt-br",speed:1,python:"/bin/python3"};
+ assert("kokoro: missing weights stop before any subprocess/download", !synthesizeBeat(deps,{},request).ok && calls.length===0);
+ deps.fs.existsSync=()=>true;
+ const spoken=synthesizeBeat(deps,{},request);
+ assertEq("kokoro: local Python result preserves measured duration and language",[spoken.durationSeconds,spoken.langApplied],[1.25,"pt-br"]);
+ assert("kokoro: invokes Python directly, never an editor", calls[0][0]==="/bin/python3" && calls[0][1].includes("pf_dora") && calls[0][1].includes("pt-br"));
+ deps.exec=()=>({status:1,stdout:JSON.stringify({ok:true,durationSeconds:1}),stderr:"failed",error:null});
+ assert("kokoro: nonzero exit cannot claim synthesis success",!synthesizeBeat(deps,{},request).ok);
+}
+
+// 6. CLI (spawned with an empty PATH: no remotion, no network)
 // ---------------------------------------------------------------------------
 
 {
@@ -1391,7 +1405,7 @@ fs.writeFileSync(path.join(fx, "kit.js"), "// kit");
   r = cli("check", "no-such-run");
   assert("cli: an unknown run is a clear error", r.code === 1 && /no run found/.test(r.err));
 
-  // the gate against run.json state, without ever calling hyperframes
+  // the gate against run.json state, without ever calling remotion
   const goodHash = (() => {
     fs.writeFileSync(path.join(runPath, "project", "explain-data.js"), "window.EXPLAIN={};");
     fs.writeFileSync(path.join(runPath, "project", "index.motion.json"), "{}");
@@ -1472,7 +1486,7 @@ fs.writeFileSync(path.join(fx, "kit.js"), "// kit");
     r = json("voice", "cli-guard", "--silent");
     assert("guard: voice --silent builds and records the script hash", r.code === 0 && /^[0-9a-f]{64}$/.test(readRun(guardRun).scriptHash));
     r = json("check", "cli-guard");
-    assert("guard: with the script as voiced, check goes on to the engine (not installed here)", r.code === 1 && /HyperFrames is not installed/.test(r.json.error), r.out);
+    assert("guard: with the script as voiced, check goes on to the engine (not installed here)", r.code === 1 && /Remotion is not installed/.test(r.json.error), r.out);
     writeGuardScript("#other");
     r = json("check", "cli-guard");
     assert("guard: check refuses a script edited after voice, with the exact message", r.code === 1 && r.json.error === "script.json changed since voice: run voice again" && /voice/.test(r.json.fix) && r.json.stale === true, r.out);
@@ -1495,7 +1509,7 @@ fs.writeFileSync(path.join(fx, "kit.js"), "// kit");
     fs.writeFileSync(path.join(guardRun, "run.json"), JSON.stringify(old));
     writeGuardScript("#third");
     r = json("check", "cli-guard");
-    assert("guard: no recorded hash means no refusal", r.code === 1 && /HyperFrames is not installed/.test(r.json.error), r.out);
+    assert("guard: no recorded hash means no refusal", r.code === 1 && /Remotion is not installed/.test(r.json.error), r.out);
   }
 
   // --- doctor always gives a verdict on espeak-ng
@@ -1505,7 +1519,7 @@ fs.writeFileSync(path.join(fx, "kit.js"), "// kit");
   assert("cli: doctor's text names espeak-ng on every machine", /espeak-ng:/.test(r.out));
 
   r = json("doctor", "--offline");
-  assert("cli: doctor reports as JSON, never installs, exit reflects blocking problems only", r.json && r.json.home.path === home && Array.isArray(r.json.problems) && r.json.hyperframes && "tier" in r.json.hyperframes);
+  assert("cli: doctor reports as JSON, never installs, exit reflects blocking problems only", r.json && r.json.home.path === home && Array.isArray(r.json.problems) && r.json.remotion && "tier" in r.json.remotion);
 }
 
 console.log(`\n${passed} passed, ${failed} failed`);

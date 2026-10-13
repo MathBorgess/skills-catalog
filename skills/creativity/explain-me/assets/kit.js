@@ -22,7 +22,7 @@
  * timeline and reports stage content that sits in the caption band or outside the safe zone (auditStage).
  * No randomness, no clocks, no infinite repeats, no idle loops on the stage (an ambient level only drifts
  * a glow behind it, and the Motion Gate never counts that glow): every frame is a
- * function of the playhead time alone (HyperFrames determinism rules).
+ * function of the playhead time alone (Remotion determinism rules).
  */
 (function (global) {
   "use strict";
@@ -76,7 +76,7 @@
     if (global.console && console.warn) console.warn("explain-kit: " + message);
   }
 
-  // A finding that must stop the render: HyperFrames counts a console error as a runtime error, so `check`
+  // A finding that must stop the render: Remotion counts a console error as a runtime error, so `check`
   // fails on it. Nothing throws, so the page and the render itself keep working.
   function problem(message) {
     if (global.console && console.error) console.error("explain-kit: " + message);
@@ -1233,7 +1233,7 @@
   // The safe zone and the caption band are only a promise until something measures them. After the build the
   // kit seeks its own timeline every AUDIT_STEP seconds (and just before each beat ends, where the frames are
   // taken), finds where every visible shape, text and image of the stage lands on screen, and reports:
-  //   - caption band: a box that overlaps the burned captions. An error (console.error, which HyperFrames
+  //   - caption band: a box that overlaps the burned captions. An error (console.error, which Remotion
   //     counts as a runtime error, so `check` fails) when it lasts BAND_BLOCKING_SEC or more, a warning
   //     when it is shorter. Only when captions are burned.
   //   - safe zone: a box that leaves layout.safe by more than SAFE_TOLERANCE. A warning.
@@ -1482,7 +1482,7 @@
           var key = (root && root.getAttribute("data-composition-id")) || "explain";
           global.__timelines = global.__timelines || {};
           global.__timelines[key] = tl;
-          if (typeof global.__hfForceTimelineRebind === "function") global.__hfForceTimelineRebind();
+          global.__remotionSeek = function(seconds) { tl.seek(seconds, false); };
         };
         // The caption layer is created now so its font starts loading with the rest of the page.
         kit._captions = prepareCaptions(kit);

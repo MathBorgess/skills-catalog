@@ -26,7 +26,7 @@ The motion identity is a tree of decisions. A decision is on the **frontier** wh
 | D9 | **Kinetic type**: how the big words enter (whole, word by word, letter by letter), how one word is emphasized, how many words share the screen | D4, D5, D7 | `## Motion identity`, "Kinetic type"; `rules.maxWordsOnScreen` if it differs | Kinetic type, [`choreography-and-type.md`](choreography-and-type.md) |
 | D10 | **Ambient and stillness**: `none`, `subtle` or `lively`, and where stillness is a choice (the end hold, a pause before the main point) | D1, D4 | `motion.ambient` | Ambient row, [`choreography-and-type.md`](choreography-and-type.md) |
 | D11 | **Never-list**: three to six things this brand never does in motion | D4 to D10 | `## Motion identity`, "Never" | Troubleshooting table below, appeal killers |
-| D12 | **Brief block**: the 5 to 8 lines a HyperFrames brief carries | D4 to D11 | `## Brief block` | [`spec-schema.md`](spec-schema.md) |
+| D12 | **Brief block**: the 5 to 8 lines a Remotion brief carries | D4 to D11 | `## Brief block` | [`spec-schema.md`](spec-schema.md) |
 
 The usual rounds: **R1** D1, D2, D3. **R2** D4. **R3** D5, D6, D7, D10. **R4** D8, D9. **R5** D11, D12. Then the proof. A round is shorter when the spec already settles a decision: say what you found and move on.
 

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Tests for the motion-identity driver. Run: node skills/creativity/motion-identity/scripts/motion.test.mjs
-// No network and no HyperFrames: the render path runs against a fake exec.
+// No network and no Remotion: the render path runs against a fake exec.
 
 import { spawnSync } from "node:child_process";
 import fs from "node:fs";
@@ -85,7 +85,7 @@ const FULL = FRONT + BODY;
   fs.writeFileSync(path.join(dir, "DESIGN.md"), FULL);
   assert("find: DESIGN.md alone is found", findProjectSpec(dir) === path.join(dir, "DESIGN.md"));
   fs.writeFileSync(path.join(dir, "frame.md"), FULL);
-  assert("find: frame.md wins over DESIGN.md (HyperFrames order)", findProjectSpec(dir) === path.join(dir, "frame.md"));
+  assert("find: frame.md wins over DESIGN.md (Remotion order)", findProjectSpec(dir) === path.join(dir, "frame.md"));
   assert("find: none in an empty folder", findProjectSpec(tmp("empty")) === null);
   assertEq("find: the precedence list", PROJECT_SPEC_NAMES, ["frame.md", "design.md", "DESIGN.md"]);
 }
@@ -205,7 +205,7 @@ const errorAt = (r, p) => r.errors.some((e) => e.path === p);
   assert("page: tokens are inlined", page.includes("--mi-bg: #0B1020;") && page.includes("--mi-accent: #FF5C8A;") && page.includes('--mi-font-display: Inter, sans-serif;'));
   assert("page: words are escaped and the accent word is marked", page.includes("&lt;it&gt;") && page.includes('class="mi-word mi-accent-word" id="mi-w3"'));
   assert("page: the plan, size, duration and language are written", page.includes("window.MOTION_PROOF =") && page.includes('data-duration="' + plan.total + '"') && page.includes('<html lang="pt-BR">') && page.includes('data-width="1080"'));
-  assert("page: the plan is inlined on one line (HyperFrames lints a composition over 300 lines)", page.split("\n").some((l) => /^\s*window\.MOTION_PROOF = \{.*\};$/.test(l)));
+  assert("page: the plan is inlined on one line (Remotion lints a composition over 300 lines)", page.split("\n").some((l) => /^\s*window\.MOTION_PROOF = \{.*\};$/.test(l)));
   assert("page: no marker is left behind", ["<!-- mi:tokens -->", "<!-- mi:headline -->", "/* mi:plan */", "/* mi:signature */"].every((m) => !page.includes(m)));
   assert("page: the supporting line uses muted only when it is readable", tokensCss(data, plan).includes("--mi-sub: #8A93B2;") && tokensCss({ ...data, colors: { ...data.colors, muted: "#303550" } }, plan).includes("--mi-sub: #F4F6FF;"));
   let threw = false;
@@ -231,29 +231,32 @@ const errorAt = (r, p) => r.errors.some((e) => e.path === p);
   const okEnvelope = JSON.stringify({ ok: true, lint: { findings: [] }, runtime: { findings: [] }, _meta: { version: "9.9.9" } });
   const fakeExec = (cmd, args) => {
     calls.push([path.basename(cmd), ...args]);
-    if (args.includes("check")) return { status: 0, stdout: `notice\n${okEnvelope}\n`, stderr: "", error: null };
+    if (args.includes("compositions")) return { status: 0, stdout: `notice\n${okEnvelope}\n`, stderr: "", error: null };
     if (args.includes("render")) {
-      fs.writeFileSync(args[args.indexOf("-o") + 1], "mp4");
+      fs.writeFileSync(args.find(a => a.endsWith(".mp4")), "mp4");
       return { status: 0, stdout: "", stderr: "", error: null };
     }
-    fs.writeFileSync(args[args.length - 1], "png");
+    const png=args.includes("still") ? args.find(a=>a.endsWith(".png")) : args[args.length-1];
+    if(png) fs.writeFileSync(png, "png");
     return { status: 0, stdout: "", stderr: "", error: null };
   };
   const dir = tmp("run");
   const r = runProof({ dir, page, plan, exec: fakeExec, env });
   assert("run: check, render, one frame per moment and a contact sheet", r.rendered && r.frames.length === plan.frames.length && r.contact && r.problems.length === 0, JSON.stringify(r.problems));
   assert("run: the project holds the page and its motion sidecar", fs.existsSync(path.join(dir, "project", "index.html")) && fs.existsSync(path.join(dir, "project", "index.motion.json")) && fs.existsSync(path.join(dir, "plan.json")));
-  assert("run: check runs before render", calls.findIndex((c) => c.includes("check")) < calls.findIndex((c) => c.includes("render")));
-  const failingExec = (cmd, args) => (args.includes("check") ? { status: 1, stdout: JSON.stringify({ ok: false, runtime: { findings: [{ severity: "error", code: "runtime_error", message: "boom" }] } }), stderr: "", error: null } : fakeExec(cmd, args));
+  assert("run: check runs before render", calls.findIndex((c) => c.includes("compositions")) < calls.findIndex((c) => c.includes("render")));
+  const failingExec = (cmd, args) => (args.includes("compositions") ? { status: 1, stdout: JSON.stringify({ ok: false, runtime: { findings: [{ severity: "error", code: "runtime_error", message: "boom" }] } }), stderr: "", error: null } : fakeExec(cmd, args));
   const bad = runProof({ dir: tmp("bad"), page, plan, exec: failingExec, env });
   assert("run: a failing check stops before the render", !bad.rendered && bad.check.errors === 1 && /fix them before the render/.test(bad.problems[0]));
   const none = runProof({ dir: tmp("norender"), page, plan, render: false, exec: () => assert("run: no exec without render", false), env });
   assert("run: --no-render only writes the project", !none.rendered && none.problems.length === 0 && fs.existsSync(none.page));
   const lost = runProof({ dir: tmp("nohf"), page, plan, exec: fakeExec, env: { PATH: "" } });
-  assert("run: no hyperframes and no npx is reported, not thrown", !lost.rendered && /not reachable/.test(lost.problems[0]));
+  assert("run: no remotion and no npx is reported, not thrown", !lost.rendered && /not reachable/.test(lost.problems[0]));
   assertEq("run: the check envelope is summarized", summarizeCheck({ ok: true, contrast: { findings: [{ severity: "warning", code: "contrast_aa_failure", message: "m" }] } }).warnings, 1);
   assertEq("slug: from a brand name", slugify("We Brand Ação!"), "we-brand-acao");
 }
+
+assertEq("contract: Remotion adapter matches its canonical explain-me implementation", fs.readFileSync(path.join(HERE,"lib/remotion.mjs"),"utf8"),fs.readFileSync(path.join(SKILL,"../explain-me/scripts/lib/remotion.mjs"),"utf8"));
 
 // ------------------------------------------------------------------ the CLI
 {

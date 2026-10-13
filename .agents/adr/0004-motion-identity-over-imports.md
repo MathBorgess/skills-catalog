@@ -1,5 +1,7 @@
 # A motion-identity skill instead of importing motion skills
 
+> Superseded engine details by [ADR0005](0005-remotion-editor.md). This document records the earlier decision, not the current setup.
+
 The catalog adds one small skill, `motion-identity`. It runs a grilling to build a brand's motion identity and writes it into the brand spec that HyperFrames and explain-me already read. It does not install, vendor or fork the motion skills it learned from, and it does not render videos of its own beyond a short proof.
 
 ## Context

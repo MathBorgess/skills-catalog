@@ -34,15 +34,15 @@ The style asks for big words that dominate the frame. They stay readable because
 - **Exit together, last word first,** on `eases.exit`, faster than the entrance.
 - **In each tool.**
   - explain-me: one `<text>` per word, introduced with `grow` or `fade` (`shift` gives the direction), emphasized with `indicate`. Use `write` for one or two words.
-  - HyperFrames: split the words into spans (SplitText with `type: "words"`, or spans you write). Animate them with `fromTo` on the scene's timeline. HyperFrames' `kinetic-beat-slam` rule is a percussive variant for energetic brands.
+  - Remotion: split the words into spans (SplitText with `type: "words"`, or spans you write). Animate them with `fromTo` on the scene's timeline. Remotion' `kinetic-beat-slam` rule is a percussive variant for energetic brands.
 
 ## Ambient
 
-`motion.ambient` is the background life behind the stage: `none`, `subtle` or `lively`. It is a slow glow, never the motion the content needs. explain-me draws it outside its stage and then watches only the stage for the Motion Gate. In HyperFrames, keep it on the scene's timeline with a finite repeat count. One ambient motion per scene at most; stillness after motion is a choice too.
+`motion.ambient` is the background life behind the stage: `none`, `subtle` or `lively`. It is a slow glow, never the motion the content needs. explain-me draws it outside its stage and then watches only the stage for the Motion Gate. In Remotion, keep it on the scene's timeline with a finite repeat count. One ambient motion per scene at most; stillness after motion is a choice too.
 
 ## GSAP habits that survive a seeked render
 
-HyperFrames renders a video by seeking one paused timeline, frame by frame. These habits from GreenSock's guidance and HyperFrames' own rules keep every frame a function of the playhead:
+Remotion renders a video by seeking one paused timeline, frame by frame. These habits from GreenSock's guidance and Remotion' own rules keep every frame a function of the playhead:
 
 - **Everything on the timeline.** Every tween goes on the scene's `tl` with a position parameter, never a bare `gsap.to()` (it runs on the wall clock and never renders). Use labels (`tl.addLabel("signature", 4.2)`) to keep the story readable.
 - **`fromTo` over `from`.** Explicit start and end states are the same at every seek. Stack several tweens on one property of one element with `immediateRender: false` on all but the first.

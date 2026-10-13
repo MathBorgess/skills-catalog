@@ -2,7 +2,7 @@
 
 The Design Spec is one editable `DESIGN.md` that every format reads: the narrated video, inline SVG and interactive HTML. It holds palette, type, preferred motion with worked examples, frame layout, burned captions, reference images, timing and voices. Changing the style means editing a spec, never one artefact. The shipped default is [`../assets/DESIGN.md`](../assets/DESIGN.md): read it as the model of a complete spec.
 
-A spec is YAML frontmatter plus a markdown body, the same shape as a HyperFrames `frame.md` or `design.md`, so one brand file can serve both.
+A spec is YAML frontmatter plus a markdown body, the same shape as a Remotion `frame.md` or `design.md`, so one brand file can serve both.
 
 - The **frontmatter is normative**: quote values verbatim (exact hex, family, number). Never invent or round them.
 - The **prose is judgment**: the `##` sections carry intent, taste and constraints. Read them before composing.
@@ -17,7 +17,7 @@ Highest first. Each run resolves them key by key:
 2. **Personal spec**: `<home>/DESIGN.md`, seeded from the shipped default by `explain.mjs setup` and never overwritten.
 3. **Shipped default**: `assets/DESIGN.md`. Never edit it.
 
-Find a project's brand spec with `explain.mjs design find [--project <dir>]`. It checks, in HyperFrames order, `frame.md`, then `design.md`, then `DESIGN.md`, and prints the first it finds. Offer it at intake; never apply it without the user's yes.
+Find a project's brand spec with `explain.mjs design find [--project <dir>]`. It checks, in this skill's precedence order, `frame.md`, then `design.md`, then `DESIGN.md`, and prints the first it finds. Offer it at intake; never apply it without the user's yes.
 
 Merge rules: maps merge deeply, lists and scalars replace, a missing or `null` value keeps the lower value. The driver splits prose at `## ` headings. A heading in a higher layer replaces the same heading below it. Headings that only a lower layer has come after it, in order.
 
@@ -75,7 +75,7 @@ images:
 | Key | Meaning |
 |---|---|
 | `gate` | `on`. Never `off`. |
-| `maxStaticSec` | longest allowed still frame, default 2 (the HyperFrames default). |
+| `maxStaticSec` | longest allowed still frame, default 2 (the skill's review threshold, not a Remotion default). |
 | `leadInSec`, `beatGapSec`, `tailSec` | silence before the first beat, between beats, after the last. |
 | `ease` | any GSAP ease name, such as `power2.inOut`. |
 | `durations` | seconds per primitive: `draw, write, morph, move, camera, indicate, count, grow, fade`. |

@@ -1,6 +1,7 @@
+import {prepareProject} from "./remotion.mjs";
 // `voice`: script.json -> lint -> per-beat audio (or estimated durations) -> timeline ->
 // explain-data.js, audio tags, root duration, motion sidecar and subtitles.
-// Synthesis and linting are injected so the whole flow runs in tests without HyperFrames.
+// Synthesis and linting are injected so the whole flow runs in tests without Remotion.
 
 import crypto from "node:crypto";
 import fs from "node:fs";
@@ -101,7 +102,7 @@ export async function runVoice({ runDir, synth, lint, strict = false, glossary, 
       }
       const r = await synth(b, out, { voice, lang: kLang, speed });
       if (!r.ok) return { ok: false, stage: "tts", beat: b.id, error: r.error };
-      if (!fs.existsSync(out)) return { ok: false, stage: "tts", beat: b.id, error: `hyperframes tts reported success but ${out} does not exist` };
+      if (!fs.existsSync(out)) return { ok: false, stage: "tts", beat: b.id, error: `remotion tts reported success but ${out} does not exist` };
       let dur = round3(r.durationSeconds);
       const header = wavDurationSec(fs.readFileSync(out));
       if (header !== null && Math.abs(header - dur) > 0.05) dur = header; // the file is the truth
@@ -160,6 +161,7 @@ export async function runVoice({ runDir, synth, lint, strict = false, glossary, 
     voiceCache,
   });
 
+  prepareProject(project);
   return {
     ok: true,
     lang,

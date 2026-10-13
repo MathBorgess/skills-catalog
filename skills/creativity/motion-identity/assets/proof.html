@@ -7,7 +7,7 @@
          properties in an inline <style>, never from a linked file. -->
     <!-- mi:tokens -->
     <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
-    <!-- the proof registers its paused timeline here; the literal line is what the HyperFrames lint looks for -->
+    <!-- the proof registers its paused timeline here; the adapter explicitly seeks this paused timeline -->
     <script>
       window.__timelines = window.__timelines || {};
     </script>
@@ -278,7 +278,7 @@
           var key = root.getAttribute("data-composition-id") || "proof";
           window.__timelines = window.__timelines || {};
           window.__timelines[key] = tl;
-          if (typeof window.__hfForceTimelineRebind === "function") window.__hfForceTimelineRebind();
+          window.__remotionSeek = function(seconds) { tl.seek(seconds, false); };
         }
 
         if (document.fonts && document.fonts.ready) {

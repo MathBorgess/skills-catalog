@@ -1,4 +1,5 @@
-// A run: its folder, run.json, the HyperFrames project inside it, the gate hash and metrics.
+import {prepareProject} from "./remotion.mjs";
+// A run: its folder, run.json, the Remotion project inside it, the gate hash and metrics.
 
 import crypto from "node:crypto";
 import fs from "node:fs";
@@ -39,7 +40,7 @@ export function updateRun(runDir, patch) {
 
 // sha256 over what the Motion Gate protects: the composition, its data, its motion sidecar, the
 // style tokens and the kit.
-export const GATED_FILES = ["index.html", "explain-data.js", "index.motion.json", "tokens.css", "kit.js"];
+export const GATED_FILES = ["index.html", "explain-data.js", "index.motion.json", "tokens.css", "kit.js", "remotion-entry.jsx", "package.json", "package-lock.json"];
 export function projectHash(project) {
   const h = crypto.createHash("sha256");
   for (const name of GATED_FILES) {
@@ -256,7 +257,7 @@ export function refreshDesign({ runDir, home, assetsDir }) {
 
 export const FORMATS = ["video", "svg", "html", "text", "mermaid", "image"];
 
-export function createRun({ home, slug, lang, title, designPath, dest, assetsDir, hyperframes, format = "video", orientation = DEFAULT_ORIENTATION, now = new Date() }) {
+export function createRun({ home, slug, lang, title, designPath, dest, assetsDir, remotion, format = "video", orientation = DEFAULT_ORIENTATION, now = new Date() }) {
   const orient = normalizeOrientation(orientation);
   if (!orient) throw new Error(`invalid --orientation ${JSON.stringify(orientation)}: use ${ORIENTATIONS.join(" or ")}`);
   if (!FORMATS.includes(format)) throw new Error(`invalid --format ${JSON.stringify(format)}: use one of ${FORMATS.join(", ")}`);
@@ -297,7 +298,7 @@ export function createRun({ home, slug, lang, title, designPath, dest, assetsDir
     created: now.toISOString(),
     dest: dest ? path.resolve(dest) : null,
     design: designRecord(resolved, explicit),
-    hyperframes: hyperframes ? { tier: hyperframes.tier, version: hyperframes.version } : null,
+    remotion: remotion ? { tier: remotion.tier, version: remotion.version } : null,
     python: null,
     timeline: null,
     check: null,
@@ -305,6 +306,7 @@ export function createRun({ home, slug, lang, title, designPath, dest, assetsDir
   };
   writeJson(runFile(runDir), run);
   writeJson(path.join(runDir, "script.json"), starterScript({ lang, title }));
+  prepareProject(project);
   const explanation = writeStarterExplanation(runDir, lang);
 
   return { runDir, projectDir: project, run, warnings, copiedImages, layers: resolved.layers, designData: data, explanation };

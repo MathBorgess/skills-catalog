@@ -1,4 +1,5 @@
-// The motion proof: a short, deterministic HyperFrames clip that plays a spec's motion identity —
+import {prepareProject,runCheck,runRender} from "./remotion.mjs";
+// The motion proof: a short, deterministic Remotion clip that plays a spec's motion identity —
 // big words entering in its personality, one emphasis, a move, the signature, an exit — so the owner
 // approves the identity by watching it, not by reading it.
 //
@@ -16,7 +17,7 @@ export const FRAME_SIZES = { landscape: { width: 1920, height: 1080 }, portrait:
 export const DEFAULT_SAFE = { landscape: [120, 120, 1800, 960], portrait: [60, 220, 960, 1380] };
 export const DEFAULT_DURATIONS = { draw: 1.2, write: 0.9, morph: 1.0, move: 1.2, camera: 1.5, indicate: 0.6, count: 1.0, grow: 0.6, fade: 0.5 };
 export const DEFAULT_EASE = "power2.inOut";
-const LEAD_IN = 0.3; // HyperFrames: a first motion at t=0 reads as a jump cut
+const LEAD_IN = 0.3; // Remotion: a first motion at t=0 reads as a jump cut
 const END_HOLD = 0.5;
 const SIGNATURE_SEC = 1.8;
 // Per personality: seconds between words, and the emphasis peak (the exaggeration budget of the archetype).
@@ -188,9 +189,9 @@ export function tokensCss(data, plan) {
 }
 
 const escapeHtml = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
-const jsonForScript = (v) => JSON.stringify(v).replace(/</g, "\\u003c"); // one line: HyperFrames lints a composition over 300 lines
+const jsonForScript = (v) => JSON.stringify(v).replace(/</g, "\\u003c"); // one line: Remotion lints a composition over 300 lines
 
-// Deterministic-motion rules a signature script must keep (HyperFrames renders by seeking a paused timeline).
+// Deterministic-motion rules a signature script must keep (Remotion renders by seeking a paused timeline).
 const SIGNATURE_BANS = [
   [/\.play\s*\(/, "play() — the timeline is paused and seeked"],
   [/repeat\s*:\s*-\s*1/, "repeat: -1 — repeats must be finite"],
@@ -234,10 +235,10 @@ export function motionJson(plan) {
 }
 
 // ---------------------------------------------------------------------------------------------------------
-// running HyperFrames and ffmpeg
+// running Remotion and ffmpeg
 // ---------------------------------------------------------------------------------------------------------
 
-const QUIET_ENV = { HYPERFRAMES_NO_TELEMETRY: "1", HYPERFRAMES_NO_UPDATE_CHECK: "1", HYPERFRAMES_NO_AUTO_INSTALL: "1" };
+const QUIET_ENV = {};
 
 export function hfEnv(base = process.env) {
   const env = { ...base };
@@ -264,12 +265,12 @@ export function onPath(name, env = process.env) {
   return null;
 }
 
-// An installed `hyperframes` first; otherwise npx, which reuses its cache when a copy is there.
-export function resolveHyperframes(env = process.env) {
-  const bin = onPath("hyperframes", env);
+// An installed `remotion` first; otherwise npx, which reuses its cache when a copy is there.
+export function resolveRemotion(env = process.env) {
+  const bin = onPath("remotion", env);
   if (bin) return { command: bin, prefix: [], via: "PATH" };
   const npx = onPath("npx", env);
-  if (npx) return { command: npx, prefix: ["--yes", "hyperframes@latest"], via: "npx" };
+  if (npx) return { command: npx, prefix: ["--no-install", "remotion"], via: "npx" };
   return null;
 }
 
@@ -299,7 +300,7 @@ export function firstJsonObject(text) {
   return null;
 }
 
-// The `hyperframes check --json` envelope reduced to errors and warnings worth reading.
+// The `remotion check --json` envelope reduced to errors and warnings worth reading.
 export function summarizeCheck(envelope) {
   const findings = [];
   let errors = 0;
@@ -344,31 +345,21 @@ export function runProof({ dir, page, plan, render = true, exec = defaultExec, e
   fs.writeFileSync(path.join(project, "index.motion.json"), JSON.stringify(motionJson(plan), null, 2) + "\n");
   fs.writeFileSync(path.join(dir, "plan.json"), JSON.stringify(plan, null, 2) + "\n");
   const result = { dir, project, page: path.join(project, "index.html"), rendered: false, check: null, mp4: null, frames: [], contact: null, problems: [] };
+  prepareProject(project);
   if (!render) return result;
 
-  const hf = resolveHyperframes(env);
+  const hf = resolveRemotion(env);
   if (!hf) {
-    result.problems.push("HyperFrames is not reachable: neither `hyperframes` nor `npx` is on PATH. Install Node 22+ and run again.");
+    result.problems.push("Remotion is not reachable: neither `remotion` nor `npx` is on PATH. Install Node 22+ and run again.");
     return result;
   }
-  const hfe = hfEnv(env);
-  const c = exec(hf.command, [...hf.prefix, "check", project, "--json"], { cwd: project, env: hfe });
-  const envelope = firstJsonObject(c.stdout);
-  if (!envelope) {
-    result.problems.push(`hyperframes check did not answer: ${(c.stderr || c.stdout || String(c.error ?? "")).trim().slice(-600)}`);
-    return result;
-  }
-  result.check = summarizeCheck(envelope);
-  if (!result.check.ok) {
-    result.problems.push(`hyperframes check found ${result.check.errors} error(s); fix them before the render`);
-    return result;
-  }
-  const mp4 = path.join(dir, "proof.mp4");
-  const r = exec(hf.command, [...hf.prefix, "render", project, "-o", mp4, "--quality", "looks", "--quiet"], { cwd: project, env: hfe, timeoutMs: 30 * 60 * 1000 });
-  if (r.status !== 0 || r.error || !fs.existsSync(mp4)) {
-    result.problems.push(`hyperframes render failed: ${(r.stderr || r.stdout || String(r.error ?? "")).trim().slice(-800)} (try: npx hyperframes doctor)`);
-    return result;
-  }
+  const deps={exec,env,homedir:os.homedir(),fs};
+  const resolution={command:hf.command,prefixArgs:hf.prefix};
+  result.check=runCheck(deps,resolution,project);
+  if(!result.check.ok){result.problems.push(`Remotion check failed; fix them before the render: ${result.check.raw}`);return result;}
+  const mp4=path.join(dir,"proof.mp4");
+  const rendered=runRender(deps,resolution,project,{out:mp4});
+  if(!rendered.ok||!fs.existsSync(mp4)){result.problems.push(`Remotion render failed: ${rendered.stderr}`);return result;}
   result.rendered = true;
   result.mp4 = mp4;
   const framesDir = path.join(dir, "frames");

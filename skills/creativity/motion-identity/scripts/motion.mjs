@@ -3,7 +3,7 @@
 //
 //   node motion.mjs find  [--project <dir>]                 the brand spec of a project (frame.md > design.md > DESIGN.md)
 //   node motion.mjs check <spec> [--json]                   is the motion identity complete enough for a video tool?
-//   node motion.mjs brief <spec>                            the block to paste into a HyperFrames BRIEF.md
+//   node motion.mjs brief <spec>                            the block to paste into a Remotion BRIEF.md
 //   node motion.mjs proof <spec> [--orientation portrait|landscape] [--text "<1-6 words>"] [--sub "<line>"]
 //                               [--accent <colorKey>] [--accent-word <n>] [--signature <file.js>] [--lang <tag>]
 //                               [--dest <dir>] [--no-render] [--json]
@@ -162,14 +162,14 @@ const COMMANDS = {
       `  page:    ${result.page}`,
       `  plan:    ${plan.orientation} ${plan.width}x${plan.height}, ${plan.total}s; ${plan.personality}; enter ${plan.eases.enter}, emphasis ${plan.eases.emphasis}, exit ${plan.eases.exit}, moves ${plan.eases.move}; ambient ${plan.ambient}; accent ${plan.accent.key}`,
       ...(signatureSource ? [`  signature: ${plan.signature.name ?? "(unnamed)"} at ${plan.signature.start}s for ${plan.signature.dur}s`] : ["  signature: not played (pass --signature <file.js> to show the brand's own move)"]),
-      ...(result.check ? [`  check:   ${result.check.errors} error(s), ${result.check.warnings} warning(s)${result.check.version ? ` (hyperframes ${result.check.version})` : ""}`] : []),
+      ...(result.check ? [`  check:   ${result.check.errors} error(s), ${result.check.warnings} warning(s)${result.check.version ? ` (remotion ${result.check.version})` : ""}`] : []),
       ...(result.check?.findings ?? []).slice(0, 12).map((f) => `    ${f.severity.padEnd(7)} ${f.section}/${f.code}${f.selector ? ` ${f.selector}` : ""}${f.time != null ? ` at ${f.time}s` : ""}: ${f.message}`),
       ...(result.mp4 ? [`  video:   ${result.mp4}`] : []),
       ...result.frames.map((f) => `  frame:   ${f.file} (${f.name}, ${f.t}s)`),
       ...(result.contact ? [`  sheet:   ${result.contact}`] : []),
       ...problemLines(warnings, "warn"),
       ...result.problems.map((p) => `  error  ${p}`),
-      ...(values["no-render"] ? ["  not rendered (--no-render): open the page or render it with hyperframes"] : []),
+      ...(values["no-render"] ? ["  not rendered (--no-render): open the page or render it with remotion"] : []),
       ...(ok && !values["no-render"] ? ["  next: open every frame and the video, then show the owner the sheet and the video"] : []),
     ];
     return { code: ok ? 0 : 1, data: { ok, spec: spec.path, ...result, plan, warnings, metrics }, lines };

@@ -3,7 +3,7 @@
 //
 //   node explain.mjs <command> [flags]        (run `node explain.mjs --help`)
 //
-// HyperFrames is only an engine here, reached through its CLI as a subprocess. Node ESM,
+// Remotion is only an engine here, reached through its CLI as a subprocess. Node ESM,
 // standard library only, runs from any install path (assets are found next to this file).
 
 import fs from "node:fs";
@@ -14,7 +14,7 @@ import { parseArgs } from "node:util";
 import { KIT_PRIMITIVES, describeOverride, motionIdentityLine, findProjectSpec, loadSpec, resolveDesign, tokensCss, validateSpec, SpecError } from "./lib/design.mjs";
 import { assetsDir, personalDesignPath, resolveRun, runsDir, skillHome, venvDir, venvPython } from "./lib/home.mjs";
 import { commandLine, quoteArg } from "./lib/hints.mjs";
-import { ffmpegFrame, runCheck, runRender, synthesizeBeat } from "./lib/hyperframes.mjs";
+import { ffmpegFrame, runCheck, runRender, synthesizeBeat } from "./lib/remotion.mjs";
 import { DEFAULT_ORIENTATION, frameSize, normalizeOrientation, orientationUsage, resolveLayout, runOrientation } from "./lib/orientation.mjs";
 import {
   compareSemver,
@@ -22,9 +22,9 @@ import {
   espeakInstallHint,
   findOnPath,
   inspectEspeak,
-  latestHyperframesVersion,
+  latestRemotionVersion,
   resolveEspeak,
-  resolveHyperframes,
+  resolveRemotion,
   resolvePython,
 } from "./lib/resolve.mjs";
 import { DesignInvalid, STALE_SCRIPT_MESSAGE, appendMetrics, createRun, projectDir, projectHash, readExplainData, readRun, refreshDesign, scriptStaleness, updateRun, validateLayers } from "./lib/run.mjs";
@@ -132,7 +132,7 @@ function espeakLine(espeak) {
 
 command("doctor", {
   usage: "doctor [--offline]",
-  summary: "Report the home, HyperFrames, Python/Kokoro, ffmpeg, model cache and personal DESIGN.md. Installs nothing.",
+  summary: "Report the home, Remotion, Python/Kokoro, ffmpeg, model cache and personal DESIGN.md. Installs nothing.",
   options: { offline: { type: "boolean" } },
   positionals: 0,
   async run(ctx, { values }) {
@@ -141,15 +141,15 @@ command("doctor", {
     const problems = [];
     const addProblem = (level, message, fix) => problems.push({ level, message, fix });
 
-    const hf = resolveHyperframes(deps, { probeNpx: false });
+    const hf = resolveRemotion(deps, { probeNpx: false });
     let newer = null;
     if (hf.ok && hf.version && !values.offline) {
-      const latest = await latestHyperframesVersion();
+      const latest = await latestRemotionVersion();
       if (latest) newer = { latest, available: compareSemver(latest, hf.version) > 0 };
     }
     if (!hf.ok) addProblem("error", hf.reason, hf.fix);
-    else if (hf.tier === "npx-latest") addProblem("warn", "HyperFrames is not installed; the first check or render downloads hyperframes@latest through npx", "to install it once: npm install -g hyperframes");
-    if (newer?.available) addProblem("info", `HyperFrames ${newer.latest} is available (installed ${hf.version}); explain-me never updates it for you`, "to update by hand: npm install -g hyperframes@latest");
+    else if (hf.tier === "npx-latest") addProblem("warn", "Remotion is not installed; generated projects need explicit npm install before check/render", "to install it once: npm install --save-exact remotion@4.0.535 @remotion/cli@4.0.535");
+    if (newer?.available) addProblem("info", `Remotion ${newer.latest} is available (installed ${hf.version}); explain-me never updates it for you`, "to update by hand: npm install --save-exact remotion@4.0.535 @remotion/cli@4.0.535");
 
     const python = resolvePython(deps, { home: home.dir });
     if (!python.ok) addProblem("warn", "no Python with kokoro_onnx and soundfile; narration would be silent", `run: ${hint("setup")}`);
@@ -162,16 +162,16 @@ command("doctor", {
     const uv = findOnPath("uv", deps);
 
     const nodeMajor = Number(process.versions.node.split(".")[0]);
-    if (nodeMajor < 22) addProblem("error", `Node ${process.versions.node} is too old; HyperFrames needs Node 22 or newer`, "install a current Node.js");
+    if (nodeMajor < 22) addProblem("error", `Node ${process.versions.node} is too old; Remotion needs Node 22 or newer`, "install a current Node.js");
 
-    const ttsCache = path.join(deps.homedir, ".cache", "hyperframes", "tts");
-    const model = path.join(ttsCache, "models", "kokoro-v1.0.onnx");
-    const voices = path.join(ttsCache, "voices", "voices-v1.0.bin");
+    const ttsCache = path.join(deps.homedir, ".cache", "explain-me", "kokoro");
+    const model = path.join(ttsCache, "kokoro-v1.0.onnx");
+    const voices = path.join(ttsCache, "voices-v1.0.bin");
     const modelCached = deps.fs.existsSync(model) && deps.fs.existsSync(voices);
-    if (!modelCached) addProblem("info", "the Kokoro model is not cached yet; the first narrated run downloads about 340 MB, once", `optional warm-up: ${hint("setup --warm")}`);
+    if (!modelCached) addProblem("info", "the Kokoro model is not cached yet; local model weights must be supplied before narration", `optional warm-up: ${hint("setup --warm")}`);
 
-    const chromeCached = deps.fs.existsSync(path.join(deps.homedir, ".cache", "hyperframes", "chrome"));
-    if (!chromeCached) addProblem("info", "HyperFrames has not cached its Chrome yet; the first check downloads it", "or run: hyperframes browser ensure");
+    const chromeCached = deps.fs.existsSync(path.join(deps.homedir, ".cache", "remotion", "chrome"));
+    if (!chromeCached) addProblem("info", "Remotion has not cached its Chrome yet; the first check downloads it", "or run: npx --no-install remotion browser ensure");
 
     const personal = personalDesignPath(home.dir);
     const designPresent = deps.fs.existsSync(personal);
@@ -180,7 +180,7 @@ command("doctor", {
     const data = {
       ok: !problems.some((p) => p.level === "error"),
       home: { path: home.dir, source: home.source, exists: deps.fs.existsSync(home.dir) },
-      hyperframes: hf.ok ? { tier: hf.tier, version: hf.version, command: [hf.command, ...(hf.prefixArgs ?? [])].join(" "), newer } : { tier: null, reason: hf.reason },
+      remotion: hf.ok ? { tier: hf.tier, version: hf.version, command: [hf.command, ...(hf.prefixArgs ?? [])].join(" "), newer } : { tier: null, reason: hf.reason },
       python: { ok: python.ok, tier: python.tier, path: python.path, candidates: python.candidates },
       espeak: { ...espeak, install: espeak.ok ? null : espeakInstallHint(deps.platform) },
       ffmpeg: { path: ffmpeg },
@@ -195,14 +195,14 @@ command("doctor", {
     const lines = [];
     lines.push(`${tag("info")}home: ${home.dir} (${home.source})${data.home.exists ? "" : " - not created yet, setup creates it"}`);
     if (hf.ok) {
-      lines.push(`${tag(hf.tier === "npx-latest" ? "warn" : "ok")}hyperframes: ${hf.tier}${hf.version ? ` ${hf.version}` : ""}${newer ? (newer.available ? ` (newer ${newer.latest} exists)` : " (up to date)") : ""}`);
-    } else lines.push(`${tag("error")}hyperframes: ${hf.reason}`);
+      lines.push(`${tag(hf.tier === "npx-latest" ? "warn" : "ok")}remotion: ${hf.tier}${hf.version ? ` ${hf.version}` : ""}${newer ? (newer.available ? ` (newer ${newer.latest} exists)` : " (up to date)") : ""}`);
+    } else lines.push(`${tag("error")}remotion: ${hf.reason}`);
     lines.push(python.ok ? `${tag("ok")}python: ${python.tier} ${python.path} (kokoro_onnx and soundfile import)` : `${tag("warn")}python: no interpreter has kokoro_onnx and soundfile (tried ${python.candidates.map((c) => c.tier).join(", ") || "none"})`);
     lines.push(espeakLine(espeak));
     lines.push(ffmpeg ? `${tag("ok")}ffmpeg: ${ffmpeg}` : `${tag("error")}ffmpeg: not on PATH`);
     lines.push(`${tag(uv ? "ok" : "info")}uv: ${uv ?? "not found (setup falls back to python -m venv)"}`);
     lines.push(`${tag(modelCached ? "ok" : "info")}kokoro model: ${modelCached ? "cached" : "not cached yet"} (${ttsCache})`);
-    lines.push(`${tag(chromeCached ? "ok" : "info")}chrome: ${chromeCached ? "cached by HyperFrames" : "not cached yet"}`);
+    lines.push(`${tag(chromeCached ? "ok" : "info")}chrome: ${chromeCached ? "cached by Remotion" : "not cached yet"}`);
     lines.push(`${tag(designPresent ? "ok" : "info")}personal DESIGN.md: ${designPresent ? personal : "none yet"}`);
     for (const p of problems) if (p.level !== "info" && p.fix) lines.push(`  ${p.level === "error" ? "fix" : "hint"}: ${p.fix}`);
     return { code: data.ok ? 0 : 1, data, lines };
@@ -216,7 +216,7 @@ command("doctor", {
 command("setup", {
   usage: "setup [--warm]",
   summary: "Create the home and runs/, seed the personal DESIGN.md, make sure a Python can run Kokoro (venv only if none can).",
-  details: "--warm  also run one tiny narration so HyperFrames downloads the Kokoro model now (about 340 MB, once).",
+  details: "--warm  also run one tiny narration with separately prepared Kokoro weights.",
   options: { warm: { type: "boolean" } },
   positionals: 0,
   async run(ctx, { values }) {
@@ -249,7 +249,7 @@ command("setup", {
       const run = (cmd, args) => deps.exec(cmd, args, { env: deps.env, inherit, timeoutMs: 15 * 60 * 1000 });
       const fail = (what, r) => {
         throw new CliError(`${what} failed${r?.stderr ? `: ${String(r.stderr).trim().slice(-400)}` : r?.status != null ? ` (exit ${r.status})` : ""}`, {
-          fix: "install Python 3.10-3.13, then run setup again; or install the packages yourself: pip install kokoro-onnx soundfile and set HYPERFRAMES_PYTHON",
+          fix: "install Python 3.10-3.13, then run setup again; or install the packages yourself: pip install kokoro-onnx soundfile and set REMOTION_PYTHON",
         });
       };
       if (!fs.existsSync(venvPy)) {
@@ -271,9 +271,9 @@ command("setup", {
     if (espeak.ok) note(`espeak-ng ready: ${espeak.via}${espeak.library ? ` ${espeak.library}` : ""}`);
     else note(`warn: the phonemizer behind Kokoro (espeak-ng) cannot run (${espeak.error}); narration will fail until you ${espeakFix(deps)}`);
 
-    const hf = resolveHyperframes(deps, { probeNpx: Boolean(values.warm) });
-    data.hyperframes = hf.ok ? { tier: hf.tier, version: hf.version } : null;
-    if (hf.ok) note(`hyperframes: ${hf.tier}${hf.version ? ` ${hf.version}` : ""}`);
+    const hf = resolveRemotion(deps, { probeNpx: Boolean(values.warm) });
+    data.remotion = hf.ok ? { tier: hf.tier, version: hf.version } : null;
+    if (hf.ok) note(`remotion: ${hf.tier}${hf.version ? ` ${hf.version}` : ""}`);
     else note(`warn: ${hf.reason}; ${hf.fix}`);
 
     if (values.warm) {
@@ -397,7 +397,7 @@ command("tokens", {
 
 command("new", {
   usage: "new --slug <slug> --lang <tag> [--format video|svg|html|text|mermaid|image] [--orientation landscape|portrait] [--design <path>] [--dest <dir>] [--title <t>]",
-  summary: "Create the run folder. For video (the default): the HyperFrames project from assets/, frame.md, tokens.css, run.json and a starter script.json. For svg/html: run.json and tokens.css. For text/mermaid/image: run.json. Every format also gets a starter explanation.md.",
+  summary: "Create the run folder. For video (the default): the Remotion project from assets/, frame.md, tokens.css, run.json and a starter script.json. For svg/html: run.json and tokens.css. For text/mermaid/image: run.json. Every format also gets a starter explanation.md.",
   details: "--lang is the language of the request (pt-BR, en, es, ...). Kokoro voices: pt-br, en-us, en-gb, es, fr-fr, it, ja, zh, hi; any other language gets a silent video and subtitles.\n--orientation is the frame shape of a video: landscape (16:9, 1920x1080, the default) or portrait (9:16, 1080x1920, for Reels, Shorts and TikTok). Aliases: horizontal, 16:9, vertical, 9:16, reels, shorts, tiktok. Video only; it is not --format.\n--design is the project's brand spec after the intake offered it; it overrides the personal DESIGN.md and the shipped default key by key.\nexplanation.md holds the load-bearing distinction, the glossary and the explain-back question, in the request's language (Portuguese for pt tags, English for every other language). It is never overwritten.",
   options: { slug: { type: "string" }, lang: { type: "string" }, format: { type: "string" }, orientation: { type: "string" }, design: { type: "string" }, dest: { type: "string" }, title: { type: "string" } },
   positionals: 0,
@@ -413,10 +413,10 @@ command("new", {
       if (!orientation) throw usage(`${orientationUsage()}, got "${values.orientation}"`);
     }
     const home = skillHome({ env: deps.env, platform: deps.platform, homedir: deps.homedir }).dir;
-    const hf = resolveHyperframes(deps, { probeNpx: false });
+    const hf = resolveRemotion(deps, { probeNpx: false });
     let created;
     try {
-      created = createRun({ home, slug: values.slug, lang: values.lang, title: values.title, designPath: values.design, dest: values.dest, assetsDir: ASSETS, hyperframes: hf.ok ? hf : null, format, orientation });
+      created = createRun({ home, slug: values.slug, lang: values.lang, title: values.title, designPath: values.design, dest: values.dest, assetsDir: ASSETS, remotion: hf.ok ? hf : null, format, orientation });
     } catch (e) {
       if (e instanceof DesignInvalid) {
         throw new CliError("the design spec is invalid", {
@@ -488,7 +488,7 @@ command("new", {
 // voice
 // ---------------------------------------------------------------------------
 
-const ttsCachePath = (deps) => path.join(deps.homedir, ".cache", "hyperframes", "tts", "models", "kokoro-v1.0.onnx");
+const ttsCachePath = (deps) => path.join(deps.homedir, ".cache", "explain-me", "kokoro", "kokoro-v1.0.onnx");
 
 // Loaded on first use, so a script error never needs the linter.
 function lazyLint() {
@@ -542,17 +542,17 @@ command("voice", {
     if (!glossary && fs.existsSync(path.join(runDir, "glossary.md"))) glossary = path.join(runDir, "glossary.md");
     if (values.glossary && !fs.existsSync(glossary)) throw new CliError(`glossary not found: ${glossary}`, { fix: "check the --glossary path" });
 
-    // Engine resolution is lazy: a silent run, or a lint failure, never touches Python or HyperFrames.
+    // Engine resolution is lazy: a silent run, or a lint failure, never touches Python or Remotion.
     let engine;
     const getEngine = () => {
       if (engine) return engine;
-      const hf = resolveHyperframes(deps, { probeNpx: true });
+      const hf = resolveRemotion(deps, { probeNpx: true });
       if (!hf.ok) return (engine = { error: `${hf.reason}. ${hf.fix}` });
       const python = resolvePython(deps, { home });
       if (!python.ok) return (engine = { error: `no Python can import kokoro_onnx and soundfile. Run: ${hint("setup")} (or pass --silent for a silent video with subtitles)` });
       const espeak = resolveEspeak(deps, python.path);
       if (!espeak.ok) return (engine = { error: `the phonemizer behind Kokoro (espeak-ng) cannot run: ${espeak.error}. ${espeakFix(deps)} (or pass --silent)` });
-      if (!deps.fs.existsSync(ttsCachePath(deps)) && !ctx.json) process.stderr.write("The Kokoro model is not cached yet: the first narration downloads about 340 MB to ~/.cache/hyperframes/tts (once).\n");
+      if (!deps.fs.existsSync(ttsCachePath(deps)) && !ctx.json) process.stderr.write("The Kokoro model is not cached yet: provide Kokoro weights in ~/.cache/explain-me/kokoro before narration.\n");
       return (engine = { hf, python, espeak });
     };
     const ttsDir = path.join(runDir, "tts");
@@ -595,7 +595,7 @@ command("voice", {
       });
     }
 
-    if (engine?.hf) updateRun(runDir, { hyperframes: { tier: engine.hf.tier, version: engine.hf.version }, python: { tier: engine.python.tier, path: engine.python.path, espeak: engine.espeak.via } });
+    if (engine?.hf) updateRun(runDir, { remotion: { tier: engine.hf.tier, version: engine.hf.version }, python: { tier: engine.python.tier, path: engine.python.path, espeak: engine.espeak.via } });
     else if (result.silent) updateRun(runDir, { python: null });
 
     const designInfo = { changed: design.changed, overridesChanged: design.overridesChanged, layers: design.layers, overrides: design.overrides, warnings: design.warnings };
@@ -642,7 +642,7 @@ function guardStaleScript(runDir) {
 
 command("check", {
   usage: "check <run>",
-  summary: "Run hyperframes check in project/ (lint, runtime, layout, motion, contrast) and record the result and the file hash in run.json.",
+  summary: "Load native Remotion compositions and check the first-frame runtime; visual/audio fidelity needs review and record the result and the file hash in run.json.",
   options: {},
   positionals: 1,
   async run(ctx, { positionals }) {
@@ -657,20 +657,20 @@ command("check", {
     const preflight = [];
     const mismatch = stageFrameMismatch(fs.readFileSync(path.join(project, "index.html"), "utf8"), runOrientation(readRun(runDir)));
     if (mismatch) preflight.push(mismatch);
-    const hf = resolveHyperframes(deps, { probeNpx: true });
+    const hf = resolveRemotion(deps, { probeNpx: true });
     if (!hf.ok) throw new CliError(hf.reason, { fix: hf.fix });
     const result = runCheck(deps, hf, project);
     const hash = projectHash(project);
     const at = new Date().toISOString();
     const version = result.version ?? hf.version;
     updateRun(runDir, {
-      hyperframes: { tier: hf.tier, version },
+      remotion: { tier: hf.tier, version },
       check: { ok: result.ok, errors: result.errors, warnings: result.warnings, frozen: result.frozen, hash, at },
     });
     if (result.crashed) {
-      throw new CliError("hyperframes check did not produce a result", { fix: `run: ${hint("doctor")}; or run hyperframes doctor`, lines: result.raw ? result.raw.split("\n").map((l) => `  ${l}`) : [] });
+      throw new CliError("remotion check did not produce a result", { fix: `run: ${hint("doctor")}; or run npm install in the generated project`, lines: result.raw ? result.raw.split("\n").map((l) => `  ${l}`) : [] });
     }
-    const lines = [`${tag(result.ok ? "ok" : "error")}hyperframes check: ${result.errors} error(s), ${result.warnings} warning(s)${version ? ` (hyperframes ${version})` : ""}`];
+    const lines = [`${tag(result.ok ? "ok" : "error")}remotion check: ${result.errors} error(s), ${result.warnings} warning(s)${version ? ` (remotion ${version})` : ""}`];
     for (const w of preflight) lines.push(`  warn    ${w}`);
     for (const f of result.findings) {
       lines.push(`  ${f.severity.padEnd(7)} ${f.code}${f.selector ? ` ${f.selector}` : ""}${f.time != null ? ` at ${fmtSec(f.time)}s` : ""}: ${f.message}`);
@@ -689,7 +689,7 @@ command("check", {
 command("render", {
   usage: "render <run> [--dest <dir>] [--quality draft|looks|delivery] [--fps <n>] [--verbose]",
   summary: "Render <run>/<slug>.mp4 (refuses unless the latest check passed for the current files), extract two frames per beat (entrance and settled), copy to --dest, log the metrics line.",
-  details: "--verbose  stream HyperFrames' own render log (very long); by default it is captured and only shown when the render fails.",
+  details: "--verbose  stream Remotion' own render log (very long); by default it is captured and only shown when the render fails.",
   options: { dest: { type: "string" }, quality: { type: "string" }, fps: { type: "string" }, verbose: { type: "boolean" } },
   positionals: 1,
   async run(ctx, { values, positionals }) {
@@ -711,14 +711,14 @@ command("render", {
     const hash = projectHash(project);
     if (check.hash !== hash) throw new CliError("Motion Gate closed: index.html, explain-data.js or index.motion.json changed since the last check", { fix: `run: ${hint(`check ${q(runDir)}`)}` });
 
-    const hf = resolveHyperframes(deps, { probeNpx: true });
+    const hf = resolveRemotion(deps, { probeNpx: true });
     if (!hf.ok) throw new CliError(hf.reason, { fix: hf.fix });
     const mp4 = path.join(runDir, `${run.slug}.mp4`);
     const started = Date.now();
     if (!ctx.json) process.stderr.write(`Rendering ${path.basename(mp4)} (${fmtSec(run.timeline?.total ?? 0)} s of video; this takes a while)...\n`);
     const r = runRender(deps, hf, project, { out: mp4, quality, fps: values.fps, inherit: Boolean(values.verbose) && !ctx.json });
     const renderSeconds = Math.round((Date.now() - started) / 100) / 10;
-    if (!r.ok || !fs.existsSync(mp4)) throw new CliError(`hyperframes render failed${r.status != null ? ` (exit ${r.status})` : ""}`, { fix: `run: ${hint("doctor")}; the render output above says what broke`, lines: r.stderr ? r.stderr.split("\n").map((l) => `  ${l}`) : [] });
+    if (!r.ok || !fs.existsSync(mp4)) throw new CliError(`remotion render failed${r.status != null ? ` (exit ${r.status})` : ""}`, { fix: `run: ${hint("doctor")}; the render output above says what broke`, lines: r.stderr ? r.stderr.split("\n").map((l) => `  ${l}`) : [] });
 
     const explain = readExplainData(project);
     const framesDir = path.join(runDir, "frames");
@@ -749,7 +749,7 @@ command("render", {
       }
     }
 
-    const version = check.version ?? run.hyperframes?.version ?? hf.version;
+    const version = check.version ?? run.remotion?.version ?? hf.version;
     const metricsFile = appendMetrics({
       skill: "explain-me",
       run: path.basename(runDir),
@@ -760,13 +760,13 @@ command("render", {
       check_errors: check.errors,
       motion_frozen: check.frozen ?? 0,
       render_s: renderSeconds,
-      hyperframes_version: version ?? null,
+      remotion_version: version ?? null,
       overrides: run.design?.overrides ?? [],
       format: "video",
       orientation: runOrientation(run),
       captions_burned: Boolean(explain.captions?.burn),
     });
-    updateRun(runDir, { hyperframes: { tier: hf.tier, version: version ?? null }, render: { path: mp4, at: new Date().toISOString(), seconds: renderSeconds } });
+    updateRun(runDir, { remotion: { tier: hf.tier, version: version ?? null }, render: { path: mp4, at: new Date().toISOString(), seconds: renderSeconds } });
 
     const data = { ok: true, run: runDir, mp4, srt: path.join(runDir, `${run.slug}.srt`), frames, frameTimes, orientation: runOrientation(run), captionsBurned: Boolean(explain.captions?.burn), delivered, duration: explain.total, renderSeconds, silent: Boolean(run.silent), overrides: run.design?.overrides ?? [], metrics: metricsFile, warnings: frameWarnings };
     const lines = [

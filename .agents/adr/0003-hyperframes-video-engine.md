@@ -1,5 +1,7 @@
 # HyperFrames as the explain-me video engine
 
+> Superseded engine details by [ADR0005](0005-remotion-editor.md). This document records the earlier decision, not the current setup.
+
 `explain-me` renders its videos with HyperFrames, used as an engine only and called through its CLI as a subprocess. The skill ships its own template, 3b1b Kit, design spec and driver around it. HyperFrames' own intent interview, brief, storyboard and HeyGen sign-in preflight are not part of the workflow.
 
 ## Context

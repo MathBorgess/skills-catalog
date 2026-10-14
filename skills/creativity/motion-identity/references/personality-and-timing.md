@@ -27,7 +27,7 @@ No keyword fits? Recommend `corporate` for a product or a service, and `playful`
 
 ## Durations in a video (seconds, per kit primitive)
 
-`motion.durations` uses explain-me's primitive names. HyperFrames reads the same numbers as the brand's tempo.
+`motion.durations` uses explain-me's primitive names. The Remotion editor agent uses the same numbers as the brand's tempo.
 
 | Primitive | What it is | playful | premium | corporate | energetic |
 |---|---|---|---|---|---|

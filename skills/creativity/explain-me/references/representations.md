@@ -13,7 +13,7 @@ Every format uses the Requester Language for every word it shows or speaks.
 | Exact layout, component boundaries, internal structure | Inline SVG | [`design-spec.md`](design-spec.md) | Labelled parts and boundaries, palette and type from the Design Spec. |
 | Abstract intuition, physical analogy | Generative image | Image tool | A scene with a caption that states where the analogy breaks down. |
 | Trade-offs, parameter tuning, state exploration | Interactive HTML | [`interactive-html.md`](interactive-html.md) | Live range controls, `--em-*` tokens from the Design Spec, one file, no build step. |
-| Change over time, step-by-step proof, a process with a before and an after | Scene-Driven Video | [`video-motion.md`](video-motion.md) | HyperFrames, 3b1b Kit motion, one Kokoro Narration clip per Beat, `.srt`, `.mp4`. |
+| Change over time, step-by-step proof, a process with a before and an after | Scene-Driven Video | [`video-motion.md`](video-motion.md) | Remotion, 3b1b Kit motion, one Kokoro Narration clip per Beat, `.srt`, `.mp4`. |
 
 Default to the smallest format that shows the Load-bearing Distinction. Choose video only when the mechanism changes over time.
 

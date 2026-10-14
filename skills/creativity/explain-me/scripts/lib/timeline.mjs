@@ -188,10 +188,10 @@ export function buildSrt(beats) {
 }
 
 // ---------------------------------------------------------------------------
-// HyperFrames sidecar and generated files
+// Remotion sidecar and generated files
 // ---------------------------------------------------------------------------
 
-// Where the Motion Gate stops looking: the end of the last beat, or null when there are no beats. HyperFrames
+// Where the Motion Gate stops looking: the end of the last beat, or null when there are no beats. Remotion
 // samples the motion pass over [0, sidecar `duration`] and takes the composition's own length (the root
 // data-duration, which includes the closing tail) only when the sidecar has none. So the tail, a hold kept on
 // purpose after the narration, is never judged; a frozen stretch inside the beats still is.
@@ -262,7 +262,7 @@ export function rewriteRootDuration(html, total) {
   return html.slice(0, m.index) + tag + html.slice(m.index + m[0].length);
 }
 
-// Sets data-width and data-height on the root element, the size HyperFrames renders at.
+// Sets data-width and data-height on the root element, the size Remotion renders at.
 export function rewriteRootSize(html, width, height) {
   const re = /<[A-Za-z][\w-]*\b[^>]*\bdata-composition-id\s*=\s*["']explain["'][^>]*>/;
   const m = re.exec(html);

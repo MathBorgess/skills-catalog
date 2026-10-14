@@ -9,12 +9,14 @@ The brand spec has one home, the file the owner keeps. A video project points at
 | Tool | How it gets the spec |
 |---|---|
 | explain-me | `explain.mjs new ... --design <spec>`. Or, inside the brand's project, `explain.mjs design find` offers it at intake. `new` prints `motion: personality …; eases …; ambient …; signature …`. Pass that line on to the beats, and leave `ease` off the calls. |
-| HyperFrames | Put the spec at the project root as a link: `ln -s <spec> <project>/DESIGN.md`. If the project already has a `frame.md` or `design.md`, HyperFrames reads that file first. Either link under the winning name, or ask the owner which file the project should follow. |
-| HyperFrames `BRIEF.md` | Paste the output of `motion.mjs brief <spec>` into the brief's notes. `talking-head-recut` and `embedded-captions` read only the brief. For them, it is the whole motion identity. |
+| Remotion editor | The agent explicitly reads the linked DESIGN.md and applies its tokens/motion in React. Remotion itself does not discover brand Markdown. Record the chosen source in REVIEW.md. |
+| Editor review | Paste `motion.mjs brief <spec>` into REVIEW.md and implement its identity through frame-driven motion. No dependency on removed footage-workflow skills. |
 
 Where links are not possible (a cloud upload, another machine), copy the spec, write its source path and date at the top of the copy, and replace the copy when the identity changes.
 
 ## The proof
+
+First generate with `--no-render --dest <dir>`. Install the pinned dependencies explicitly in `<dir>/project` with `npm install`, then rerun the proof with the same destination without `--no-render`. The skill never installs the old engine or silently downloads a replacement CLI. Open native Studio with `npm run dev` in the generated project to revise the proof. The SVG/GSAP page exports an explicit seek function; a Remotion React adapter drives it from the frame, including source audio via Sequence. New footage edits should use native React/Sequence components directly.
 
 ```bash
 node <skill>/scripts/motion.mjs proof <spec> \
@@ -27,7 +29,7 @@ node <skill>/scripts/motion.mjs proof <spec> \
 - **Orientation.** Use the brand's first channel (decision D2): `portrait` for Reels, Shorts and TikTok, `landscape` for lessons.
 - **Accent.** The default is the non-neutral color with the best contrast on the background, so the emphasized word stays readable. `--accent <key>` names another. If the brand's primary color fails 4.5:1 on its own background as text, say so: that is a finding about the brand, not about the proof.
 - **What it plays.** The words enter in the archetype's pattern on `eases.enter`. One word is emphasized on `eases.emphasis` and takes the accent. A line draws and the supporting line enters. The group moves on the base ease. The signature plays if there is one. Everything leaves on `eases.exit`. The ambient glow follows `motion.ambient`.
-- **What it checks.** The spec first (`check`), then `hyperframes check`: lint, runtime errors, layout, contrast, and a motion sidecar where the stage keeps moving and the first word appears on time. It renders only when both pass.
+- **What it checks.** The brand spec first, then native Remotion composition loading and first-frame runtime. Render only after those pass. Inspect motion, overlap, contrast and the requested frame samples manually; the motion sidecar is a review specification, not a Remotion-enforced lint gate.
 - **What it writes.** In the proof folder:
   - `project/index.html`, the page;
   - `plan.json`, every time and ease;
@@ -78,7 +80,7 @@ Fix the spec or the signature, never the generated page, and run the proof again
 
 The render needs network access, because the page loads GSAP from jsDelivr, and a headless Chrome.
 
-- If HyperFrames reports no browser, run `npx hyperframes browser ensure`, or point `PRODUCER_HEADLESS_SHELL_PATH` at a Chrome headless shell that is already installed.
+- If Remotion reports no browser, run `npx --no-install remotion browser ensure`, or point `REMOTION_BROWSER_EXECUTABLE` at a Chrome headless shell that is already installed.
 - If the network is closed, `--no-render` still writes the page. Say plainly that no proof rendered, and keep the status `draft`.
 
 ## Approval

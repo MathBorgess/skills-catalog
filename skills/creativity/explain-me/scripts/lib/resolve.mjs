@@ -1,4 +1,4 @@
-// Resolution of the two external pieces explain-me drives: the HyperFrames CLI and a Python
+// Resolution of the two external pieces explain-me drives: the Remotion CLI and a Python
 // that can run Kokoro. Both are "installed first": nothing is downloaded or updated when a
 // usable copy exists. Everything that touches the machine goes through `deps` so the order
 // can be tested with fakes.
@@ -7,7 +7,7 @@ import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { hfEnv } from "./hyperframes.mjs";
+import { hfEnv } from "./remotion.mjs";
 import { venvPython } from "./home.mjs";
 
 export function defaultDeps() {
@@ -91,7 +91,7 @@ function readVersionFromOutput(text) {
 }
 
 // ---------------------------------------------------------------------------
-// HyperFrames
+// Remotion
 // ---------------------------------------------------------------------------
 
 export function npxCacheRoots(deps) {
@@ -116,8 +116,8 @@ export function findNpxCacheCopies(deps) {
       continue;
     }
     for (const entry of entries) {
-      const pkgDir = p.join(root, entry, "node_modules", "hyperframes");
-      const bin = p.join(pkgDir, "bin", "hyperframes.mjs");
+      const pkgDir = p.join(root, entry, "node_modules", "@remotion", "cli");
+      const bin = p.join(pkgDir, "remotion-cli.js");
       const pkg = p.join(pkgDir, "package.json");
       if (!deps.fs.existsSync(bin) || !deps.fs.existsSync(pkg)) continue;
       try {
@@ -132,21 +132,21 @@ export function findNpxCacheCopies(deps) {
 }
 
 // Returns {ok, tier, command, prefixArgs, version, bin?, note?} or {ok:false, reason}.
-//   tier "path"      : `hyperframes` on PATH
+//   tier "path"      : `remotion` on PATH
 //   tier "npx-cache" : highest copy already in the npx cache, run with node
-//   tier "npx-latest": `npx --yes hyperframes@latest` (only when nothing is installed)
-// `probeNpx` runs `--version` through npx for the last tier (that downloads it); `doctor`
+//   tier "npx-latest": `npx --no-install remotion` (project dependencies must be installed explicitly)
+// `probeNpx` runs a local `--version` probe; it never downloads an editor; `doctor`
 // leaves it off so it never installs.
-export function resolveHyperframes(deps = defaultDeps(), { probeNpx = false } = {}) {
-  const onPath = findOnPath("hyperframes", deps);
+export function resolveRemotion(deps = defaultDeps(), { probeNpx = false } = {}) {
+  const onPath = findOnPath("remotion", deps);
   if (onPath) {
     const p = pathMod(deps);
-    // Windows shims (.cmd) sit next to node_modules/hyperframes; prefer running the script with node.
+    // Windows shims (.cmd) sit next to node_modules/remotion; prefer running the script with node.
     let command = onPath;
     let prefixArgs = [];
     let bin;
     if (isWin(deps) && /\.(cmd|bat)$/i.test(onPath)) {
-      const sibling = p.join(p.dirname(onPath), "node_modules", "hyperframes", "bin", "hyperframes.mjs");
+      const sibling = p.join(p.dirname(onPath), "node_modules", "@remotion", "cli", "remotion-cli.js");
       if (deps.fs.existsSync(sibling)) {
         command = deps.nodePath;
         prefixArgs = [sibling];
@@ -165,24 +165,24 @@ export function resolveHyperframes(deps = defaultDeps(), { probeNpx = false } = 
   if (!npx) {
     return {
       ok: false,
-      reason: "HyperFrames is not installed and npx is not on PATH",
-      fix: "install Node.js 22 or newer (it ships npx), or run: npm install -g hyperframes",
+      reason: "Remotion is not installed and npx is not on PATH",
+      fix: "install Node.js 22 or newer (it ships npx), or run: npm install --save-exact remotion@4.0.535 @remotion/cli@4.0.535",
     };
   }
-  const base = { ok: true, tier: "npx-latest", command: npx, prefixArgs: ["--yes", "hyperframes@latest"], version: null, note: "not installed; the first call downloads hyperframes@latest through npx" };
+  const base = { ok: true, tier: "npx-latest", command: npx, prefixArgs: ["--no-install", "remotion"], version: null, note: "project dependencies required; run npm install in the generated project before check/render" };
   if (probeNpx) {
     const r = deps.exec(npx, [...base.prefixArgs, "--version"], { env: hfEnv(deps.env), timeoutMs: 300000 });
     base.version = readVersionFromOutput(r.stdout);
-    base.note = "downloaded through npx on this call";
+    base.note = "probed project-local CLI";
   }
   return base;
 }
 
 // Best effort, never throws, null when offline or slow.
-export async function latestHyperframesVersion({ fetchFn = globalThis.fetch, timeoutMs = 2500 } = {}) {
+export async function latestRemotionVersion({ fetchFn = globalThis.fetch, timeoutMs = 2500 } = {}) {
   try {
     if (typeof fetchFn !== "function") return null;
-    const res = await fetchFn("https://registry.npmjs.org/hyperframes/latest", { signal: AbortSignal.timeout(timeoutMs), headers: { accept: "application/json" } });
+    const res = await fetchFn("https://registry.npmjs.org/@remotion%2fcli/latest", { signal: AbortSignal.timeout(timeoutMs), headers: { accept: "application/json" } });
     if (!res.ok) return null;
     const json = await res.json();
     return typeof json.version === "string" && parseSemver(json.version) ? json.version : null;
@@ -202,7 +202,7 @@ export function pythonHasKokoro(python, deps) {
   return r.status === 0 && !r.error;
 }
 
-// Order: $HYPERFRAMES_PYTHON -> python3 on PATH -> <home>/venv. The first one that can import
+// Order: $EXPLAIN_ME_PYTHON -> python3 on PATH -> <home>/venv. The first one that can import
 // kokoro_onnx and soundfile wins. Returns {ok, tier, path, candidates}.
 export function resolvePython(deps = defaultDeps(), { home } = {}) {
   const candidates = [];
@@ -216,7 +216,7 @@ export function resolvePython(deps = defaultDeps(), { home } = {}) {
     return kokoro ? { ok: true, tier, path: pythonPath } : null;
   };
 
-  const hit = (deps.env.HYPERFRAMES_PYTHON && consider("env", deps.env.HYPERFRAMES_PYTHON)) || consider("python3", findOnPath("python3", deps) ?? findOnPath("python", deps)) || (home && consider("venv", venvPython(home, deps.platform)));
+  const hit = (deps.env.EXPLAIN_ME_PYTHON && consider("env", deps.env.EXPLAIN_ME_PYTHON)) || consider("python3", findOnPath("python3", deps) ?? findOnPath("python", deps)) || (home && consider("venv", venvPython(home, deps.platform)));
   if (hit) return { ...hit, candidates };
   return { ok: false, tier: null, path: null, candidates };
 }

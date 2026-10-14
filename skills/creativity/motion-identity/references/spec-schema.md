@@ -1,6 +1,6 @@
 # Spec schema
 
-Where a motion identity lives in a brand spec, and how each video tool reads it. A spec is YAML frontmatter plus a markdown body. This is the same file explain-me and HyperFrames read (`frame.md`, `design.md` or `DESIGN.md`).
+Where a motion identity lives in a brand spec, and how each video tool reads it. A spec is YAML frontmatter plus a markdown body. This is the same file explain-me and Remotion read (`frame.md`, `design.md` or `DESIGN.md`).
 
 - **The frontmatter is normative.** The tools copy its values exactly. Never round, never invent.
 - **The prose is judgment.** The agent that writes a video reads it for intent and limits.
@@ -78,15 +78,14 @@ kit.beat("b03", (b) => {
 
 ### `## Brief block`
 
-At most eight lines, the motion identity in a form a HyperFrames brief can carry. Write it for an agent that has never seen the spec: personality, the three role eases and the base ease, the duration feel, the signature, ambient, and the one or two never-items that matter most. `motion.mjs brief` prints it with the spec's path.
+At most eight lines, the motion identity in a form a Remotion brief can carry. Write it for an agent that has never seen the spec: personality, the three role eases and the base ease, the duration feel, the signature, ambient, and the one or two never-items that matter most. `motion.mjs brief` prints it with the spec's path.
 
 ## How each tool reads it
 
 | Tool | Reads | Normative | Judgment |
 |---|---|---|---|
 | explain-me | `--design <spec>`, or the project's spec through `design find` | colors, typography, `motion.*`: the kit applies the role eases, the durations and the ambient level; an ambient other than `none` is reported as an override | `## Motion identity`, `## Motion examples`; `new` prints the resolved `motion:` line |
-| HyperFrames (`general-video`, `motion-graphics`, `hyperframes-creative`) | the spec at the project root, `frame.md` first, then `design.md`, then `DESIGN.md` | the frontmatter is "brand truth": exact hex and font values | all prose sections |
-| HyperFrames footage skills (`talking-head-recut`, `embedded-captions`) | only `BRIEF.md` | — | the brief block, pasted into the brief's notes |
+| Remotion editor agent | explicitly reads the linked DESIGN.md and REVIEW.md | applies exact tokens and motion through React/Sequence | prose explains intent; Remotion itself does not load Markdown |
 
 ## The floor that never moves
 

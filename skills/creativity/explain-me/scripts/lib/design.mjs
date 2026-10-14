@@ -14,7 +14,7 @@ export const KIT_PRIMITIVES = ["draw", "write", "morph", "move", "camera", "indi
 // Chain modifiers of the beat object that are part of the kit API but are not primitives.
 export const KIT_MODIFIERS = ["at"];
 export const IMAGE_ROLES = ["reference", "asset", "logo"];
-// Same precedence HyperFrames uses to discover a project's brand spec.
+// Same precedence Remotion uses to discover a project's brand spec.
 export const PROJECT_SPEC_NAMES = ["frame.md", "design.md", "DESIGN.md"];
 export const KOKORO_LANGS = ["pt-br", "en-us", "en-gb", "es", "fr-fr", "it", "ja", "zh", "hi"];
 export const HEX_RE = /^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/;

@@ -3,7 +3,7 @@ name: video-reference
 description: "Use when the user wants to distill a local video into reusable references, recover a project's video-reference library, prepare editor direction from reference layers, or guide an edit using a saved video reference. Captures text presentation, graphical construction, motion, content, sound and their temporal/semantic dependencies. The current agent analyzes; the local CLI preserves evidence and retrieves context."
 metadata:
   author: Matheus Borges
-  version: 1.0.0
+  version: 1.1.0
 ---
 
 # Video Reference

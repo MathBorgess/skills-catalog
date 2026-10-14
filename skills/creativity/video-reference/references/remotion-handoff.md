@@ -4,6 +4,8 @@ Load [production MANDATES](production-mandates.md) and carry the project-local M
 
 Map confirmed intent and author assets to REVIEW.md, a second-by-second plan, React scenes and Sequence intervals. Frame timing is useCurrentFrame()-driven and seekable. Source milliseconds remain evidence; map them explicitly into destination frames and remap connected text, motion, words and sound together.
 
+For production read [editorial quality](editorial-quality.md). Carry the timestamped print-and-speech storyboard, milestone/CTA hierarchy and reasoned cut ledger into direction. On supporting CLI versions, `schema production` exposes these requirements and `read`/`handoff` carry them under `mandates.editorialQuality`; older installed versions need this method supplied explicitly. CLI delivery of requirements is structural evidence, not an automated aesthetic or listening assessment.
+
 For changed dependencies present the requested change, every affected relation (including indirect effects), proposed resolutions and consequences. Wait for the exact human response before recording an approval. Creating a file or supplying a flag is not consent; changed revisions or proposals need a new decision.
 
 When production is requested, show the whole plan, assemble the complete editable first draft with reference behavior and author content, and open actual Remotion Studio. The human then edits assisted by AI. Follow the mandates for dimensions, safe areas, color and export boundaries. Do not add an obligatory transcript/cut or conversion stage.

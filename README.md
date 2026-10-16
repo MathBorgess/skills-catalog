@@ -80,7 +80,7 @@ Two things it deliberately does not cover: a pull on a branch other than `main`,
 
 ## Catalog
 
-The folders and tables separate `engineering`, `creativity`, and `experiments`. Installation and invocation still use the leaf skill name, without a category prefix. Learning workflows sit with engineering; writing sits with creativity.
+The folders and tables separate `engineering`, `creativity`, `media`, and `experiments`. Installation and invocation still use the leaf skill name, without a category prefix. Learning workflows sit with engineering; visual explanations and plain writing sit with creativity; brand-guided content and social media direction sit with media.
 
 Two kinds of skills live in this catalog:
 - **Operators**: Generic, reusable workflows run to get work done across projects on work that keeps arriving.
@@ -99,20 +99,28 @@ Domain design, agent workflow maintenance, and technical learning. These are ope
 
 ### Creativity
 
-Visual explanations, design, motion, and writing. These are operator skills; `motion-identity` defines how a brand moves, while `co-direct-animation` co-directs films from authored DESIGN.md and a human briefing through reviewed Flow shots and final assembly. `poster-design`, `campaign-identity-grid`, `brand-campaign-shots` and `illustration-style-remix` run image-model design work, each checking its outputs against written constraints before delivery.
+Visual explanations, interactive prototypes, and plain-language writing. (`video-reference` is currently in *analysis* status against `viral-rag` in `skills/media/`.)
 
 | Skill | Version | Kind | What it does |
 |---|---|---|---|
-| [`video-reference`](skills/creativity/video-reference/) | 1.1.0 | operator | Distills local videos into layered references and retrieves detailed Remotion direction with evidence and human-reviewed adaptation dependencies. |
+| [`video-reference`](skills/creativity/video-reference/) | 1.1.0 | operator | *(Under analysis)* Distills local videos into layered references and retrieves detailed Remotion direction with evidence and human-reviewed adaptation dependencies. |
 | [`explain-me`](skills/creativity/explain-me/) | 2.0.0 | operator | Creates one visual explanation, in the language you asked in, with controlled-writing text, diagrams, images, interactive HTML or a narrated video, landscape or portrait for Reels/Shorts/TikTok (Remotion motion, local Kokoro voice), styled from an editable, brand-able DESIGN.md; teach-me retains quizzes and progress records. |
 | [`prettify`](skills/creativity/prettify/) | 0.0.0 | operator | Guides a visual idea from a clear question through briefing, low-fidelity and high-fidelity review to an inspected web or static delivery, with explicit design decisions and task-specific dependencies. |
-| [`motion-identity`](skills/creativity/motion-identity/) | 2.0.0 | operator | Grills a brand's owner, round by round, into a motion identity — personality, one GSAP ease per role (enter, exit, emphasis), durations, ambient level, signature move, kinetic type and a never-list — and writes it into the brand's DESIGN.md, where Remotion and explain-me both read it; renders a short deterministic Remotion proof the owner approves by watching, and prints the block a Remotion REVIEW.md carries to the footage skills. Disney's principles, archetypes and timing adapted for video from LottieFiles' motion-design and GreenSock's gsap-skills. |
 | [`easy-to-read`](skills/creativity/easy-to-read/) | 1.0.0 | operator | Once activated, keeps every text it writes for you in plain language for the rest of the session — chat replies, documents, notes, summaries, PR and issue bodies — under STE-lite plus the profile of the text's language (ASD-STE100 for English; ABNT NBR ISO 24495-1 and the Senado style for Brazilian Portuguese; the core alone for other languages). Lints documents and long replies with a zero-dependency linter before they ship, and never rewrites code, commands, paths, identifiers or quotes. Canonical home of the writing rules explain-me ships as byte copies. |
-| [`co-direct-animation`](skills/creativity/co-direct-animation/) | 1.0.0 | operator | Co-directs animations from DESIGN.md and human briefing, preserving direction and decisions in an external TO-SPEC. Uses five human critique gates, user-chosen image tools and reviewed gflow video shots, then assembles the film. Replaces reference-animation. |
-| [`poster-design`](skills/creativity/poster-design/) | 1.0.0 | operator | Builds an image-model poster around one subject: picks one of three archetypes (flat digital portrait, photo-grid tribute, ensemble from references), derives its slots from the subject, generates with the tool you name, and inspects every output against the archetype's own checks, counting figures, cells and name widths. |
-| [`campaign-identity-grid`](skills/creativity/campaign-identity-grid/) | 1.0.0 | operator | Builds a brand tile wall of logo, slogan and photo blocks from a row-by-row spec, checks each output by counting rows, cells, gaps and slogan letters, and switches to generating tiles separately and assembling them in an HTML grid when the model keeps breaking the layout. |
-| [`brand-campaign-shots`](skills/creativity/brand-campaign-shots/) | 1.0.0 | operator | Writes a Brand DNA brief the user corrects, casts the muse from it, then generates an editorial campaign triptych and inspects it for brand fit, one consistent muse and invented logos. |
-| [`illustration-style-remix`](skills/creativity/illustration-style-remix/) | 1.0.0 | operator | Redraws a person or character, or a whole set, in one named style: breaks the style into six observable layers, locks them in a style block, varies only the subject, and inspects every output layer by layer for drift. |
+
+### Media
+
+Brand-guided media creation and social content direction. `brand-dna` captures the durable visual, voice, and motion baseline once (`[known]` vs. `[inferred]`); `social-video-director` and `social-post-director` layer an episodic `moodboard.md` *before* the hook, run a fast Arena-style delta loop over `viral-rag`, and separate `moodboard.md` from `storyboard.md`; `poster-design`, `campaign-identity-grid`, `brand-campaign-shots`, and `illustration-style-remix` direct image-model assets and inspect every output by counting.
+
+| Skill | Version | Kind | What it does |
+|---|---|---|---|
+| [`brand-dna`](skills/media/brand-dna/) | 0.0.0 | operator | Extracts, confirms, and locks a three-block Brand & Voice DNA brief (`brand-dna.md`: Visual & Brand Core, Voice DNA, Motion & Guardrails) marking every claim `[known]` or `[inferred]` so downstream media skills reuse it in zero questions. |
+| [`social-video-director`](skills/media/social-video-director/) | 0.0.0 | operator | Co-directs short-form vertical videos (Reels, Shorts, TikTok) through a fast Arena-style loop over `brand-dna` and `viral-rag`: format & angle -> `moodboard.md` (confirmed before the hook) -> `0–3s` Hook Triad -> 3-track Retention Beats -> second-by-second `storyboard.md` -> Inspect by counting. |
+| [`social-post-director`](skills/media/social-post-director/) | 0.0.0 | operator | Co-directs social posts, carousels, and threads through a fast Arena-style loop over `brand-dna` and `viral-rag`: format & angle -> `moodboard.md` (confirmed before the hook) -> First-Fold Hook -> grounded beats/slides -> visual `storyboard.md` -> Inspect by counting. |
+| [`poster-design`](skills/media/poster-design/) | 1.0.0 | operator | Builds an image-model poster around one subject: picks one of three archetypes (flat digital portrait, photo-grid tribute, ensemble from references), derives its slots from the subject, generates with the tool you name, and inspects every output against the archetype's own checks, counting figures, cells and name widths. |
+| [`campaign-identity-grid`](skills/media/campaign-identity-grid/) | 1.0.0 | operator | Builds a brand tile wall of logo, slogan and photo blocks from a row-by-row spec, checks each output by counting rows, cells, gaps and slogan letters, and switches to generating tiles separately and assembling them in an HTML grid when the model keeps breaking the layout. |
+| [`brand-campaign-shots`](skills/media/brand-campaign-shots/) | 1.0.0 | operator | Writes or reuses a Brand DNA brief the user corrects, casts the muse from it, then generates an editorial campaign triptych and inspects it for brand fit, one consistent muse and invented logos. |
+| [`illustration-style-remix`](skills/media/illustration-style-remix/) | 1.0.0 | operator | Redraws a person or character, or a whole set, in one named style: breaks the style into six observable layers, locks them in a style block, varies only the subject, and inspects every output layer by layer for drift. |
 
 ### Experiments
 
@@ -126,14 +134,16 @@ Shipped workflows with a fixed hypothesis, measurement, and exit condition. Thes
 
 The following skills are **deprecated** and no longer maintained or accessible in the catalog. They have been moved out of `skills/` to [`deprecated/`](deprecated/) and are no longer usable or installed by the plugin or package:
 
+- [`co-direct-animation`](deprecated/co-direct-animation/): Previously used to co-direct animations through five formal critique gates and Flow shot generation. Replaced by `brand-dna` and `social-video-director` in `skills/media/`.
 - [`handoff`](deprecated/handoff/): Previously used to compact conversation briefs and schedule cross-provider session graphs. Deprecated and removed from active catalog.
+- [`motion-identity`](deprecated/motion-identity/): Previously used to grill a brand owner into standalone motion keys in `DESIGN.md`. Folded into `brand-dna` and `social-video-director` in `skills/media/`.
 - [`shunt`](deprecated/shunt/): Previously used to keep large models off heavy I/O via read thresholds and run wrappers. Deprecated and removed from active catalog.
 
 ## Using a skill
 
 How a skill works under the hood, for whoever maintains it, is in [`docs/`](docs/) — written for people, never loaded by a model.
 
-After install, start a session and type `/domain-modeling`, `/study-wiki`, `/teach-me`, `/explain-me`, `/motion-identity`, `/co-direct-animation`, `/easy-to-read`, `/skills-evaluate`, or `/still-cursor-living-day`, or just say what you want — the skill's `description` is what makes the model reach for it on its own.
+After install, start a session and type `/domain-modeling`, `/study-wiki`, `/teach-me`, `/explain-me`, `/brand-dna`, `/social-video-director`, `/social-post-director`, `/easy-to-read`, `/skills-evaluate`, or `/still-cursor-living-day`, or just say what you want — the skill's `description` is what makes the model reach for it on its own.
 
 **Improving the skills**
 

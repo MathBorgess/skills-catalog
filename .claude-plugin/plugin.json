@@ -8,7 +8,7 @@
   },
   "homepage": "https://github.com/MathBorgess/skills-catalog",
   "repository": "https://github.com/MathBorgess/skills-catalog",
-  "license": "MIT",
+  "license": "SEE LICENSE IN LICENSES.md",
   "keywords": [
     "skills",
     "study-wiki",
@@ -40,6 +40,7 @@
     "./skills/creativity/campaign-identity-grid",
     "./skills/creativity/brand-campaign-shots",
     "./skills/creativity/illustration-style-remix",
-    "./skills/creativity/video-reference"
+    "./skills/creativity/video-reference",
+    "./skills/creativity/morphological-project-design"
   ]
 }

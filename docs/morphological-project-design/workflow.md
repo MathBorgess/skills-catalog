@@ -3,8 +3,8 @@
 | Surface | Status |
 | --- | --- |
 | Source workflow | Recovered from an executed project exploration |
-| Reusable operator skill | Design interview in progress; not implemented or shipped |
-| Proponent revision after selection | Requested extension; not performed in the source workflow |
+| Reusable operator skill | Shared understanding confirmed; implementation in branch, validation in progress; not shipped |
+| Proponent revision after selection | Accepted extension: revise all N candidates, then select again |
 | Commercial result | No observed sales, customer validation or measured competitive advantage |
 
 ## Observed sequence
@@ -39,40 +39,67 @@ The [catalog glossary](../../GLOSSARY.md#morphological-project-selection) distin
 
 ## Design interview
 
-The user requested a reusable operator skill covering N candidates, separate proponents, an independent devil's advocate, suggested adjustments, a revision/consolidation stage, and subsequent competitor research. The following decisions remain open.
+The user requested a reusable operator skill covering N candidates, separate proponents, an independent devil's advocate, suggested adjustments, a revision/consolidation stage, and subsequent competitor research. Q1–Q6 are settled by explicit answers, and Q7 explicitly confirmed the final shared understanding before implementation.
 
-| Question | Decision | Recommendation awaiting an answer |
+| Question | Decision | Accepted outcome |
 | --- | --- | --- |
 | Q1 | Output boundary | Deliver a decision package and pitch; hand off implementation |
-| Q2 | Revision scope | One revision by the selected candidate's author, checked by the critic, then consolidated |
+| Q2 | Revision scope | Revise all N candidates, then perform a new comparative selection |
 | Q3 | No viable candidate | Allow rejection of every candidate; distinguish a research lead from a viable business |
-| Q4 | Box integration | Use text-to-morphbox as the principal generator, accepting a compatible existing box |
-| Q5 | External framework distribution | Preserve attribution and complete applicable RCD terms if distributing an adaptation; alternatively integrate an external dependency |
+| Q4 | Box integration | Markdown and JSON are sufficient; PDF and text-to-morphbox generation are optional |
+| Q5 | External framework distribution | Distribute the RCD adaptation with attribution and the complete specific source terms, distinguished from MIT |
+| Q6 | Effect of competitor research | Permit withdrawal or reselection among the N revised candidates; research any replacement before closing |
+
+An adverse competitor finding may invalidate the recommendation or change the ranking among already-revised candidates. Research each replacement before accepting it. Preserve the finding and exclusion reason; do not cycle back to a candidate already discarded with evidence. This bounds the research/reselection process by the finite set of N revisions and never authorizes a third generation round.
+
+## Agreed workflow and proposed artifact contract
+
+The core workflow has two candidate rounds. Round one produces N independent proposals. The critic provides candidate-specific feedback; every author revises its own proposal in round two while retaining its original morphological path. The critic then compares all N revisions. Authors do not receive competing proposals. Preserve the original outputs and record each revision separately.
+
+Consolidation is followed by the dedicated There's An AI For That investigation and official-source checks. The critic can withdraw or replace the recommendation in response to that evidence. A final commercial recommendation must account for the competitor evidence rather than silently preserving an earlier conclusion.
+
+The output boundary is a project decision package, rather than a product implementation:
+
+| Artifact | Purpose |
+| --- | --- |
+| `brief.md`, `ideas.md` | Constraints and normalized seed ideas |
+| `morphbox.md`, `morphbox.json` | Human-readable dimensions and structured alternatives |
+| `paths.json` | Seed, algorithm/version, input snapshot, accepted paths and rejection log |
+| `criteria.json` | Comparison criteria fixed before seeing proposals |
+| `prompts/`, `round-1/`, `round-2/` | Full prompts, N original proposals, N revisions and critic reports |
+| `research/competitors.md`, `research/sources.json` | Competitor capabilities, catalog labels, provenance and source dates |
+| `decision.md`, `project.md`, `validation-plan.md` | Ranking, consolidated scope, objections, economics and future validation |
+| `pitch.md` | Timed pitch for a selected candidate, with assumptions and limitations |
+| `run.json` | Agent identities, requested/observed models, execution status and artifact hashes |
+
+If every candidate is rejected, the decision and validation plan explain why and what evidence would justify another attempt. Do not force a winning project or a promotional pitch. Any exploratory presentation must explicitly retain the rejection and unvalidated status. The run records that outcome rather than reporting a missing successful pitch as a completed commercial recommendation.
+
+The core box and sampler must work without Python or ReportLab. When explicitly requested and available, text-to-morphbox can also produce a PDF; lack of that optional output does not make the Markdown/JSON exploration incomplete.
 
 ```mermaid
 flowchart TD
-  Brief[Recovered workflow and requested extension] --> Boundary[Q1: output boundary]
-  Brief --> Revision[Q2: revision scope]
-  Brief --> Rejection[Q3: no viable candidate]
-  Brief --> Box[Q4: generator integration]
-  Brief --> Terms[Q5: framework distribution]
-  Boundary --> Outputs[Final artifact contract]
-  Revision --> Completion[Revision completion and research findings]
-  Rejection --> Completion
-  Box --> Runtime[Runtime and reproducibility contract]
-  Terms --> Runtime
-  Outputs --> Agreement[Shared understanding confirmed]
-  Completion --> Agreement
-  Runtime --> Agreement
-  Agreement --> Implementation[Implement and validate the operator skill]
+  Ideas[Brief and seed ideas] --> Box[Markdown and JSON morphological box]
+  Box --> Paths[N reproducible paths]
+  Paths --> First[N independent proposals]
+  First --> Critic1[Critic feedback for all N]
+  Critic1 --> Second[N revisions preserving paths]
+  Second --> Critic2[New comparative selection]
+  Critic2 -->|Candidate| Consolidation[Consolidated candidate]
+  Critic2 -->|None| NoGo[No-go, reasons and next tests]
+  Consolidation --> Research[Catalog and official-source research]
+  Research --> Finding{Adverse finding}
+  Finding -->|No| Packet[Differences, validation plan and pitch]
+  Finding -->|Yes| Reselect{Another revised candidate worth researching}
+  Reselect -->|Yes| Research
+  Reselect -->|No| NoGo
 ```
 
-Proposed operational defaults are N = 3 and configurable requested proponent/critic models. Separate context and exclusive outputs preserve independence. The number actually simultaneous is limited by the host, rather than by the requested candidate count. No paid services, public repository creation, outreach or product implementation is implied by running this exploration.
+Operational defaults are N = 3 and configurable requested proponent/critic models, respecting available native agent capabilities. Separate context and exclusive outputs preserve independence. The number actually simultaneous is limited by the host, rather than by the requested candidate count. Preserve completed outputs after a partial failure and resume only the missing work; an incomplete round must not be reported as a complete comparison of N. No paid services, public repository creation, outreach or product implementation is implied by running this exploration.
 
-The external framework is [Revenue-Centric Design](https://github.com/heliocosta-dev/revenue-centric-design/tree/1942760c2242f609bf63ce2c97204f5a1791bd68), attributed to Richard (@richardrx). Its supplied terms require attribution, preservation of the full terms in copies/derivatives, and prohibit gambling/betting/casino use. Distribution remains Q5; this design note is not a license grant or a publication decision.
+The external framework is [Revenue-Centric Design](https://github.com/heliocosta-dev/revenue-centric-design/tree/1942760c2242f609bf63ce2c97204f5a1791bd68), attributed to Richard (@richardrx). Its supplied terms require attribution, preservation of the full terms in copies/derivatives, and prohibit gambling/betting/casino use. Q5 accepts distributing the adaptation with those specific terms. The [licensing decision](../../.agents/adr/0007-preserve-rcd-reuse-terms.md) records the distinction from existing MIT material; no package has yet been changed or published.
 
 ## Catalog implementation constraints
 
-Once the interview is complete, follow the repository contract: generic English operator instructions, a concise entrypoint with progressive references, Codex picker metadata, catalog and plugin registration, and Node ESM standard-library helpers. The original Python sampler is behavioral reference material; a future port must record its own reproducibility contract.
+The implementation follows the repository contract: generic English operator instructions, a concise entrypoint with progressive references, Codex picker metadata, catalog and plugin registration, and Node ESM standard-library helpers. The original Python sampler is behavioral reference material; the Node port records its own `splitmix64-v1-low2` reproducibility contract rather than promising Python sequence compatibility.
 
 Validate executable helpers against meaningful behavior, use independent forward-testing for the multi-agent workflow, and run the catalog's required checks. Structural validation alone cannot prove actual isolation, concurrent execution, commercial demand, competitor superiority or financial return. Package publication and local installation remain separate actions.

@@ -325,12 +325,24 @@ A developed project proposal interpreting one morphological path for a specific 
 _Avoid_: morphological path, commercial recommendation, proposal (unqualified)
 
 **Commercial Recommendation**:
-A comparative judgment about a project candidate's commercial potential, the supporting assumptions and the evidence still needed.
+A comparative judgment about a project candidate's commercial potential and the evidence still needed, including a judgment that none currently merits advancement.
 _Avoid_: validated business, observed revenue, investment approval
 
 **Revenue Hypothesis**:
 An untested claim about who would pay, for what outcome, at what price and with which economic benefit.
 _Avoid_: revenue, commercial validation, realized return
+
+**Candidate Revision Round**:
+An iteration in which every proponent updates its project candidate in response to criticism while retaining its morphological path.
+_Avoid_: reroll, winner-only refinement
+
+**No-Go Decision**:
+A recommendation not to advance any reviewed project candidate under the current evidence, with the reasons and evidence needed to reconsider.
+_Avoid_: missing result, proof that no market exists
+
+**Competitive Finding**:
+A source-supported observation about an existing alternative that changes the assessment of a candidate's proposed value or differentiation.
+_Avoid_: assumed absence of a feature, catalog label alone, measured advantage
 
 ## Deprecated Domains
 

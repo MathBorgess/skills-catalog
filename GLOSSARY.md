@@ -306,6 +306,32 @@ _Avoid_: automatic approval, omitted verification
 The human's decision to use a proposed visual reference for the current artifact, without by itself making that direction part of the durable design spec.
 _Avoid_: design spec update, permanent brand decision
 
+### Morphological Project Selection
+
+**Seed Idea**:
+An initial project concept whose possibilities help identify dimensions and alternatives for exploration.
+_Avoid_: project candidate, selected project
+
+**Morphological Box**:
+A set of project dimensions, each with distinct alternatives, that defines the space of possible combinations.
+_Avoid_: list of ideas, candidate ranking
+
+**Morphological Path**:
+A combination containing one alternative from every dimension of a morphological box.
+_Avoid_: project proposal, variation (unqualified)
+
+**Project Candidate**:
+A developed project proposal interpreting one morphological path for a specific audience and use.
+_Avoid_: morphological path, commercial recommendation, proposal (unqualified)
+
+**Commercial Recommendation**:
+A comparative judgment about a project candidate's commercial potential, the supporting assumptions and the evidence still needed.
+_Avoid_: validated business, observed revenue, investment approval
+
+**Revenue Hypothesis**:
+An untested claim about who would pay, for what outcome, at what price and with which economic benefit.
+_Avoid_: revenue, commercial validation, realized return
+
 ## Deprecated Domains
 
 The domain languages for **Shunt** (outlines, excerpts, edit bypass, run wrapper, recover event) and **Handoff** (session, slot, graph gate, digest, supervisor, child, capabilities, gate run, verdict, risk level, attention matrix, revise round) have been moved to [deprecated/](deprecated/) alongside their retired skill implementations.

@@ -69,11 +69,24 @@ The structural manifest has this shape; expand the proposal arrays to exactly th
     "selectionHistory": [
       {"proposalId": "proposal-01", "researchPath": "research/proposal-01.md"}
     ]
-  }
+  },
+  "artifacts": [
+    {"path": "brief.md", "sha256": "<sha256>"},
+    {"path": "ideas.md", "sha256": "<sha256>"},
+    {"path": "morphbox.md", "sha256": "<sha256>"},
+    {"path": "morphbox.json", "sha256": "<sha256>"},
+    {"path": "criteria.json", "sha256": "<sha256>"},
+    {"path": "validation-plan.md", "sha256": "<sha256>"},
+    {"path": "RCD-LICENSE.txt", "sha256": "<sha256>"},
+    {"path": "project.md", "sha256": "<sha256>"},
+    {"path": "pitch.md", "sha256": "<sha256>"}
+  ]
 }
 ```
 
 `decision.considered` contains all sampled IDs, not only the winner. A `rejected_all` decision omits `proposalId`; its selection history can be empty if rejection occurred before a research candidate existed. Research can be `limited` with `notes` stating precisely what was inaccessible, user-supplied or unverified. Every provisional candidate and replacement in the history needs a corresponding research entry. A selected candidate must appear in that history.
+
+Hash every required package file in `artifacts`. Both outcomes require the brief, ideas, Markdown/JSON box, criteria, validation plan and complete RCD terms. Only a `selected` decision requires `project.md` and `pitch.md`; omit those promotional artifacts after a no-go. A separately hashed top-level `criteria` entry is also accepted instead of listing `criteria.json` in `artifacts`. Additional evidence files may be listed as well.
 
 Add native `agentId`, `requestedModel`, `observedModel`, timestamps, actual batches, invocation parameters and completion/error records to the relevant proposal/review entries or an execution section. Preserve the host's evidence when available. These records document what was observed; they do not sandbox filesystem access or prove that a model never saw other context. Record hashes only after an artifact is saved. Any later final decision or revised research is a separate version, with history preserved.
 
@@ -83,7 +96,7 @@ Run the checker from any working directory:
 node <skill-dir>/scripts/check-run.mjs <run>/run.json
 ```
 
-It verifies the source bytes and draw replay, IDs, two complete rounds, reviewer files, path confinement, hashes, selection history and research-file presence. It cannot determine whether a proposal respects the meaning of every choice, a source supports a claim, an agent was actually independent, a pitch fits a human's speech or anyone will pay. Keep those reviews separate from a structural pass.
+It verifies the source bytes and draw replay, IDs, two complete rounds, reviewer files, path confinement, hashes, required package-file presence, byte-identical bundled RCD terms, selection history and research-file presence. It cannot determine whether a proposal respects the meaning of every choice, a source supports a claim, an agent was actually independent, a pitch fits a human's speech or anyone will pay. Keep those reviews separate from a structural pass.
 
 ## Failure and stopping rules
 

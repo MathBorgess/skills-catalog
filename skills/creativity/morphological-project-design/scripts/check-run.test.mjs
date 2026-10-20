@@ -30,11 +30,14 @@ async function fixture(t) {
     reviews.push({ id, ...await artifact(`${id}-review.md`), agentId: 'critic' });
   }
   const research = [{ proposalId: ids[0], ...await artifact('research.md'), status: 'complete' }];
+  const artifacts = [];
+  for (const path of ['brief.md', 'ideas.md', 'morphbox.md', 'morphbox.json', 'criteria.json', 'validation-plan.md', 'project.md', 'pitch.md']) artifacts.push(await artifact(path));
+  artifacts.push(await artifact('RCD-LICENSE.txt', await readFile(new URL('../RCD-LICENSE.txt', import.meta.url))));
   const run = {
     schemaVersion: 1,
     draw: { ...await artifact('paths.json', JSON.stringify(draw)), inputPath: 'morphbox.input.txt' }, rounds, reviews, research,
     decision: { status: 'selected', proposalId: ids[0], considered: ids, report: await artifact('decision.md'), selectionHistory: [{ proposalId: ids[0], researchPath: 'research.md' }] },
-    artifacts: [],
+    artifacts,
   };
   const manifest = join(root, 'run.json');
   const save = () => writeFile(manifest, JSON.stringify(run));
@@ -44,13 +47,41 @@ async function fixture(t) {
 
 test('complete selected and rejected-all runs pass only structural checks', async t => {
   const f = await fixture(t);
-  assert.deepEqual(await checkRun(f.manifest), { status: 'selected', count: 3, checkedFiles: 12, researchLimited: [] });
+  assert.deepEqual(await checkRun(f.manifest), { status: 'selected', count: 3, checkedFiles: 21, researchLimited: [] });
   f.run.decision.status = 'rejected_all';
   f.run.decision.proposalId = null;
   f.run.decision.selectionHistory = [];
   f.run.research = [];
+  f.run.artifacts = f.run.artifacts.filter(entry => !['project.md', 'pitch.md'].includes(entry.path));
   await f.save();
   assert.equal((await checkRun(f.manifest)).status, 'rejected_all');
+});
+
+test('selected packages require core deliverables and an unmodified complete RCD license', async t => {
+  const f = await fixture(t);
+  const original = [...f.run.artifacts];
+  for (const removed of original) {
+    f.run.artifacts = original.filter(entry => entry !== removed);
+    await f.save();
+    await assert.rejects(checkRun(f.manifest), /Missing required package artifact/);
+  }
+  f.run.artifacts = original.map(entry => entry.path === 'RCD-LICENSE.txt' ? null : entry).filter(Boolean);
+  f.run.artifacts.push(await f.artifact('RCD-LICENSE.txt', 'An abbreviated or changed license'));
+  await f.save();
+  await assert.rejects(checkRun(f.manifest), /preserve the complete bundled terms/);
+});
+
+test('a separate hashed criteria entry is supported and rejected-all still requires its validation plan', async t => {
+  const f = await fixture(t);
+  f.run.criteria = f.run.artifacts.find(entry => entry.path === 'criteria.json');
+  f.run.artifacts = f.run.artifacts.filter(entry => entry !== f.run.criteria);
+  await f.save();
+  assert.equal((await checkRun(f.manifest)).status, 'selected');
+  f.run.decision.status = 'rejected_all';
+  f.run.decision.proposalId = null;
+  f.run.artifacts = f.run.artifacts.filter(entry => entry.path !== 'validation-plan.md');
+  await f.save();
+  await assert.rejects(checkRun(f.manifest), /Missing required package artifact: validation-plan.md/);
 });
 
 test('partial or misidentified rounds and a missing second review fail', async t => {

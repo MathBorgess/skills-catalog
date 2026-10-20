@@ -3,7 +3,7 @@
 | Surface | Status |
 | --- | --- |
 | Source workflow | Recovered from an executed project exploration |
-| Reusable operator skill | Shared understanding confirmed; implementation in branch, validation in progress; not shipped |
+| Reusable operator skill | Implemented and tested in the proposed release branch; not yet published on main |
 | Proponent revision after selection | Accepted extension: revise all N candidates, then select again |
 | Commercial result | No observed sales, customer validation or measured competitive advantage |
 
@@ -96,10 +96,12 @@ flowchart TD
 
 Operational defaults are N = 3 and configurable requested proponent/critic models, respecting available native agent capabilities. Separate context and exclusive outputs preserve independence. The number actually simultaneous is limited by the host, rather than by the requested candidate count. Preserve completed outputs after a partial failure and resume only the missing work; an incomplete round must not be reported as a complete comparison of N. No paid services, public repository creation, outreach or product implementation is implied by running this exploration.
 
-The external framework is [Revenue-Centric Design](https://github.com/heliocosta-dev/revenue-centric-design/tree/1942760c2242f609bf63ce2c97204f5a1791bd68), attributed to Richard (@richardrx). Its supplied terms require attribution, preservation of the full terms in copies/derivatives, and prohibit gambling/betting/casino use. Q5 accepts distributing the adaptation with those specific terms. The [licensing decision](../../.agents/adr/0007-preserve-rcd-reuse-terms.md) records the distinction from existing MIT material; no package has yet been changed or published.
+The external framework is [Revenue-Centric Design](https://github.com/heliocosta-dev/revenue-centric-design/tree/1942760c2242f609bf63ce2c97204f5a1791bd68), attributed to Richard (@richardrx). Its supplied terms require attribution, preservation of the full terms in copies/derivatives, and prohibit gambling/betting/casino use. Q5 accepts distributing the adaptation with those specific terms. The [licensing decision](../../.agents/adr/0007-preserve-rcd-reuse-terms.md) records the distinction from existing MIT material. The branch updates package notices and registrations; publication follows the normal reviewed release process.
 
 ## Catalog implementation constraints
 
 The implementation follows the repository contract: generic English operator instructions, a concise entrypoint with progressive references, Codex picker metadata, catalog and plugin registration, and Node ESM standard-library helpers. The original Python sampler is behavioral reference material; the Node port records its own `splitmix64-v1-low2` reproducibility contract rather than promising Python sequence compatibility.
 
 Validate executable helpers against meaningful behavior, use independent forward-testing for the multi-agent workflow, and run the catalog's required checks. Structural validation alone cannot prove actual isolation, concurrent execution, commercial demand, competitor superiority or financial return. Package publication and local installation remain separate actions.
+
+See the [validation record](validation.md) for the exercised behavior, deviations and remaining coverage gaps.

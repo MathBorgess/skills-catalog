@@ -8,7 +8,7 @@ import { ALGORITHM, drawSequences, isEntrypoint, parseBox } from './sample-paths
 
 const HELP = `Usage: node check-run.mjs RUN.json
 Read-only structural check: snapshot replay, two complete proposal rounds,
-reviews, artifact hashes, confined paths, decision and researched selections.
+reviews, required package files and license, hashes, decision and researched selections.
 All artifact paths are relative to RUN.json's folder and must remain inside it.
 run.draw.inputPath must name the retained raw box input. Its bytes must match
 the sampler's input hash and its parsed dimensions must match the snapshot.
@@ -106,7 +106,18 @@ export async function checkRun(manifestPath) {
   } else {
     demand(decision.proposalId === undefined || decision.proposalId === null, 'rejected_all must not name a winner');
   }
-  for (const entry of array(run.artifacts ?? [], 'artifacts')) await artifact(entry, 'additional artifact');
+  const artifacts = array(run.artifacts, 'artifacts');
+  const entries = [...artifacts, ...(run.criteria ? [run.criteria] : [])];
+  demand(new Set(entries.map(entry => entry.path)).size === entries.length, 'Duplicate additional artifact path');
+  const required = ['brief.md', 'ideas.md', 'morphbox.md', 'morphbox.json', 'criteria.json', 'validation-plan.md', 'RCD-LICENSE.txt'];
+  if (decision.status === 'selected') required.push('project.md', 'pitch.md');
+  for (const path of required) demand(entries.some(entry => entry.path === path), `Missing required package artifact: ${path}`);
+  for (const entry of entries) {
+    const bytes = await artifact(entry, 'package artifact');
+    if (entry.path === 'RCD-LICENSE.txt') {
+      demand(bytes.equals(await readFile(new URL('../RCD-LICENSE.txt', import.meta.url))), 'RCD-LICENSE.txt must preserve the complete bundled terms');
+    }
+  }
   return { status: decision.status, count: ids.length, checkedFiles, researchLimited: research.filter(entry => entry.status === 'limited').map(entry => entry.proposalId) };
 }
 

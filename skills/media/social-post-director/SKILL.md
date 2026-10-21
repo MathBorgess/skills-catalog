@@ -3,7 +3,7 @@ name: social-post-director
 description: "Use when the user wants to direct, write, hook, moodboard, or structure a social media post, carousel, thread, or written piece — 'cria um post', 'carrossel para instagram', 'post para linkedin', 'thread', 'texto para rede social', 'roteiro de carrossel'. Runs a fast Arena-style human-agent loop over brand-dna and viral-rag: format & angle -> moodboard (sensory/editorial layer above DNA) -> First-Fold Hook -> grounded beats/slides -> slide/visual Storyboard -> Inspect by counting."
 metadata:
   author: Matheus Borges
-  version: 1.0.0
+  version: 1.0.1
 ---
 
 # Social Post Director

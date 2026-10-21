@@ -9,7 +9,7 @@ Distilled for short-form vertical video (`1080x1920`, `30 fps`) from LottieFiles
   - Top `0..250 px`: reserved for status bar and platform chrome.
   - Right `900..1080 px`: reserved for Reels/TikTok/Shorts action buttons (like, comment, share, save).
   - Bottom `1500..1920 px`: reserved for creator handle, caption overlay, and audio ticker.
-- **Burned caption band (when used):** `[60, 1400, 960, 1580]`, chunked in sync with speech, never overlapping stage graphics or the presenter's face.
+- **Burned caption band (when used):** `[108, 1400, 900, 1500]` (`x1, y1, x2, y2`, inside the safe box), chunked in sync with speech, never overlapping stage graphics or the presenter's face.
 - **Face protection rule:** Never place text, logos, or cards over a presenter's eyes, mouth, or face.
 
 ## 2. Kinetic Typography (The Big Words)

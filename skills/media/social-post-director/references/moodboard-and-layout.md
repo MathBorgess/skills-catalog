@@ -1,6 +1,6 @@
 # Moodboard and Slide/Visual Storyboard separation
 
-`moodboard.md` and `storyboard.md` are **two separate files and two separate confirmation gates**:
+For slides or companion cards, `moodboard.md` and `storyboard.md` are **two separate files and two separate confirmation gates**. For text-only posts or threads, confirm the editorial moodboard and record `storyboard: not applicable (text-only)` in `brief.md`; skip Part 2 and visual inspection checks.
 
 1. **`moodboard.md` (Step 3 — BEFORE the Hook):** The episodic editorial, artistic, and sensory layer *above* `brand-dna.md` and `voice-dna`. It defines the reading atmosphere, voice modulation, and visual direction before any hook or slide is written.
 2. **`storyboard.md` (Step 6 — AFTER the Copy):** The concrete slide-by-slide or visual card specification mapping layout, typography hierarchy, safe margins, and asset handoffs.
@@ -27,7 +27,7 @@ After `post.md` is approved in Step 5, write `<out>/storyboard.md` to map the vi
 
 ### Canvas & Safe Margins
 - **Instagram / LinkedIn Carousel:** `1080 x 1350` (`4:5` portrait, default) or `1080 x 1080` (`1:1`).
-- **Safe Margins:** Keep all text and critical visuals inside `x = 90..990, y = 110..1240` (clear of carousel pagination dots, top header, and corner badges).
+- **Safe Margins:** Keep all text and critical visuals inside `x = 90..990, y = 110..1240` for `1080 x 1350`, or `x = 90..990, y = 90..990` for `1080 x 1080` (clear of carousel pagination dots, top header, and corner badges).
 
 ### Slide / Card Table
 

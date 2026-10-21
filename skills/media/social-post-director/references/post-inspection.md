@@ -1,10 +1,10 @@
 # Post inspection by counting (`review.md`)
 
-In Step 7, judge `<out>/post.md` and `<out>/storyboard.md` by counting observable properties and write this exact table into `<out>/review.md`:
+In Step 7, judge `<out>/post.md` and, when slides or companion cards were requested, `<out>/storyboard.md` by counting observable properties. Write this table into `<out>/review.md`. For text-only work, record `storyboard: not applicable (text-only)` in `brief.md`; mark check 8 `not applicable` with that reason and evaluate check 2 from the confirmed editorial moodboard alone.
 
 ## Expected / Seen Table
 
-| Check | Expected | Seen (Count / Measurement) | Verdict (`pass / fail`) |
+| Check | Expected | Seen (Count / Measurement) | Verdict (`pass / fail / not applicable`) |
 |---|---|---|---|
 | **1. Brand DNA confirmation** | `0` unconfirmed `[inferred]` lines in `brand-dna.md` | `<count>` unconfirmed lines | `pass / fail` |
 | **2. Moodboard gate order** | `moodboard.md` confirmed *before* hook and separate from `storyboard.md` | Confirmed at step 3; separate files present | `pass / fail` |

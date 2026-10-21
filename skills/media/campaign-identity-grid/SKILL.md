@@ -3,7 +3,7 @@ name: campaign-identity-grid
 description: "Use when the user wants a brand campaign board from an image model — 'identity grid', 'brand wall', 'asymmetric grid poster', 'campaign visual identity', 'tile board of logo, slogan and photos' — made from a brand name. Writes the grid as a row-by-row spec, generates it in one shot, checks the structure by counting, and switches to assembling separate tiles in an HTML grid when the model keeps breaking the layout. Not for a single-subject poster (poster-design) or a full brand guideline."
 metadata:
   author: Matheus Borges
-  version: 1.0.0
+  version: 1.0.1
 ---
 
 # Campaign identity grid

@@ -26,7 +26,7 @@ Pick one per brand for 90% of its moves. An episodic `moodboard.md` may modulate
 ## Brief Block
 - Palette: bg #0B0D10 | text #F5F7FA | accent #FF5A36
 - Type: display Space Grotesk 700 (>=96px hook) | body Inter 500
-- Motion: energetic | enter expo.out (0.35s) | exit expo.in (0.25s) | emphasis back.out(3)
+- Motion: energetic | enter expo.out (0.35s) | exit expo.in (0.25s) | emphasis back.out(3) | base power3.inOut
 - Pacing: maxStaticSec 2.0s | word stagger 0.05s | build 25% / breathe 35% / resolve 40%
 - Safe zone (9:16): x=108..900, y=250..1500; never cover a face with captions or cards
 - Never: no stock cyber-grids, no LUT over camera skin tone, no "Not X, it's Y" phrasing

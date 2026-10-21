@@ -77,7 +77,7 @@ The [skill index and routing rules](https://github.com/Jakubantalik/transitions.
 
 ## Existing catalog compatibility
 
-The catalog already defines [Design Spec and Brand Spec](../../GLOSSARY.md) and implements [motion-identity](../../skills/creativity/motion-identity/SKILL.md) and [explain-me's design contract](../../skills/creativity/explain-me/references/design-spec.md). [ADR 0004](../../.agents/adr/0004-motion-identity-over-imports.md) records why motion identity belongs in one brand spec rather than imported overlapping skills.
+The catalog already defines [Design Spec and Brand Spec](../../GLOSSARY.md) and implements [motion-identity](../../deprecated/motion-identity/SKILL.md) (retired; historical reference) and [explain-me's design contract](../../skills/creativity/explain-me/references/design-spec.md). [ADR 0004](../../.agents/adr/0004-motion-identity-over-imports.md) records why motion identity belongs in one brand spec rather than imported overlapping skills.
 
 A new consumer should preserve existing frontmatter and sections. UI motion values use a different runtime from GSAP-based video primitives; CSS milliseconds/easings must not silently overwrite video seconds/GSAP names. Token extraction, spec resolution and adapters are design questions still open. No second catalog index or competing brand-spec file has been created.
 

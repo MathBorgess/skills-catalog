@@ -26,7 +26,7 @@ The runner created eight dimensions with three alternatives each, froze comparis
 STRUCTURE OK: 2 paths, two complete rounds; decision=selected; 23 file checks.
 ```
 
-A subsequent independent code review found that the checker did not require the decision package's core files. The checker and run-contract reference were then strengthened, with two regression tests requiring the deliverables and byte-identical RCD terms. The original native manifest and outputs were preserved. Rechecking that unchanged manifest with the final checker passed 24 file checks, including the separately recorded criteria. This is a post-test structural correction, not another native proposal round.
+A subsequent independent code review found that the checker did not require the decision package's core files. The checker and run-contract reference were then strengthened, with two regression tests requiring the deliverables and byte-identical RCD terms. The original native manifest and outputs were preserved. Rechecking that unchanged manifest with the checker at that stage passed 24 file checks, including the separately recorded criteria. This is a post-test structural correction, not another native proposal round.
 
 The final recommendation prioritized one candidate for future validation. No substitute or third proposal round was generated. The supplied research packet contained catalog feature excerpts and dated summaries of official documentation. The runner made no TAAFT request and no current product checks. Product entry URLs, task labels, current prices and hands-on comparisons remained unknown; research was explicitly `limited`.
 
@@ -41,3 +41,9 @@ The package included preserved initial proposals, revisions, feedback, prompts, 
 - **Validation is not a market result.** Correct arithmetic under synthetic assumptions, complete artifacts and a critic's ranking do not establish demand, delivery costs, competitive advantage, financial return or spoken pitch duration.
 
 Raw prompts, outputs, native lifecycle evidence, checks and deviations were retained locally for owner review. This public page records the generic findings without publishing the private execution trace.
+
+## Pre-merge structural corrections
+
+Review of the proposed release found two further gaps: a manifest could pass without submitted prompts, and declared authors could switch candidates between rounds. The checker now requires a hashed, nonempty prompt file and native agent ID for each proposal/review, checks additional invocation prompts when recorded, and verifies author continuity. A replacement remains possible when its record names that candidate's initial author and gives a reason; an author from another candidate cannot serve as its replacement.
+
+Six regression tests cover missing, changed, empty and aliased prompt files; additional prompt hashes/IDs; missing identities; undeclared or mismatched replacements; legitimate replacement recovery; and swapped candidate authors. The helper suite now has 28 passing tests. These are structural fixtures. The earlier native N = 2 run was not repeated, and its preserved manifest was not rewritten to claim compliance with these new required fields. Submitted-prompt fidelity, completeness of the invocation inventory and actual context isolation still require host evidence and review.

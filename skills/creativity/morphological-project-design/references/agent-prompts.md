@@ -22,7 +22,7 @@ Extract each author's feedback without exposing peer proposals or the other auth
 
 > Revise only your project once. Your inputs are your original path, original proposal, the common brief/criteria and this candidate-specific critic feedback: [feedback]. Preserve every morphological choice and save to [new round-two path]. Include a response table: objection, adjustment, remaining limitation. Recalculate changed economics and scope. If the criticism cannot be resolved within the path, state that clearly rather than changing the path or claiming a viable business. Do not read other candidates or overwrite round one.
 
-Reuse the original author where possible. If unavailable, give a replacement only this candidate's own inputs and record the replacement. Do not turn failure recovery into extra unrecorded creative rounds.
+Reuse the original author where possible. If unavailable, give a new agent only this candidate's own inputs and record the initial author and reason in the revised entry's `replacement` field. Keep agents assigned to a single candidate across both rounds. Do not turn failure recovery into extra unrecorded creative rounds.
 
 ## Second critic
 

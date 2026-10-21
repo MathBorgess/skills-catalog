@@ -8,7 +8,8 @@ import { ALGORITHM, drawSequences, isEntrypoint, parseBox } from './sample-paths
 
 const HELP = `Usage: node check-run.mjs RUN.json
 Read-only structural check: snapshot replay, two complete proposal rounds,
-reviews, required package files and license, hashes, decision and researched selections.
+reviews and submitted prompts, declared author continuity, required package files
+and license, hashes, decision and researched selections.
 All artifact paths are relative to RUN.json's folder and must remain inside it.
 run.draw.inputPath must name the retained raw box input. Its bytes must match
 the sampler's input hash and its parsed dimensions must match the snapshot.
@@ -38,7 +39,7 @@ export async function checkRun(manifestPath) {
     demand(info.isFile(), `${label}: expected a regular file`);
     if (uniqueOutput) {
       const inode = `${info.dev}:${info.ino}`;
-      demand(!outputPaths.has(actual) && !outputInodes.has(inode), 'Proposals and reviews must preserve separate output files with distinct realpaths and file identities');
+      demand(!outputPaths.has(actual) && !outputInodes.has(inode), 'Proposals, reviews and prompts must preserve separate output files with distinct realpaths and file identities');
       outputPaths.add(actual);
       outputInodes.add(inode);
     }
@@ -46,6 +47,15 @@ export async function checkRun(manifestPath) {
     demand(createHash('sha256').update(bytes).digest('hex') === entry.sha256, `${label}: sha256 mismatch`);
     checkedFiles += 1;
     return bytes;
+  }
+  async function prompt(entry, label) {
+    demand(entry && typeof entry.path === 'string' && entry.path.startsWith('prompts/'), `${label}: retain the submitted prompt under prompts/`);
+    const bytes = await artifact(entry, label, true);
+    demand(bytes.toString('utf8').trim().length > 0, `${label}: submitted prompt is empty`);
+  }
+  function agentId(entry, label) {
+    demand(typeof entry.agentId === 'string' && entry.agentId.trim().length > 0 && entry.agentId === entry.agentId.trim(), `${label}: missing native agentId`);
+    return entry.agentId;
   }
   const draw = JSON.parse((await artifact(run.draw, 'draw')).toString('utf8'));
   demand(draw.schemaVersion === 1 && draw.algorithm === ALGORITHM, 'Unsupported draw schemaVersion or algorithm');
@@ -66,21 +76,46 @@ export async function checkRun(manifestPath) {
   const rounds = array(run.rounds, 'rounds');
   demand(rounds.length === 2 && ['initial', 'revised'].every(id => rounds.some(round => round.id === id)), 'Both initial and revised rounds are required');
   const proponentAgents = new Set();
-  for (const round of rounds) {
+  const initialAuthors = new Map();
+  const candidateByAuthor = new Map();
+  for (const roundId of ['initial', 'revised']) {
+    const round = rounds.find(entry => entry.id === roundId);
     const proposals = array(round.proposals, `${round.id}.proposals`);
     completeIds(proposals, `${round.id}.proposals`);
-    const declaredAgents = proposals.map(proposal => proposal.agentId).filter(Boolean);
+    const declaredAgents = proposals.map(proposal => agentId(proposal, `${round.id}/${proposal.id}`));
     demand(new Set(declaredAgents).size === declaredAgents.length, `${round.id}: duplicated declared proponent agentId`);
     declaredAgents.forEach(agent => proponentAgents.add(agent));
     for (const proposal of proposals) {
+      const label = `${round.id}/${proposal.id}`;
+      const owner = candidateByAuthor.get(proposal.agentId);
+      demand(owner === undefined || owner === proposal.id, `${label}: agentId belongs to a different candidate`);
+      candidateByAuthor.set(proposal.agentId, proposal.id);
+      if (round.id === 'initial') {
+        demand(proposal.replacement === undefined, `${label}: replacement is only valid for a revised candidate`);
+        initialAuthors.set(proposal.id, proposal.agentId);
+      } else if (proposal.agentId === initialAuthors.get(proposal.id)) {
+        demand(proposal.replacement === undefined, `${label}: unchanged author must not declare a replacement`);
+      } else {
+        demand(proposal.replacement?.fromAgentId === initialAuthors.get(proposal.id)
+          && typeof proposal.replacement.reason === 'string' && proposal.replacement.reason.trim().length > 0,
+        `${label}: changed author requires replacement.fromAgentId and a nonempty reason`);
+      }
       await artifact(proposal, `${round.id}/${proposal.id}`, true);
+      await prompt(proposal.prompt, `${label} prompt`);
     }
   }
   const reviews = array(run.reviews, 'reviews');
   demand(reviews.length === 2 && ['initial', 'revised'].every(id => reviews.some(review => review.id === id)), 'Both initial and revised reviews are required');
   for (const review of reviews) {
-    demand(!review.agentId || !proponentAgents.has(review.agentId), `${review.id}: declared reviewer must differ from proponent agents in both rounds`);
+    demand(!proponentAgents.has(agentId(review, `${review.id} review`)), `${review.id}: declared reviewer must differ from proponent agents in both rounds`);
     await artifact(review, `${review.id} review`, true);
+    await prompt(review.prompt, `${review.id} review prompt`);
+  }
+  const additionalPrompts = run.additionalPrompts === undefined ? [] : array(run.additionalPrompts, 'additionalPrompts');
+  demand(additionalPrompts.every(entry => typeof entry.id === 'string' && entry.id.trim().length > 0)
+    && new Set(additionalPrompts.map(entry => entry.id)).size === additionalPrompts.length, 'Additional prompts need distinct nonempty invocation IDs');
+  for (const entry of additionalPrompts) {
+    await prompt(entry, `${entry.id} additional prompt`);
   }
   const research = array(run.research, 'research');
   demand(new Set(research.map(entry => entry.proposalId)).size === research.length, 'Duplicate research proposalId');

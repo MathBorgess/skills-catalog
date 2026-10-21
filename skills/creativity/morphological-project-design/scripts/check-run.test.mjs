@@ -13,6 +13,7 @@ import { createDraw } from './sample-paths.mjs';
 async function fixture(t) {
   const root = await mkdtemp(join(tmpdir(), 'morphological-check-'));
   t.after(() => rm(root, { recursive: true, force: true }));
+  await mkdir(join(root, 'prompts'));
   async function artifact(path, contents = path) {
     await writeFile(join(root, path), contents);
     return { path, sha256: createHash('sha256').update(contents).digest('hex') };
@@ -25,9 +26,12 @@ async function fixture(t) {
   const reviews = [];
   for (const id of ['initial', 'revised']) {
     const proposals = [];
-    for (const proposalId of ids) proposals.push({ id: proposalId, ...await artifact(`${id}-${proposalId}.md`), agentId: `worker-${proposalId}` });
+    for (const proposalId of ids) proposals.push({
+      id: proposalId, ...await artifact(`${id}-${proposalId}.md`), agentId: `worker-${proposalId}`,
+      prompt: await artifact(`prompts/${id}-${proposalId}.md`, `Full ${id} prompt for ${proposalId}`),
+    });
     rounds.push({ id, proposals });
-    reviews.push({ id, ...await artifact(`${id}-review.md`), agentId: 'critic' });
+    reviews.push({ id, ...await artifact(`${id}-review.md`), agentId: 'critic', prompt: await artifact(`prompts/${id}-review.md`) });
   }
   const research = [{ proposalId: ids[0], ...await artifact('research.md'), status: 'complete' }];
   const artifacts = [];
@@ -47,7 +51,7 @@ async function fixture(t) {
 
 test('complete selected and rejected-all runs pass only structural checks', async t => {
   const f = await fixture(t);
-  assert.deepEqual(await checkRun(f.manifest), { status: 'selected', count: 3, checkedFiles: 21, researchLimited: [] });
+  assert.deepEqual(await checkRun(f.manifest), { status: 'selected', count: 3, checkedFiles: 29, researchLimited: [] });
   f.run.decision.status = 'rejected_all';
   f.run.decision.proposalId = null;
   f.run.decision.selectionHistory = [];
@@ -55,6 +59,103 @@ test('complete selected and rejected-all runs pass only structural checks', asyn
   f.run.artifacts = f.run.artifacts.filter(entry => !['project.md', 'pitch.md'].includes(entry.path));
   await f.save();
   assert.equal((await checkRun(f.manifest)).status, 'rejected_all');
+});
+
+test('every proposal and review requires a retained, hashed and nonempty submitted prompt', async t => {
+  const f = await fixture(t);
+  const invocations = [...f.run.rounds.flatMap(round => round.proposals), ...f.run.reviews];
+  for (const invocation of invocations) {
+    const original = invocation.prompt;
+    delete invocation.prompt;
+    await f.save();
+    await assert.rejects(checkRun(f.manifest), /retain the submitted prompt/);
+    invocation.prompt = original;
+  }
+  const first = invocations[0];
+  await writeFile(join(f.root, first.prompt.path), 'Changed prompt after recording its hash');
+  await f.save();
+  await assert.rejects(checkRun(f.manifest), /prompt: sha256 mismatch/);
+  first.prompt = await f.artifact(first.prompt.path, '  \n');
+  await f.save();
+  await assert.rejects(checkRun(f.manifest), /submitted prompt is empty/);
+  first.prompt = await f.artifact('untracked-prompt.md', 'Full prompt');
+  await f.save();
+  await assert.rejects(checkRun(f.manifest), /retain the submitted prompt under prompts/);
+});
+
+test('prompt files must exist and remain distinct from proposal outputs and peer prompts', async t => {
+  const f = await fixture(t);
+  const first = f.run.rounds[0].proposals[0];
+  const original = first.prompt;
+  first.prompt = { ...original, path: 'prompts/missing.md' };
+  await f.save();
+  await assert.rejects(checkRun(f.manifest), /ENOENT/);
+  await symlink(join(f.root, first.path), join(f.root, 'prompts', 'output-alias.md'));
+  first.prompt = { path: 'prompts/output-alias.md', sha256: first.sha256 };
+  await f.save();
+  await assert.rejects(checkRun(f.manifest), /separate output files/);
+  first.prompt = original;
+  f.run.rounds[0].proposals[1].prompt = original;
+  await f.save();
+  await assert.rejects(checkRun(f.manifest), /separate output files/);
+});
+
+test('additional invocation prompts are hashed and have unique invocation IDs', async t => {
+  const f = await fixture(t);
+  f.run.additionalPrompts = [{ id: 'post-research-01', ...await f.artifact('prompts/post-research-01.md', 'Full post-research prompt') }];
+  await f.save();
+  assert.equal((await checkRun(f.manifest)).checkedFiles, 30);
+  await writeFile(join(f.root, f.run.additionalPrompts[0].path), 'tampered');
+  await assert.rejects(checkRun(f.manifest), /prompt: sha256 mismatch/);
+  f.run.additionalPrompts.push({ ...f.run.additionalPrompts[0] });
+  await f.save();
+  await assert.rejects(checkRun(f.manifest), /distinct nonempty invocation IDs/);
+});
+
+test('a changed candidate author requires an explicit matching replacement record', async t => {
+  const f = await fixture(t);
+  const revised = f.run.rounds[1].proposals[0];
+  const originalAgentId = revised.agentId;
+  revised.agentId = 'replacement-worker';
+  await f.save();
+  await assert.rejects(checkRun(f.manifest), /changed author requires replacement/);
+  revised.replacement = { fromAgentId: 'wrong-author', reason: 'Original author became unavailable.' };
+  await f.save();
+  await assert.rejects(checkRun(f.manifest), /changed author requires replacement/);
+  revised.replacement.fromAgentId = originalAgentId;
+  revised.replacement.reason = '  ';
+  await f.save();
+  await assert.rejects(checkRun(f.manifest), /changed author requires replacement/);
+  revised.replacement.reason = 'Original author became unavailable; replacement received only this candidate context.';
+  await f.save();
+  assert.equal((await checkRun(f.manifest)).status, 'selected');
+  revised.agentId = originalAgentId;
+  await f.save();
+  await assert.rejects(checkRun(f.manifest), /unchanged author must not declare a replacement/);
+});
+
+test('authors cannot switch candidate IDs between rounds, even with replacement claims', async t => {
+  const f = await fixture(t);
+  const [first, second] = f.run.rounds[1].proposals;
+  const firstAgent = first.agentId;
+  first.agentId = second.agentId;
+  second.agentId = firstAgent;
+  first.replacement = { fromAgentId: firstAgent, reason: 'Claimed replacement' };
+  second.replacement = { fromAgentId: first.agentId, reason: 'Claimed replacement' };
+  await f.save();
+  await assert.rejects(checkRun(f.manifest), /agentId belongs to a different candidate/);
+});
+
+test('all native invocation entries require an agent identity', async t => {
+  const f = await fixture(t);
+  const invocations = [...f.run.rounds.flatMap(round => round.proposals), ...f.run.reviews];
+  for (const invocation of invocations) {
+    const original = invocation.agentId;
+    delete invocation.agentId;
+    await f.save();
+    await assert.rejects(checkRun(f.manifest), /missing native agentId/);
+    invocation.agentId = original;
+  }
 });
 
 test('selected packages require core deliverables and an unmodified complete RCD license', async t => {
@@ -204,7 +305,9 @@ test('selection history rejects A-B-A cycles even if both candidates were resear
 
 test('reviewer declared only as a proponent in the other round is still rejected', async t => {
   const f = await fixture(t);
+  const originalAgentId = f.run.rounds[1].proposals[0].agentId;
   f.run.rounds[1].proposals[0].agentId = 'revised-only-proponent';
+  f.run.rounds[1].proposals[0].replacement = { fromAgentId: originalAgentId, reason: 'Original author unavailable.' };
   f.run.reviews[0].agentId = 'revised-only-proponent';
   await f.save();
   await assert.rejects(checkRun(f.manifest), /proponent agents in both rounds/);

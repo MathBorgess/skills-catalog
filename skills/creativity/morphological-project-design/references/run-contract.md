@@ -48,15 +48,22 @@ The structural manifest has this shape; expand the proposal arrays to exactly th
   "draw": {"path": "paths.json", "sha256": "<sha256>", "inputPath": "morphbox.json"},
   "rounds": [
     {"id": "initial", "proposals": [
-      {"id": "proposal-01", "path": "round-1/proposal-01.md", "sha256": "<sha256>"}
+      {"id": "proposal-01", "agentId": "worker-01", "path": "round-1/proposal-01.md", "sha256": "<sha256>",
+       "prompt": {"path": "prompts/initial-proposal-01.md", "sha256": "<sha256>"}}
     ]},
     {"id": "revised", "proposals": [
-      {"id": "proposal-01", "path": "round-2/proposal-01.md", "sha256": "<sha256>"}
+      {"id": "proposal-01", "agentId": "worker-01", "path": "round-2/proposal-01.md", "sha256": "<sha256>",
+       "prompt": {"path": "prompts/revised-proposal-01.md", "sha256": "<sha256>"}}
     ]}
   ],
   "reviews": [
-    {"id": "initial", "path": "round-1/critic.md", "sha256": "<sha256>"},
-    {"id": "revised", "path": "round-2/critic.md", "sha256": "<sha256>"}
+    {"id": "initial", "agentId": "critic", "path": "round-1/critic.md", "sha256": "<sha256>",
+     "prompt": {"path": "prompts/initial-critic.md", "sha256": "<sha256>"}},
+    {"id": "revised", "agentId": "critic", "path": "round-2/critic.md", "sha256": "<sha256>",
+     "prompt": {"path": "prompts/revised-critic.md", "sha256": "<sha256>"}}
+  ],
+  "additionalPrompts": [
+    {"id": "post-research-01", "path": "prompts/post-research-01.md", "sha256": "<sha256>"}
   ],
   "research": [
     {"proposalId": "proposal-01", "path": "research/proposal-01.md", "sha256": "<sha256>", "status": "complete"}
@@ -88,7 +95,11 @@ The structural manifest has this shape; expand the proposal arrays to exactly th
 
 Hash every required package file in `artifacts`. Both outcomes require the brief, ideas, Markdown/JSON box, criteria, validation plan and complete RCD terms. Only a `selected` decision requires `project.md` and `pitch.md`; omit those promotional artifacts after a no-go. A separately hashed top-level `criteria` entry is also accepted instead of listing `criteria.json` in `artifacts`. Additional evidence files may be listed as well.
 
-Add native `agentId`, `requestedModel`, `observedModel`, timestamps, actual batches, invocation parameters and completion/error records to the relevant proposal/review entries or an execution section. Preserve the host's evidence when available. These records document what was observed; they do not sandbox filesystem access or prove that a model never saw other context. Record hashes only after an artifact is saved. Any later final decision or revised research is a separate version, with history preserved.
+Each proposal and review requires its native `agentId` and a hashed `prompt` file under `prompts/`. Preserve the complete submitted text for that invocation, including expanded instructions and supplied context; retain any separately attached resources as hashed artifacts. Use a distinct, nonempty prompt file per invocation. Record every additional delegated invocation, including retries and post-research reviews, in `additionalPrompts` with a unique invocation `id`, `path` and `sha256`; omit that array only when no additional invocation occurred. The checker verifies the recorded files, not whether the host omitted an invocation or the text faithfully matches its submission.
+
+A revised proposal retains its initial author. If that author is unavailable, use a new agent with only that candidate's context and add `"replacement": {"fromAgentId": "<initial-agent-id>", "reason": "<why replacement was needed>"}` to the revised entry. An agent that authored another candidate cannot be its replacement. Unchanged authors omit `replacement`. This preserves candidate continuity while allowing explicit failure recovery.
+
+Add `requestedModel`, `observedModel`, timestamps, actual batches, invocation parameters and completion/error records to the relevant entries or an execution section. Preserve the host's evidence when available. These records document what was observed; they do not sandbox filesystem access or prove that a model never saw other context. Record hashes only after an artifact is saved. Any later final decision or revised research is a separate version, with history preserved.
 
 Run the checker from any working directory:
 
@@ -96,7 +107,7 @@ Run the checker from any working directory:
 node <skill-dir>/scripts/check-run.mjs <run>/run.json
 ```
 
-It verifies the source bytes and draw replay, IDs, two complete rounds, reviewer files, path confinement, hashes, required package-file presence, byte-identical bundled RCD terms, selection history and research-file presence. It cannot determine whether a proposal respects the meaning of every choice, a source supports a claim, an agent was actually independent, a pitch fits a human's speech or anyone will pay. Keep those reviews separate from a structural pass.
+It verifies the source bytes and draw replay, IDs, two complete rounds, reviewer and submitted-prompt files, declared author continuity/replacements, path confinement, hashes, required package-file presence, byte-identical bundled RCD terms, selection history and research-file presence. It cannot determine whether a proposal respects the meaning of every choice, a source supports a claim, an agent was actually independent, a pitch fits a human's speech or anyone will pay. Keep those reviews separate from a structural pass.
 
 ## Failure and stopping rules
 

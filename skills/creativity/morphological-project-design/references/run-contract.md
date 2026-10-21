@@ -62,11 +62,13 @@ The structural manifest has this shape; expand the proposal arrays to exactly th
     {"id": "revised", "agentId": "critic", "path": "round-2/critic.md", "sha256": "<sha256>",
      "prompt": {"path": "prompts/revised-critic.md", "sha256": "<sha256>"}}
   ],
-  "additionalPrompts": [
-    {"id": "post-research-01", "path": "prompts/post-research-01.md", "sha256": "<sha256>"}
-  ],
   "research": [
     {"proposalId": "proposal-01", "path": "research/proposal-01.md", "sha256": "<sha256>", "status": "complete"}
+  ],
+  "postResearchReviews": [
+    {"proposalId": "proposal-01", "researchPath": "research/proposal-01.md", "researchSha256": "<research-sha256>",
+     "agentId": "critic", "path": "research/proposal-01-critic.md", "sha256": "<sha256>",
+     "prompt": {"path": "prompts/post-research-proposal-01.md", "sha256": "<sha256>"}}
   ],
   "decision": {
     "status": "selected",
@@ -83,6 +85,7 @@ The structural manifest has this shape; expand the proposal arrays to exactly th
     {"path": "morphbox.md", "sha256": "<sha256>"},
     {"path": "morphbox.json", "sha256": "<sha256>"},
     {"path": "criteria.json", "sha256": "<sha256>"},
+    {"path": "research/sources.json", "sha256": "<sha256>"},
     {"path": "validation-plan.md", "sha256": "<sha256>"},
     {"path": "RCD-LICENSE.txt", "sha256": "<sha256>"},
     {"path": "project.md", "sha256": "<sha256>"},
@@ -91,11 +94,15 @@ The structural manifest has this shape; expand the proposal arrays to exactly th
 }
 ```
 
-`decision.considered` contains all sampled IDs, not only the winner. A `rejected_all` decision omits `proposalId`; its selection history can be empty if rejection occurred before a research candidate existed. Research can be `limited` with `notes` stating precisely what was inaccessible, user-supplied or unverified. Every provisional candidate and replacement in the history needs a corresponding research entry. A selected candidate must appear in that history.
+`decision.considered` contains all sampled IDs, not only the winner. `decision.report.path` is exactly `decision.md`; this must be a physically distinct file from every other artifact, including symlinks and hard links. Record it only in `decision.report`.
 
-Hash every required package file in `artifacts`. Both outcomes require the brief, ideas, Markdown/JSON box, criteria, validation plan and complete RCD terms. Only a `selected` decision requires `project.md` and `pitch.md`; omit those promotional artifacts after a no-go. A separately hashed top-level `criteria` entry is also accepted instead of listing `criteria.json` in `artifacts`. Additional evidence files may be listed as well.
+A `rejected_all` decision omits `proposalId`; its selection history can be empty if rejection occurred before a research candidate existed. Research can be `limited` with `notes` stating precisely what was inaccessible, user-supplied or unverified. Every provisional candidate and replacement in the history needs a corresponding research entry. A selected candidate must appear in that history.
 
-Each proposal and review requires its native `agentId` and a hashed `prompt` file under `prompts/`. Preserve the complete submitted text for that invocation, including expanded instructions and supplied context; retain any separately attached resources as hashed artifacts. Use a distinct, nonempty prompt file per invocation. Record every additional delegated invocation, including retries and post-research reviews, in `additionalPrompts` with a unique invocation `id`, `path` and `sha256`; omit that array only when no additional invocation occurred. The checker verifies the recorded files, not whether the host omitted an invocation or the text faithfully matches its submission.
+Every formal candidate research entry in `run.research` requires a `postResearchReviews` entry, including candidates rejected after research. It names the reviewed research path and SHA-256, an independent critic's native `agentId`, a hashed nonempty output and its submitted prompt. Preserve a distinct critic output; it cannot reuse the research file, an earlier review or another artifact, even through an alias. This records reassessment separately from the two earlier comparative reviews. Keep incidental research from earlier proposal rounds in additional artifacts. A no-go before formal research can omit `postResearchReviews` and `research/sources.json`; a no-go after research retains the corresponding evidence.
+
+Hash every required package file in `artifacts`. Both outcomes require the brief, ideas, Markdown/JSON box, criteria, validation plan and complete RCD terms. Whenever `research` is nonempty, include `research/sources.json` using the [source-record schema](competitors-and-pitch.md#source-record). Each research candidate has recorded sources or an explicit limited-research gap; unknown dates/URLs stay explicit rather than being invented. Only a `selected` decision requires `project.md` and `pitch.md`; omit those promotional artifacts after a no-go. A separately hashed top-level `criteria` entry is also accepted instead of listing `criteria.json` in `artifacts`. Additional evidence files may be listed as well.
+
+Each proposal and review requires its native `agentId` and a hashed `prompt` file under `prompts/`. Preserve the complete submitted text for that invocation, including expanded instructions and supplied context; retain any separately attached resources as hashed artifacts. Use a distinct, nonempty prompt file per invocation. Record delegated calls beyond the proposal, review and post-research entries, including retries, in `additionalPrompts` with a unique invocation `id`, `path` and `sha256`; omit that array when no such invocation occurred. The checker verifies the recorded files, not whether the host omitted an invocation or the text faithfully matches its submission.
 
 A revised proposal retains its initial author. If that author is unavailable, use a new agent with only that candidate's context and add `"replacement": {"fromAgentId": "<initial-agent-id>", "reason": "<why replacement was needed>"}` to the revised entry. An agent that authored another candidate cannot be its replacement. Unchanged authors omit `replacement`. This preserves candidate continuity while allowing explicit failure recovery.
 
@@ -107,7 +114,7 @@ Run the checker from any working directory:
 node <skill-dir>/scripts/check-run.mjs <run>/run.json
 ```
 
-It verifies the source bytes and draw replay, IDs, two complete rounds, reviewer and submitted-prompt files, declared author continuity/replacements, path confinement, hashes, required package-file presence, byte-identical bundled RCD terms, selection history and research-file presence. It cannot determine whether a proposal respects the meaning of every choice, a source supports a claim, an agent was actually independent, a pitch fits a human's speech or anyone will pay. Keep those reviews separate from a structural pass.
+It verifies the source bytes and draw replay, IDs, two complete rounds, reviewer and submitted-prompt files, declared author continuity/replacements, path confinement, hashes, distinct decision and post-research review outputs, required package files, structured source records, byte-identical bundled RCD terms and researched selection history. It cannot determine whether a proposal respects the meaning of every choice, a source supports a claim, a critic actually reassessed the evidence, an agent was independent, a pitch fits a human's speech or anyone will pay. Keep those reviews separate from a structural pass.
 
 ## Failure and stopping rules
 

@@ -18,6 +18,30 @@ Use a comparison such as:
 
 Include the current manual workflow and a generic model plus common tools when relevant. Editing, human control or AI generation alone seldom establish exclusivity. A useful proposed difference identifies a specific task, workflow constraint and observable benefit, without claiming superiority before comparison.
 
+## Source record
+
+Write `research/sources.json` whenever any candidate has a research entry, and hash it in `run.artifacts`. Use this shape:
+
+```json
+{
+  "schemaVersion": 1,
+  "sources": [
+    {
+      "proposalId": "proposal-01",
+      "date": "2026-10-20",
+      "url": "https://example.org/product/docs",
+      "claim": "The specific capability supported by this source.",
+      "provenance": "Official documentation directly consulted on the recorded date."
+    }
+  ],
+  "gaps": []
+}
+```
+
+Every source names a candidate recorded in `run.research` and includes `date`, `url`, `claim` and `provenance`. Dates use `YYYY-MM-DD`; provenance explains whether that is publication, consultation or receipt. URLs use HTTP(S). Claims and provenance are nonempty. For limited research, an unknown date or original URL is `null`, accompanied by a nonempty `limitations` field. User-supplied excerpts identify the originating message or retained input in `provenance`; keep them distinguishable from direct verification. The example is a schema fixture, not a consulted competitor.
+
+If limited research produced no usable source, keep `sources` empty for that candidate and add `{"proposalId": "proposal-01", "notes": "<what was blocked or unavailable>"}` to `gaps`. A `complete` research entry requires at least one source record. A no-go before research requires no source file; a no-go after research preserves its sources and gaps. Structural validation checks the fields and references; it does not establish that the source supports the claim.
+
 ## Reassessment and bounded reselection
 
 Give the findings to the critic. Record the provisional candidate, finding, rationale and transition in `decision.md` and `decision.selectionHistory`. The critic can retain the candidate, choose a different already-revised candidate or reject all. Research each replacement before accepting it. Preserve rejected candidates and exclusion evidence; never restart the generation process or cycle through the same rejected candidate.

@@ -14,6 +14,7 @@ async function fixture(t) {
   const root = await mkdtemp(join(tmpdir(), 'morphological-check-'));
   t.after(() => rm(root, { recursive: true, force: true }));
   await mkdir(join(root, 'prompts'));
+  await mkdir(join(root, 'research'));
   async function artifact(path, contents = path) {
     await writeFile(join(root, path), contents);
     return { path, sha256: createHash('sha256').update(contents).digest('hex') };
@@ -34,31 +35,177 @@ async function fixture(t) {
     reviews.push({ id, ...await artifact(`${id}-review.md`), agentId: 'critic', prompt: await artifact(`prompts/${id}-review.md`) });
   }
   const research = [{ proposalId: ids[0], ...await artifact('research.md'), status: 'complete' }];
+  const sources = {
+    schemaVersion: 1,
+    sources: [{ proposalId: ids[0], date: '2026-10-20', url: 'https://example.org/product/docs', claim: 'Synthetic documented capability', provenance: 'Synthetic directly consulted official documentation' }],
+    gaps: [],
+  };
+  async function postReview(entry) {
+    return {
+      proposalId: entry.proposalId, researchPath: entry.path, researchSha256: entry.sha256, agentId: 'critic',
+      ...await artifact(`research/${entry.proposalId}-critic.md`),
+      prompt: await artifact(`prompts/post-research-${entry.proposalId}.md`),
+    };
+  }
   const artifacts = [];
   for (const path of ['brief.md', 'ideas.md', 'morphbox.md', 'morphbox.json', 'criteria.json', 'validation-plan.md', 'project.md', 'pitch.md']) artifacts.push(await artifact(path));
   artifacts.push(await artifact('RCD-LICENSE.txt', await readFile(new URL('../RCD-LICENSE.txt', import.meta.url))));
+  artifacts.push(await artifact('research/sources.json', JSON.stringify(sources)));
   const run = {
     schemaVersion: 1,
     draw: { ...await artifact('paths.json', JSON.stringify(draw)), inputPath: 'morphbox.input.txt' }, rounds, reviews, research,
     decision: { status: 'selected', proposalId: ids[0], considered: ids, report: await artifact('decision.md'), selectionHistory: [{ proposalId: ids[0], researchPath: 'research.md' }] },
+    postResearchReviews: [await postReview(research[0])],
     artifacts,
   };
   const manifest = join(root, 'run.json');
   const save = () => writeFile(manifest, JSON.stringify(run));
+  async function saveSources() {
+    const entry = await artifact('research/sources.json', JSON.stringify(sources));
+    run.artifacts = run.artifacts.map(previous => previous.path === entry.path ? entry : previous);
+  }
   await save();
-  return { root, run, manifest, save, artifact };
+  return { root, run, manifest, save, artifact, sources, saveSources, postReview };
 }
 
 test('complete selected and rejected-all runs pass only structural checks', async t => {
   const f = await fixture(t);
-  assert.deepEqual(await checkRun(f.manifest), { status: 'selected', count: 3, checkedFiles: 29, researchLimited: [] });
+  assert.deepEqual(await checkRun(f.manifest), { status: 'selected', count: 3, checkedFiles: 32, researchLimited: [] });
   f.run.decision.status = 'rejected_all';
   f.run.decision.proposalId = null;
   f.run.decision.selectionHistory = [];
   f.run.research = [];
-  f.run.artifacts = f.run.artifacts.filter(entry => !['project.md', 'pitch.md'].includes(entry.path));
+  delete f.run.postResearchReviews;
+  f.run.artifacts = f.run.artifacts.filter(entry => !['project.md', 'pitch.md', 'research/sources.json'].includes(entry.path));
   await f.save();
   assert.equal((await checkRun(f.manifest)).status, 'rejected_all');
+});
+
+test('decision reports require decision.md and cannot reuse another artifact by path or physical alias', async t => {
+  const f = await fixture(t);
+  const original = f.run.decision.report;
+  f.run.decision.report = f.run.artifacts.find(entry => entry.path === 'brief.md');
+  await f.save();
+  await assert.rejects(checkRun(f.manifest), /Decision report path must be decision.md/);
+  f.run.decision.report = original;
+  await rm(join(f.root, 'decision.md'));
+  await symlink(join(f.root, 'brief.md'), join(f.root, 'decision.md'));
+  f.run.decision.report.sha256 = f.run.artifacts.find(entry => entry.path === 'brief.md').sha256;
+  await f.save();
+  await assert.rejects(checkRun(f.manifest), /Decision report must be a distinct file/);
+  await rm(join(f.root, 'decision.md'));
+  await link(join(f.root, f.run.rounds[0].proposals[0].path), join(f.root, 'decision.md'));
+  f.run.decision.report.sha256 = f.run.rounds[0].proposals[0].sha256;
+  await f.save();
+  await assert.rejects(checkRun(f.manifest), /Decision report must be a distinct file/);
+});
+
+test('selected and post-research no-go decisions require a separate hashed critic output and prompt', async t => {
+  const f = await fixture(t);
+  const original = f.run.postResearchReviews;
+  delete f.run.postResearchReviews;
+  await f.save();
+  await assert.rejects(checkRun(f.manifest), /Every researched candidate needs a hashed post-research critic review/);
+  f.run.decision.status = 'rejected_all';
+  f.run.decision.proposalId = null;
+  f.run.decision.selectionHistory = [];
+  await f.save();
+  await assert.rejects(checkRun(f.manifest), /Every researched candidate needs a hashed post-research critic review/);
+  f.run.postResearchReviews = original;
+  await f.save();
+  assert.equal((await checkRun(f.manifest)).status, 'rejected_all');
+  delete original[0].prompt;
+  await f.save();
+  await assert.rejects(checkRun(f.manifest), /retain the submitted prompt/);
+});
+
+test('post-research reviews bind the research hash, use an independent critic and preserve distinct outputs', async t => {
+  const f = await fixture(t);
+  const review = f.run.postResearchReviews[0];
+  const original = { ...review };
+  review.researchSha256 = '0'.repeat(64);
+  await f.save();
+  await assert.rejects(checkRun(f.manifest), /recorded research path and hash/);
+  Object.assign(review, original, { agentId: f.run.rounds[0].proposals[0].agentId });
+  await f.save();
+  await assert.rejects(checkRun(f.manifest), /Post-research reviewer must differ/);
+  Object.assign(review, original, { path: f.run.reviews[1].path, sha256: f.run.reviews[1].sha256 });
+  await f.save();
+  await assert.rejects(checkRun(f.manifest), /Post-research critic output must be a distinct file/);
+  Object.assign(review, original);
+  await f.save();
+  await writeFile(join(f.root, review.path), 'Tampered post-research review');
+  await assert.rejects(checkRun(f.manifest), /post-research review: sha256 mismatch/);
+});
+
+test('post-research critic outputs cannot reuse research files through direct paths, symlinks or hard links', async t => {
+  const f = await fixture(t);
+  const review = f.run.postResearchReviews[0];
+  const original = { ...review };
+  const research = f.run.research[0];
+  review.path = research.path;
+  review.sha256 = research.sha256;
+  await f.save();
+  await assert.rejects(checkRun(f.manifest), /Post-research critic output must be a distinct file/);
+  Object.assign(review, original);
+  await rm(join(f.root, review.path));
+  await symlink(join(f.root, research.path), join(f.root, review.path));
+  review.sha256 = research.sha256;
+  await f.save();
+  await assert.rejects(checkRun(f.manifest), /Post-research critic output must be a distinct file/);
+  await rm(join(f.root, review.path));
+  await link(join(f.root, research.path), join(f.root, review.path));
+  await assert.rejects(checkRun(f.manifest), /Post-research critic output must be a distinct file/);
+});
+
+test('research requires a structured hashed source record for every researched candidate', async t => {
+  const f = await fixture(t);
+  const original = [...f.run.artifacts];
+  f.run.artifacts = original.filter(entry => entry.path !== 'research/sources.json');
+  await f.save();
+  await assert.rejects(checkRun(f.manifest), /Missing required package artifact: research\/sources.json/);
+  f.run.artifacts = original;
+  await writeFile(join(f.root, 'research/sources.json'), '{}');
+  await f.save();
+  await assert.rejects(checkRun(f.manifest), /sha256 mismatch/);
+  const source = { ...f.sources.sources[0] };
+  for (const field of ['date', 'url', 'claim', 'provenance']) {
+    f.sources.sources[0] = { ...source };
+    delete f.sources.sources[0][field];
+    await f.saveSources();
+    await f.save();
+    await assert.rejects(checkRun(f.manifest), /Research source|research source/);
+  }
+  f.sources.sources = [];
+  await f.saveSources();
+  await f.save();
+  await assert.rejects(checkRun(f.manifest), /Every research candidate needs a source record/);
+});
+
+test('limited research preserves user-supplied evidence with unknown dates and URLs or explicit no-source gaps', async t => {
+  const f = await fixture(t);
+  f.run.research[0].status = 'limited';
+  f.run.research[0].notes = 'Supplied excerpts only; publication date and original URL were not supplied.';
+  f.sources.sources[0] = {
+    proposalId: f.run.research[0].proposalId, date: null, url: null,
+    claim: 'Capability described in the supplied excerpt', provenance: 'User message retained in brief.md',
+    limitations: 'Publication date and original URL are unknown; not directly verified.',
+  };
+  await f.saveSources();
+  await f.save();
+  assert.deepEqual((await checkRun(f.manifest)).researchLimited, [f.run.research[0].proposalId]);
+  delete f.sources.sources[0].limitations;
+  await f.saveSources();
+  await f.save();
+  await assert.rejects(checkRun(f.manifest), /Unknown source date\/URL requires limited research and explicit limitations/);
+  f.sources.sources = [];
+  f.sources.gaps = [{ proposalId: f.run.research[0].proposalId, notes: 'Research was blocked and no source excerpt was provided.' }];
+  await f.saveSources();
+  await f.save();
+  assert.equal((await checkRun(f.manifest)).status, 'selected');
+  f.run.research[0].status = 'complete';
+  await f.save();
+  await assert.rejects(checkRun(f.manifest), /Research gap needs a limited candidate/);
 });
 
 test('every proposal and review requires a retained, hashed and nonempty submitted prompt', async t => {
@@ -104,7 +251,7 @@ test('additional invocation prompts are hashed and have unique invocation IDs', 
   const f = await fixture(t);
   f.run.additionalPrompts = [{ id: 'post-research-01', ...await f.artifact('prompts/post-research-01.md', 'Full post-research prompt') }];
   await f.save();
-  assert.equal((await checkRun(f.manifest)).checkedFiles, 30);
+  assert.equal((await checkRun(f.manifest)).checkedFiles, 33);
   await writeFile(join(f.root, f.run.additionalPrompts[0].path), 'tampered');
   await assert.rejects(checkRun(f.manifest), /prompt: sha256 mismatch/);
   f.run.additionalPrompts.push({ ...f.run.additionalPrompts[0] });
@@ -253,6 +400,9 @@ test('reselection requires research for every candidate, not only the final winn
   await f.save();
   await assert.rejects(checkRun(f.manifest), /matching recorded research/);
   f.run.research.push({ proposalId: replacement, ...await f.artifact('replacement-research.md'), status: 'limited', notes: 'Catalog blocked; user-provided links only.' });
+  f.run.postResearchReviews.push(await f.postReview(f.run.research[1]));
+  f.sources.gaps.push({ proposalId: replacement, notes: 'Catalog blocked; no directly verified sources.' });
+  await f.saveSources();
   await f.save();
   assert.deepEqual((await checkRun(f.manifest)).researchLimited, [replacement]);
   f.run.research[1].notes = '';

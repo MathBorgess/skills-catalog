@@ -7,7 +7,7 @@ description: >-
   decision package or pitch. Stops before implementing the selected product.
 metadata:
   author: Matheus Borges
-  version: 1.0.0
+  version: 1.0.1
 ---
 
 # Morphological Project Design

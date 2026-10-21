@@ -8,7 +8,7 @@ In Step 7, judge `<out>/post.md` and, when slides or companion cards were reques
 |---|---|---|---|
 | **1. Brand DNA confirmation** | `0` unconfirmed `[inferred]` lines in `brand-dna.md` | `<count>` unconfirmed lines | `pass / fail` |
 | **2. Moodboard gate order** | `moodboard.md` confirmed *before* hook and separate from `storyboard.md` | Confirmed at step 3; separate files present | `pass / fail` |
-| **3. First-Fold Hook compactness** | Cover headline `2–6` words (or Line 1 `<= 12` words); sub-hook `<= 14` words | Headline/Line 1: `<N>` words; Sub-hook: `<M>` words | `pass / fail` |
+| **3. First-Fold Hook compactness** | Carousel: cover headline `2–6` words and sub-hook `<= 14` words; text post/thread: Line 1 `<= 12` words and Line 2 `<= 18` words | Headline/Line 1: `<N>` words; Sub-hook/Line 2: `<M>` words | `pass / fail` |
 | **4. Slide / Paragraph word ceiling** | Every carousel slide body `<= 28` words (or text post paragraph `<= 45` words) | Max words in a slide/paragraph: `<N>` (`<id>`) | `pass / fail` |
 | **5. Sentence burstiness** | At least one short punch (`<= 5` words) and one structural sentence (`>= 18` words) | Shortest: `<N>` words; Longest: `<M>` words | `pass / fail` |
 | **6. Concept grounding chain** | `0` blocks/slides using an ungrounded concept | `<count>` ungrounded leaps | `pass / fail` |

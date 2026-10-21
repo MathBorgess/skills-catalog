@@ -81,6 +81,13 @@ try {
   for (const value of ["Use when reviewing: proposals.", "Use when reviewing:", "Use reviews # a comment", "- proposal", "[proposal, evidence]", "&review proposal", "false", "42"]) {
     refuses((dir) => edit(dir, "SKILL.md", (s) => s.replace(/description: [^\n]+/, `description: ${value}`)), "one-line description");
   }
+  for (const value of ["1_000", "0b101", "yes", "ON", "no", "Off", "y", "N", "2026-10-20", "1.2.3"]) {
+    refuses((dir) => edit(dir, "SKILL.md", (s) => s.replace(/description: [^\n]+/, `description: ${value}`)), "one-line description");
+    const quoted = fixture();
+    edit(quoted, "SKILL.md", (s) => s.replace(/description: [^\n]+/, `description: ${JSON.stringify(value)}`).replace("author: Synthetic fixture", `author: '${value}'`));
+    edit(quoted, "agents/openai.yaml", (s) => s.replace('display_name: "Review Proposals"', `display_name: ${JSON.stringify(value)}`));
+    assert.equal(checkPackage(quoted).ok, true, `quoted ${value} remains a string across metadata fields`);
+  }
   refuses((dir) => edit(dir, "SKILL.md", (s) => s.replace("author: Synthetic fixture", "author: Review: methods")), "metadata.author");
   refuses((dir) => edit(dir, "agents/openai.yaml", (s) => s.replace('display_name: "Review Proposals"', "display_name: Review: Proposals")), "interface display_name");
   refuses((dir) => edit(dir, "SKILL.md", (s) => s.replace("metadata:\n", "metadata:\nother:\n")), "metadata.author");

@@ -28,8 +28,9 @@ function scalar(source, key, indent = "") {
   if (value.startsWith("'")) return /^'(?:[^']|'')*'$/.test(value) ? value.slice(1, -1).replaceAll("''", "'") : "";
   const reservedStart = /^[!&*\[\]{},#|>@`%]/.test(value) || /^[-?:](?:[ \t]|$)/.test(value);
   const unsafePlain = /:(?:[ \t]|$)|(?:^|[ \t])#|[\u0000-\u001f\u007f-\u009f]/.test(value);
-  const typedPlain = /^(?:~|null|true|false|[-+]?(?:0x[0-9a-f]+|0o[0-7]+|(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)(?:e[-+]?[0-9]+)?|\.inf|\.nan))$/i.test(value);
-  return !value || reservedStart || unsafePlain || typedPlain ? "" : value;
+  const plainVersion = key === "version" && /^\d+\.\d+\.\d+$/.test(value);
+  const ambiguousPlain = !/^\p{L}/u.test(value) || /^(?:null|true|false|y|yes|n|no|on|off)$/i.test(value);
+  return !value || reservedStart || unsafePlain || (!plainVersion && ambiguousPlain) ? "" : value;
 }
 
 function mapping(source, key) {

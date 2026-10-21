@@ -15,14 +15,14 @@ Produce this directory. Fill every slot with activity-specific content; do not s
 
 ## SKILL.md
 
-Use this shape, retaining the destination's author/version conventions. The checker supports one-line plain strings, JSON-compatible double-quoted strings and YAML single-quoted strings with doubled apostrophes. Quote values containing a colon followed by whitespace or a trailing colon, a whitespace-separated `#`, reserved leading indicators or values that YAML would interpret as a number, boolean or null. Block scalars, comments after values and other YAML forms are outside this template's supported subset.
+Use this shape, retaining the destination's author/version conventions. The checker supports one-line strings with JSON-compatible double quotes, YAML single quotes with doubled apostrophes, or a conservative plain form. Plain text must start with a letter and avoid YAML boolean/null words, including `y`, `n`, `yes`, `no`, `on` and `off`; quote numeric-looking values and dates. Only `metadata.version` also accepts a plain `x.y.z` version. Quote values containing a colon followed by whitespace or a trailing colon, a whitespace-separated `#` or reserved leading indicators. Block scalars, comments after values and other YAML forms are outside this template's supported subset.
 
 ```markdown
 ---
 name: <activity-name>
 description: "Use when <task situations, artifacts and realistic user phrases>. <Boundary that prevents an adjacent activity from triggering it>."
 metadata:
-  author: <package author>
+  author: "<package author>"
   version: 0.0.0
 ---
 

@@ -306,6 +306,24 @@ _Avoid_: automatic approval, omitted verification
 The human's decision to use a proposed visual reference for the current artifact, without by itself making that direction part of the durable design spec.
 _Avoid_: design spec update, permanent brand decision
 
+### Domain Skill Creation
+
+**Skill Factory**:
+A skill whose output is another skill prepared for a specific activity.
+_Avoid_: persona library, prompt generator
+
+**Activity Name**:
+The public name by which a model or user finds and invokes a skill for the work it performs.
+_Avoid_: personality name, expert name
+
+**Domain Personality**:
+A bot or agent's working profile informed by documented methods of successful practitioners of its activity.
+_Avoid_: activity name, actual practitioner
+
+**Review Lens**:
+A set of observable criteria adapted from documented domain methods to critique an activity's output.
+_Avoid_: expert endorsement, independent reviewer (a lens alone establishes neither)
+
 ## Deprecated Domains
 
 The domain languages for **Shunt** (outlines, excerpts, edit bypass, run wrapper, recover event) and **Handoff** (session, slot, graph gate, digest, supervisor, child, capabilities, gate run, verdict, risk level, attention matrix, revise round) have been moved to [deprecated/](deprecated/) alongside their retired skill implementations.

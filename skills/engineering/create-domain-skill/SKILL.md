@@ -28,5 +28,5 @@ Origin and format references: [sources](references/sources.md).
 - [ ] The package checker and destination checks passed; generated instructions load their bundled references and use only available tools.
 - [ ] Personality, methods and two complementary review lenses have inspectable evidence, explicit adaptations and scope limits.
 - [ ] Practical outputs, baseline comparison, domain critiques and revisions exist, or the delivery explicitly says which validation remains unrun.
-- [ ] Private inputs and evaluation evidence remain in the resolved private workspace outside checkout, installation and publication trees; the reusable package contains only public or synthetic material.
+- [ ] Private inputs and evaluation evidence remain in the resolved private workspace outside checkout, installation and publication trees. Current-user ownership and effective owner-only permissions/ACLs were verified on the new workspace and private files/directories; existing data, permissions and ancestors remain unchanged. The reusable package contains only public or synthetic material.
 - [ ] No invented endorsement, source, success metric or test result appears; the delivery distinguishes structural checks from observed domain performance.

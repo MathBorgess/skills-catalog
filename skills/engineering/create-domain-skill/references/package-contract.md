@@ -15,14 +15,14 @@ Produce this directory. Fill every slot with activity-specific content; do not s
 
 ## SKILL.md
 
-Use this shape, retaining the destination's author/version conventions:
+Use this shape, retaining the destination's author/version conventions. The checker supports one-line strings with JSON-compatible double quotes, YAML single quotes with doubled apostrophes, or a conservative plain form. Plain text must start with a letter and avoid YAML boolean/null words, including `y`, `n`, `yes`, `no`, `on` and `off`; quote numeric-looking values and dates. Only `metadata.version` also accepts a plain `x.y.z` version. Quote values containing a colon followed by whitespace or a trailing colon, a whitespace-separated `#` or reserved leading indicators. Block scalars, comments after values and other YAML forms are outside this template's supported subset.
 
 ```markdown
 ---
 name: <activity-name>
 description: "Use when <task situations, artifacts and realistic user phrases>. <Boundary that prevents an adjacent activity from triggering it>."
 metadata:
-  author: <package author>
+  author: "<package author>"
   version: 0.0.0
 ---
 
@@ -74,7 +74,7 @@ Write a portable profile that can be loaded by the skill or incorporated into a 
 - `review-rubric.md`: the two complementary review lenses, observable criteria and blocking failure conditions.
 - `sources.md`: inspectable source records, adaptations, evidence limits and provenance.
 
-Keep personal briefs, execution transcripts, evaluation outputs and API credentials out of the reusable package. Include synthetic or public examples when needed. Add deterministic scripts only when an activity actually needs a repeatable procedure; use the destination's runtime and dependency rules.
+Keep personal briefs, execution transcripts and evaluation outputs in the private workspace selected during [intake](intake.md), outside checkout, installation and publication trees. Include only synthetic or public examples in the reusable package, and never retain API credentials. Add deterministic scripts only when an activity actually needs a repeatable procedure; use the destination's runtime and dependency rules.
 
 ## evals/evals.json
 

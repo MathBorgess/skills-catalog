@@ -16,7 +16,7 @@ const inside = (root, target) => {
   return rel !== ".." && !rel.startsWith(`..${process.platform === "win32" ? "\\" : "/"}`) && !isAbsolute(rel);
 };
 
-// The template uses one-line plain or JSON-compatible quoted YAML scalars.
+// Supported strings: one-line plain scalars, JSON double quotes or YAML single quotes.
 function scalar(source, key, indent = "") {
   const matches = [...source.matchAll(new RegExp(`^${indent}${key}:[ \\t]*([^\\r\\n]*)$`, "gm"))];
   if (matches.length !== 1) return "";
@@ -26,7 +26,11 @@ function scalar(source, key, indent = "") {
     catch { return ""; }
   }
   if (value.startsWith("'")) return /^'(?:[^']|'')*'$/.test(value) ? value.slice(1, -1).replaceAll("''", "'") : "";
-  return /^(?:[>|#]|$)/.test(value) ? "" : value;
+  const reservedStart = /^[!&*\[\]{},#|>@`%]/.test(value) || /^[-?:](?:[ \t]|$)/.test(value);
+  const unsafePlain = /:(?:[ \t]|$)|(?:^|[ \t])#|[\u0000-\u001f\u007f-\u009f]/.test(value);
+  const plainVersion = key === "version" && /^\d+\.\d+\.\d+$/.test(value);
+  const ambiguousPlain = !/^\p{L}/u.test(value) || /^(?:null|true|false|y|yes|n|no|on|off)$/i.test(value);
+  return !value || reservedStart || unsafePlain || (!plainVersion && ambiguousPlain) ? "" : value;
 }
 
 function mapping(source, key) {

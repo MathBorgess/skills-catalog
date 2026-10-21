@@ -1,7 +1,7 @@
 {
   "name": "skills-catalog",
-  "version": "4.2.0",
-  "description": "Agent skills organized into engineering, creativity and experiments, including animation composed from references while preserving the author's DESIGN.md.",
+  "version": "4.3.0",
+  "description": "Agent skills organized into engineering, creativity, media, and experiments, including brand-guided social video and post directors.",
   "author": {
     "name": "Matheus Borges",
     "url": "https://github.com/MathBorgess"
@@ -19,11 +19,12 @@
     "codex",
     "image-collection",
     "explain-me",
-    "motion-identity",
     "easy-to-read",
     "plain-language",
     "prettify",
-    "co-direct-animation"
+    "brand-dna",
+    "social-video-director",
+    "social-post-director"
   ],
   "skills": [
     "./skills/engineering/domain-modeling",
@@ -32,14 +33,15 @@
     "./skills/engineering/skills-evaluate",
     "./skills/experiments/still-cursor-living-day",
     "./skills/creativity/explain-me",
-    "./skills/creativity/motion-identity",
     "./skills/creativity/easy-to-read",
     "./skills/creativity/prettify",
-    "./skills/creativity/co-direct-animation",
-    "./skills/creativity/poster-design",
-    "./skills/creativity/campaign-identity-grid",
-    "./skills/creativity/brand-campaign-shots",
-    "./skills/creativity/illustration-style-remix",
-    "./skills/creativity/video-reference"
+    "./skills/creativity/video-reference",
+    "./skills/media/brand-dna",
+    "./skills/media/social-video-director",
+    "./skills/media/social-post-director",
+    "./skills/media/poster-design",
+    "./skills/media/campaign-identity-grid",
+    "./skills/media/brand-campaign-shots",
+    "./skills/media/illustration-style-remix"
   ]
 }

@@ -1,6 +1,6 @@
 # Evaluate the activity and domain personality
 
-Keep the evidence in `<workspace>/iteration-<n>/`. Use the brief's bounded budget; default to one initial pass and at most two revision rounds. Do not interpret a budget as permission for paid services or live bot actions beyond the user's scope.
+Keep the evidence in `<workspace>/iteration-<n>/`, using the private workspace selected during [intake](intake.md) outside checkout, installation and publication trees. Use the brief's bounded budget; default to one initial pass and at most two revision rounds. Do not interpret a budget as permission for paid services or live bot actions beyond the user's scope.
 
 ## 1. Check the structure and discovery
 

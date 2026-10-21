@@ -19,7 +19,7 @@ Default paths:
 
 - In a catalog, use its existing layout and category rules. In this catalog, the factory is engineering; generated activities belong to their own appropriate category.
 - Outside a catalog, use `skills/<activity-name>/` for `<out>`.
-- Keep private briefs, raw research, outputs and critiques in `<out>-workspace/`, beside the skill. Respect an explicit workspace path and the destination's privacy rules.
+- Keep private briefs, raw research, transcripts, outputs and critiques in `<workspace>`, defaulting to `$HOME/.local/share/create-domain-skill/<activity-name>/<run-id>/` with a unique run ID. Resolve the host's home directory and existing path ancestors, including symlinks, before writing. The workspace must be outside repository checkouts, skill installation trees and directories included in published artifacts. Use an explicit path only when its resolved location meets those boundaries; otherwise choose a safe private location before capturing inputs. Keep existing evidence in place; moving or deleting it requires a separate instruction.
 - Use the destination's author and version conventions. In this catalog, a new skill stays at `0.0.0` until its first publication to `main`. Do not credit a researched practitioner as the package author.
 - Write reusable instructions in the destination's language; in this catalog that is English. A skill may produce deliverables in the language of its caller.
 

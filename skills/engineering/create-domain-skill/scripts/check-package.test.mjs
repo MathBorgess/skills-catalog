@@ -49,6 +49,13 @@ try {
   edit(neighboringMappings, "SKILL.md", (s) => s.replace("\n---\n\n#", "\nother:\n  author: Another author\n  version: 9.9.9\n---\n\n#"));
   edit(neighboringMappings, "agents/openai.yaml", (s) => `${s}other:\n  display_name: Another display name\n  short_description: Another description\n`);
   assert.equal(checkPackage(neighboringMappings).ok, true, "unrelated mappings do not supply or shadow required section fields");
+  const quotedPunctuation = fixture();
+  edit(quotedPunctuation, "SKILL.md", (s) => s.replace(/description: [^\n]+/, 'description: "Use when reviewing: proposals # with evidence."').replace("author: Synthetic fixture", "author: 'O''Neil: review # methods'"));
+  edit(quotedPunctuation, "agents/openai.yaml", (s) => s.replace('display_name: "Review Proposals"', 'display_name: "Review: Proposals # with evidence"'));
+  assert.equal(checkPackage(quotedPunctuation).ok, true, "quoted strings preserve colons, hashes and escaped apostrophes");
+  const plainText = fixture();
+  edit(plainText, "SKILL.md", (s) => s.replace(/description: [^\n]+/, "description: Use https://example.org/tasks#review for O'Neil's proposals."));
+  assert.equal(checkPackage(plainText).ok, true, "plain strings retain URL colons, unseparated hashes and internal apostrophes");
   const installed = join(temp, "installed", "review-proposals");
   mkdirSync(dirname(installed));
   symlinkSync(good, installed);
@@ -71,6 +78,11 @@ try {
   refuses((dir) => edit(dir, "agents/openai.yaml", (s) => `${s}policy:\n  allow_implicit_invocation: false\n`), "omit policy");
   refuses((dir) => edit(dir, "agents/openai.yaml", (s) => `${s}'policy': {allow_implicit_invocation: false}\n`), "omit policy");
   refuses((dir) => edit(dir, "SKILL.md", (s) => s.replace(/description: [^\n]+/, "description:")), "one-line description");
+  for (const value of ["Use when reviewing: proposals.", "Use when reviewing:", "Use reviews # a comment", "- proposal", "[proposal, evidence]", "&review proposal", "false", "42"]) {
+    refuses((dir) => edit(dir, "SKILL.md", (s) => s.replace(/description: [^\n]+/, `description: ${value}`)), "one-line description");
+  }
+  refuses((dir) => edit(dir, "SKILL.md", (s) => s.replace("author: Synthetic fixture", "author: Review: methods")), "metadata.author");
+  refuses((dir) => edit(dir, "agents/openai.yaml", (s) => s.replace('display_name: "Review Proposals"', "display_name: Review: Proposals")), "interface display_name");
   refuses((dir) => edit(dir, "SKILL.md", (s) => s.replace("metadata:\n", "metadata:\nother:\n")), "metadata.author");
   refuses((dir) => edit(dir, "SKILL.md", (s) => s.replace("metadata:\n", "metadata:\nmetadata:\n")), "metadata.author");
   refuses((dir) => edit(dir, "agents/openai.yaml", (s) => s.replace("interface:\n", "interface:\nother:\n")), "interface display_name");

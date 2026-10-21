@@ -1,5 +1,7 @@
 # Morphological project design: validation
 
+The table and initial checks below record the pre-release exercise; later structural corrections are described separately.
+
 | Surface | Status on 2026-10-20 |
 | --- | --- |
 | Implementation | Proposed release branch; not yet published or installed |
@@ -46,4 +48,12 @@ Raw prompts, outputs, native lifecycle evidence, checks and deviations were reta
 
 Review of the proposed release found two further gaps: a manifest could pass without submitted prompts, and declared authors could switch candidates between rounds. The checker now requires a hashed, nonempty prompt file and native agent ID for each proposal/review, checks additional invocation prompts when recorded, and verifies author continuity. A replacement remains possible when its record names that candidate's initial author and gives a reason; an author from another candidate cannot serve as its replacement.
 
-Six regression tests cover missing, changed, empty and aliased prompt files; additional prompt hashes/IDs; missing identities; undeclared or mismatched replacements; legitimate replacement recovery; and swapped candidate authors. The helper suite now has 28 passing tests. These are structural fixtures. The earlier native N = 2 run was not repeated, and its preserved manifest was not rewritten to claim compliance with these new required fields. Submitted-prompt fidelity, completeness of the invocation inventory and actual context isolation still require host evidence and review.
+Six regression tests cover missing, changed, empty and aliased prompt files; additional prompt hashes/IDs; missing identities; undeclared or mismatched replacements; legitimate replacement recovery; and swapped candidate authors. The helper suite at that stage had 28 passing tests. These are structural fixtures. The earlier native N = 2 run was not repeated, and its preserved manifest was not rewritten to claim compliance with these new required fields. Submitted-prompt fidelity, completeness of the invocation inventory and actual context isolation still require host evidence and review.
+
+## Decision and research evidence corrections
+
+Further review after publication identified three missing structural requirements: the decision report could reuse another artifact, post-research critic evidence was optional, and the structured competitor source record was absent from the required files. The checker now requires a physically distinct `decision.md`; a distinct hashed post-research critic output and prompt linked to each formal research entry; and a hashed, structured `research/sources.json` identifying claims and provenance or explicit gaps. File aliases and hard links cannot substitute research or an earlier report for the decision or post-research critic output.
+
+The regression fixtures include no-go before research without source/review files, no-go after research with retained critic evidence, and selected candidates with limited research. Unknown source dates and URLs remain explicit nulls with limitations; no-source research can retain a gap instead of inventing evidence. These changes verify recorded structure. No new native run, research, critic review or market test was performed, and the historical run and local manifest remain unchanged. The historical structural passes above apply to their then-current checker, not to the additional evidence requirements.
+
+`npm run check` passed after these corrections, including all 34 helper tests (25 manifest checks and 9 sampler tests). The complete local check log is retained with the review evidence; `git diff --check` is clean. The package release version is handled by the integrating release change.

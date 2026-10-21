@@ -19,6 +19,39 @@ quality, economic viability or a commercial outcome.
 const demand = (condition, message) => { if (!condition) throw new Error(message); };
 const array = (value, label) => { demand(Array.isArray(value), `${label} must be an array`); return value; };
 const shaPattern = /^[a-f0-9]{64}$/;
+const nonempty = value => typeof value === 'string' && value.trim().length > 0;
+const validDate = value => typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value)
+  && !Number.isNaN(Date.parse(value)) && new Date(value).toISOString().slice(0, 10) === value;
+const validUrl = value => {
+  try { return typeof value === 'string' && ['https:', 'http:'].includes(new URL(value).protocol); }
+  catch { return false; }
+};
+
+function checkSources(bytes, research) {
+  const record = JSON.parse(bytes.toString('utf8'));
+  demand(record.schemaVersion === 1, 'Unsupported research sources schemaVersion');
+  const sources = array(record.sources, 'research sources');
+  const gaps = array(record.gaps, 'research gaps');
+  const byId = new Map(research.map(entry => [entry.proposalId, entry]));
+  for (const source of sources) {
+    const entry = byId.get(source.proposalId);
+    demand(entry, 'Research source refers to an unrecorded research candidate');
+    demand(nonempty(source.claim) && nonempty(source.provenance), 'Each research source needs a claim and provenance');
+    demand(source.date === null || validDate(source.date), 'Research source date must be YYYY-MM-DD or explicit null');
+    demand(source.url === null || validUrl(source.url), 'Research source URL must be HTTP(S) or explicit null');
+    if (source.date === null || source.url === null) {
+      demand(entry.status === 'limited' && nonempty(source.limitations), 'Unknown source date/URL requires limited research and explicit limitations');
+    }
+  }
+  for (const gap of gaps) {
+    demand(byId.get(gap.proposalId)?.status === 'limited' && nonempty(gap.notes), 'Research gap needs a limited candidate and nonempty notes');
+  }
+  for (const entry of research) {
+    demand(sources.some(source => source.proposalId === entry.proposalId)
+      || (entry.status === 'limited' && gaps.some(gap => gap.proposalId === entry.proposalId)),
+    'Every research candidate needs a source record or an explicit limited-research gap');
+  }
+}
 
 export async function checkRun(manifestPath) {
   const manifestFile = await realpath(manifestPath);
@@ -28,7 +61,10 @@ export async function checkRun(manifestPath) {
   let checkedFiles = 0;
   const outputPaths = new Set();
   const outputInodes = new Set();
-  async function artifact(entry, label, uniqueOutput = false) {
+  const allPaths = new Set();
+  const allInodes = new Set();
+  const exclusiveFiles = [];
+  async function artifact(entry, label, uniqueOutput = false, exclusiveRole) {
     demand(entry && typeof entry.path === 'string' && entry.path.length > 0, `${label}: missing path`);
     demand(!isAbsolute(entry.path) && !entry.path.includes('\\') && !entry.path.split('/').includes('..'), `${label}: unsafe relative path`);
     demand(shaPattern.test(entry.sha256 ?? ''), `${label}: invalid sha256`);
@@ -37,8 +73,16 @@ export async function checkRun(manifestPath) {
     demand(rel !== '' && rel !== '..' && !rel.startsWith('../') && !isAbsolute(rel), `${label}: path escapes run folder`);
     const info = await stat(actual, { bigint: true });
     demand(info.isFile(), `${label}: expected a regular file`);
+    const inode = `${info.dev}:${info.ino}`;
+    const collision = exclusiveFiles.find(file => file.actual === actual || file.inode === inode);
+    demand(!collision, `${collision?.role} must be a distinct file from every other artifact`);
+    if (exclusiveRole) {
+      demand(!allPaths.has(actual) && !allInodes.has(inode), `${exclusiveRole} must be a distinct file from every other artifact`);
+      exclusiveFiles.push({ actual, inode, role: exclusiveRole });
+    }
+    allPaths.add(actual);
+    allInodes.add(inode);
     if (uniqueOutput) {
-      const inode = `${info.dev}:${info.ino}`;
       demand(!outputPaths.has(actual) && !outputInodes.has(inode), 'Proposals, reviews and prompts must preserve separate output files with distinct realpaths and file identities');
       outputPaths.add(actual);
       outputInodes.add(inode);
@@ -128,7 +172,8 @@ export async function checkRun(manifestPath) {
   const decision = run.decision;
   demand(decision && ['selected', 'rejected_all'].includes(decision.status), 'Decision must be selected or rejected_all; incomplete runs cannot pass');
   completeIds(array(decision.considered, 'decision.considered'), 'decision.considered');
-  await artifact(decision.report, 'decision report');
+  demand(decision.report?.path === 'decision.md', 'Decision report path must be decision.md');
+  await artifact(decision.report, 'decision report', true, 'Decision report');
   const history = array(decision.selectionHistory, 'decision.selectionHistory');
   demand(history.length <= ids.length && new Set(history.map(item => item.proposalId)).size === history.length, 'Selection history must contain unique candidate IDs; rejected candidates cannot be revisited');
   for (const item of history) {
@@ -141,10 +186,24 @@ export async function checkRun(manifestPath) {
   } else {
     demand(decision.proposalId === undefined || decision.proposalId === null, 'rejected_all must not name a winner');
   }
+  const postResearchReviews = run.postResearchReviews === undefined ? [] : array(run.postResearchReviews, 'postResearchReviews');
+  demand(new Set(postResearchReviews.map(review => review.proposalId)).size === postResearchReviews.length, 'Duplicate post-research review proposalId');
+  for (const review of postResearchReviews) {
+    const entry = research.find(candidate => candidate.proposalId === review.proposalId);
+    demand(entry && review.researchPath === entry.path && review.researchSha256 === entry.sha256, 'Post-research review must reference the recorded research path and hash');
+    demand(!proponentAgents.has(agentId(review, `${review.proposalId} post-research review`)), 'Post-research reviewer must differ from all proponent agents');
+    const bytes = await artifact(review, `${review.proposalId} post-research review`, true, 'Post-research critic output');
+    demand(bytes.toString('utf8').trim().length > 0, 'Post-research review output is empty');
+    await prompt(review.prompt, `${review.proposalId} post-research review prompt`);
+  }
+  for (const entry of research) {
+    demand(postResearchReviews.some(review => review.proposalId === entry.proposalId), 'Every researched candidate needs a hashed post-research critic review and prompt');
+  }
   const artifacts = array(run.artifacts, 'artifacts');
   const entries = [...artifacts, ...(run.criteria ? [run.criteria] : [])];
   demand(new Set(entries.map(entry => entry.path)).size === entries.length, 'Duplicate additional artifact path');
   const required = ['brief.md', 'ideas.md', 'morphbox.md', 'morphbox.json', 'criteria.json', 'validation-plan.md', 'RCD-LICENSE.txt'];
+  if (research.length) required.push('research/sources.json');
   if (decision.status === 'selected') required.push('project.md', 'pitch.md');
   for (const path of required) demand(entries.some(entry => entry.path === path), `Missing required package artifact: ${path}`);
   for (const entry of entries) {
@@ -152,6 +211,7 @@ export async function checkRun(manifestPath) {
     if (entry.path === 'RCD-LICENSE.txt') {
       demand(bytes.equals(await readFile(new URL('../RCD-LICENSE.txt', import.meta.url))), 'RCD-LICENSE.txt must preserve the complete bundled terms');
     }
+    if (entry.path === 'research/sources.json') checkSources(bytes, research);
   }
   return { status: decision.status, count: ids.length, checkedFiles, researchLimited: research.filter(entry => entry.status === 'limited').map(entry => entry.proposalId) };
 }

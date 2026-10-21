@@ -1,6 +1,6 @@
 {
   "name": "skills-catalog",
-  "version": "4.3.0",
+  "version": "4.4.0",
   "description": "Agent skills organized into engineering, creativity, media, and experiments, including brand-guided social video and post directors.",
   "author": {
     "name": "Matheus Borges",
@@ -8,7 +8,7 @@
   },
   "homepage": "https://github.com/MathBorgess/skills-catalog",
   "repository": "https://github.com/MathBorgess/skills-catalog",
-  "license": "MIT",
+  "license": "SEE LICENSE IN LICENSES.md",
   "keywords": [
     "skills",
     "study-wiki",
@@ -42,6 +42,7 @@
     "./skills/media/poster-design",
     "./skills/media/campaign-identity-grid",
     "./skills/media/brand-campaign-shots",
-    "./skills/media/illustration-style-remix"
+    "./skills/media/illustration-style-remix",
+    "./skills/creativity/morphological-project-design"
   ]
 }

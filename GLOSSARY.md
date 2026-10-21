@@ -296,6 +296,44 @@ _Avoid_: automatic approval, omitted verification
 The human's decision to use a proposed visual reference for the current artifact, without by itself making that direction part of the durable design spec.
 _Avoid_: design spec update, permanent brand decision
 
+### Morphological Project Selection
+
+**Seed Idea**:
+An initial project concept whose possibilities help identify dimensions and alternatives for exploration.
+_Avoid_: project candidate, selected project
+
+**Morphological Box**:
+A set of project dimensions, each with distinct alternatives, that defines the space of possible combinations.
+_Avoid_: list of ideas, candidate ranking
+
+**Morphological Path**:
+A combination containing one alternative from every dimension of a morphological box.
+_Avoid_: project proposal, variation (unqualified)
+
+**Project Candidate**:
+A developed project proposal interpreting one morphological path for a specific audience and use.
+_Avoid_: morphological path, commercial recommendation, proposal (unqualified)
+
+**Commercial Recommendation**:
+A comparative judgment about a project candidate's commercial potential and the evidence still needed, including a judgment that none currently merits advancement.
+_Avoid_: validated business, observed revenue, investment approval
+
+**Revenue Hypothesis**:
+An untested claim about who would pay, for what outcome, at what price and with which economic benefit.
+_Avoid_: revenue, commercial validation, realized return
+
+**Candidate Revision Round**:
+An iteration in which every proponent updates its project candidate in response to criticism while retaining its morphological path.
+_Avoid_: reroll, winner-only refinement
+
+**No-Go Decision**:
+A recommendation not to advance any reviewed project candidate under the current evidence, with the reasons and evidence needed to reconsider.
+_Avoid_: missing result, proof that no market exists
+
+**Competitive Finding**:
+A source-supported observation about an existing alternative that changes the assessment of a candidate's proposed value or differentiation.
+_Avoid_: assumed absence of a feature, catalog label alone, measured advantage
+
 ## Deprecated Domains
 
 The domain languages for **Shunt** (outlines, excerpts, edit bypass, run wrapper, recover event), **Handoff** (session, slot, graph gate, digest, supervisor, child, capabilities, gate run, verdict, risk level, attention matrix, revise round), **Motion Identity** (standalone motion grilling and proof), and **Animation Direction** (`co-direct-animation`'s five-gate Flow pipeline) have been moved to [deprecated/](deprecated/) alongside their retired skill implementations. Their motion archetypes, role eases, kinetic type rules, and moodboard/storyboard progression are now absorbed into **Media Direction** (`brand-dna`, `social-video-director`, `social-post-director`). Meanwhile, `video-reference` remains in *analysis* status while `viral-rag` serves as the active reference engine for media direction.

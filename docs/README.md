@@ -36,6 +36,7 @@ Each skill **may** have one, and there is no required shape. A page earns its pl
 | --- | --- |
 | [`handoff`](../deprecated/handoff/) *(deprecated)* | [mechanism](handoff/mechanism.md) — the six phases, the three owner gates, the session graph, and what was built (now retired) |
 | Experiments | [index](experiments/README.md) — versioned trials that are not part of any skill |
+| [`morphological-project-design`](../skills/creativity/morphological-project-design/) | [workflow and agreed scope](morphological-project-design/workflow.md), [validation record](morphological-project-design/validation.md) — implemented and tested in the proposed release branch; not yet published |
 | [`prettify`](../skills/creativity/prettify/) | [source investigation](prettify/research.md), [workflow design](prettify/workflow.md), and [validation evidence](prettify/validation.md) — implemented on the MAT-265 branch; see [MAT-265](https://linear.app/borgesmathai/issue/MAT-265/criar-prettify-design-guiado-por-designmd-do-briefing-a-entrega) and [PR #67](https://github.com/MathBorgess/skills-catalog/pull/67) |
 
 | [`co-direct-animation`](../deprecated/co-direct-animation/) (retired; historical reference) | [workflow, migration and validation scope](co-direct-animation/README.md) |

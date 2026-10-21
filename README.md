@@ -104,6 +104,7 @@ Visual explanations, interactive prototypes, and plain-language writing. (`video
 | Skill | Version | Kind | What it does |
 |---|---|---|---|
 | [`video-reference`](skills/creativity/video-reference/) | 1.1.0 | operator | *(Under analysis)* Distills local videos into layered references and retrieves detailed Remotion direction with evidence and human-reviewed adaptation dependencies. |
+| [`morphological-project-design`](skills/creativity/morphological-project-design/) | 1.0.0 | operator | Turns seed ideas into reproducible morphological paths, two rounds of N independent proposals and commercial critique, competitor research, a decision package and pitch. RCD instructional adaptation has [specific terms](LICENSES.md). |
 | [`explain-me`](skills/creativity/explain-me/) | 2.0.0 | operator | Creates one visual explanation, in the language you asked in, with controlled-writing text, diagrams, images, interactive HTML or a narrated video, landscape or portrait for Reels/Shorts/TikTok (Remotion motion, local Kokoro voice), styled from an editable, brand-able DESIGN.md; teach-me retains quizzes and progress records. |
 | [`prettify`](skills/creativity/prettify/) | 0.0.0 | operator | Guides a visual idea from a clear question through briefing, low-fidelity and high-fidelity review to an inspected web or static delivery, with explicit design decisions and task-specific dependencies. |
 | [`easy-to-read`](skills/creativity/easy-to-read/) | 1.0.0 | operator | Once activated, keeps every text it writes for you in plain language for the rest of the session — chat replies, documents, notes, summaries, PR and issue bodies — under STE-lite plus the profile of the text's language (ASD-STE100 for English; ABNT NBR ISO 24495-1 and the Senado style for Brazilian Portuguese; the core alone for other languages). Lints documents and long replies with a zero-dependency linter before they ship, and never rewrites code, commands, paths, identifiers or quotes. Canonical home of the writing rules explain-me ships as byte copies. |
@@ -219,4 +220,4 @@ To submit the plugin to Anthropic's community marketplace later, follow [Discove
 
 ## License
 
-MIT © Matheus Borges — see [`LICENSE`](LICENSE). Use them, fork them, adapt them to your own workflow.
+Existing catalog material and original helpers remain MIT © Matheus Borges — see [`LICENSE`](LICENSE). The Revenue-Centric Design instructional adaptation in `morphological-project-design` has specific source-available terms, including attribution and a gambling/betting/casino exclusion. See [`LICENSES.md`](LICENSES.md) for the exact file scopes and complete applicable terms.

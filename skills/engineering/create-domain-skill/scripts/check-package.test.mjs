@@ -45,6 +45,10 @@ function refuses(mutate, expected) {
 try {
   const good = fixture();
   assert.deepEqual(checkPackage(good), { ok: true, name: "review-proposals", errors: [] });
+  const neighboringMappings = fixture();
+  edit(neighboringMappings, "SKILL.md", (s) => s.replace("\n---\n\n#", "\nother:\n  author: Another author\n  version: 9.9.9\n---\n\n#"));
+  edit(neighboringMappings, "agents/openai.yaml", (s) => `${s}other:\n  display_name: Another display name\n  short_description: Another description\n`);
+  assert.equal(checkPackage(neighboringMappings).ok, true, "unrelated mappings do not supply or shadow required section fields");
   const installed = join(temp, "installed", "review-proposals");
   mkdirSync(dirname(installed));
   symlinkSync(good, installed);
@@ -67,6 +71,10 @@ try {
   refuses((dir) => edit(dir, "agents/openai.yaml", (s) => `${s}policy:\n  allow_implicit_invocation: false\n`), "omit policy");
   refuses((dir) => edit(dir, "agents/openai.yaml", (s) => `${s}'policy': {allow_implicit_invocation: false}\n`), "omit policy");
   refuses((dir) => edit(dir, "SKILL.md", (s) => s.replace(/description: [^\n]+/, "description:")), "one-line description");
+  refuses((dir) => edit(dir, "SKILL.md", (s) => s.replace("metadata:\n", "metadata:\nother:\n")), "metadata.author");
+  refuses((dir) => edit(dir, "SKILL.md", (s) => s.replace("metadata:\n", "metadata:\nmetadata:\n")), "metadata.author");
+  refuses((dir) => edit(dir, "agents/openai.yaml", (s) => s.replace("interface:\n", "interface:\nother:\n")), "interface display_name");
+  refuses((dir) => edit(dir, "agents/openai.yaml", (s) => s.replace("interface:\n", "interface:\ninterface:\n")), "interface display_name");
   refuses((dir) => edit(dir, "SKILL.md", (s) => s.replace("[methods](references/methods.md)", "methods")), "must link references/methods.md");
   refuses((dir) => rmSync(join(dir, "references/personality.md")), "required nonempty file");
   refuses((dir) => edit(dir, "evals/evals.json", () => "{"), "invalid JSON");
@@ -76,6 +84,9 @@ try {
   refuses((dir) => editEvals(dir, (e) => ({ ...e, triggers: e.triggers.filter((t) => t.should_trigger) })), "two distinct negative");
   refuses((dir) => editEvals(dir, (e) => ({ ...e, triggers: e.triggers.map((t) => ({ ...t, should_trigger: "false" })) })), "boolean should_trigger");
   refuses((dir) => editEvals(dir, (e) => ({ ...e, triggers: [e.triggers[0], e.triggers[0], ...e.triggers.slice(2)] })), "two distinct positive");
+  refuses((dir) => editEvals(dir, (e) => ({ ...e, triggers: [...e.triggers, { ...e.triggers[0], should_trigger: false }] })), "unique trigger prompts");
+  refuses((dir) => editEvals(dir, (e) => ({ ...e, triggers: [...e.triggers, e.triggers[0]] })), "unique trigger prompts");
+  refuses((dir) => editEvals(dir, (e) => ({ ...e, triggers: [...e.triggers, { ...e.triggers[0], prompt: ` ${e.triggers[0].prompt} `, should_trigger: false }] })), "unique trigger prompts");
   refuses((dir) => editEvals(dir, (e) => ({ ...e, evals: e.evals.map((c) => ({ ...c, files: ["../outside.md"] })) })), "fixture must be a file inside package");
   const outside = join(temp, "outside.md");
   writeFileSync(outside, "Outside fixture must never be read\n");

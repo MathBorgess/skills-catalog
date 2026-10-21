@@ -101,4 +101,4 @@ Author at least four practical cases using the following schema. `kind` is one o
 }
 ```
 
-The single case above illustrates a record, not a complete suite. Supply all four kinds and at least two positive and two negative trigger prompts. Evaluation results belong in the workspace, not in this JSON. Run the factory's `scripts/check-package.mjs` against the filled directory. It checks this structural contract; it cannot establish expertise, source truth, trigger reliability or performance.
+The single case above illustrates a record, not a complete suite. Supply all four kinds and at least two positive and two negative trigger prompts. Every trigger prompt must be unique across both labels, including after trimming surrounding whitespace. Evaluation results belong in the workspace, not in this JSON. Run the factory's `scripts/check-package.mjs` against the filled directory. It checks this structural contract; it cannot establish expertise, source truth, trigger reliability or performance.

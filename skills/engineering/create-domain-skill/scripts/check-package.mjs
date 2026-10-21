@@ -29,6 +29,16 @@ function scalar(source, key, indent = "") {
   return /^(?:[>|#]|$)/.test(value) ? "" : value;
 }
 
+function mapping(source, key) {
+  const lines = source.split(/\r?\n/);
+  const starts = lines.flatMap((line, index) => line.startsWith(`${key}:`) ? [index] : []);
+  if (starts.length !== 1 || lines[starts[0]].trimEnd() !== `${key}:`) return "";
+  const start = starts[0] + 1;
+  let end = start;
+  while (end < lines.length && (!lines[end].trim() || /^[ \t#]/.test(lines[end]))) end++;
+  return lines.slice(start, end).join("\n");
+}
+
 export function checkPackage(directory) {
   const errors = [];
   let root;
@@ -61,7 +71,8 @@ export function checkPackage(directory) {
     errors.push("SKILL.md: activity name must match directory, use lowercase hyphens and be at most 64 characters");
   }
   if (!description || description.length > 1024) errors.push("SKILL.md: one-line description must contain 1-1024 characters");
-  if (!/^metadata:\s*$/m.test(frontmatter) || !scalar(frontmatter, "author", "  ") || !/^\d+\.\d+\.\d+$/.test(scalar(frontmatter, "version", "  "))) {
+  const metadata = mapping(frontmatter, "metadata");
+  if (!scalar(metadata, "author", "  ") || !/^\d+\.\d+\.\d+$/.test(scalar(metadata, "version", "  "))) {
     errors.push("SKILL.md: metadata.author and semantic metadata.version are required");
   }
   if (/^["']?disable-model-invocation["']?[ \t]*:/m.test(frontmatter)) errors.push("SKILL.md: omit disable-model-invocation to preserve default model invocation");
@@ -71,7 +82,8 @@ export function checkPackage(directory) {
     if (!skill.includes(`](${path})`)) errors.push(`SKILL.md: must link ${path}`);
   }
   const ui = contents.get("agents/openai.yaml") ?? "";
-  if (!/^interface:\s*$/m.test(ui) || !scalar(ui, "display_name", "  ") || !scalar(ui, "short_description", "  ")) {
+  const uiInterface = mapping(ui, "interface");
+  if (!scalar(uiInterface, "display_name", "  ") || !scalar(uiInterface, "short_description", "  ")) {
     errors.push("agents/openai.yaml: interface display_name and short_description are required");
   }
   if (/^["']?policy["']?[ \t]*:/m.test(ui)) errors.push("agents/openai.yaml: omit policy to preserve default model invocation");
@@ -104,8 +116,10 @@ export function checkPackage(directory) {
     }
     const triggers = Array.isArray(evaluations.triggers) ? evaluations.triggers : [];
     if (triggers.some((entry) => !nonempty(entry?.prompt) || typeof entry?.should_trigger !== "boolean")) errors.push("evals/evals.json: triggers need prompt and boolean should_trigger");
+    const allPrompts = triggers.filter((entry) => nonempty(entry?.prompt)).map((entry) => entry.prompt.trim());
+    if (new Set(allPrompts).size !== allPrompts.length) errors.push("evals/evals.json: unique trigger prompts are required across all labels");
     for (const expected of [true, false]) {
-      const prompts = new Set(triggers.filter((entry) => nonempty(entry?.prompt) && entry?.should_trigger === expected).map((entry) => entry.prompt));
+      const prompts = new Set(triggers.filter((entry) => nonempty(entry?.prompt) && entry?.should_trigger === expected).map((entry) => entry.prompt.trim()));
       if (prompts.size < 2) errors.push(`evals/evals.json: need two distinct ${expected ? "positive" : "negative"} trigger prompts`);
     }
   }

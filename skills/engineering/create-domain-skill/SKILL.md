@@ -3,7 +3,7 @@ name: create-domain-skill
 description: "Use when the user wants to create a reusable skill for an activity, turn an expert's public methods into an agent workflow, or prepare a bot or agent for a specific job with a domain personality and practical evaluations. Produces a skill named after the activity, a working personality profile, cited methods and review criteria. Not for performing an existing skill's activity or merely role-playing a famous person."
 metadata:
   author: Matheus Borges
-  version: 0.0.0
+  version: 1.0.0
 ---
 
 # Create domain skill

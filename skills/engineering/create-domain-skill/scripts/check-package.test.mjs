@@ -52,6 +52,12 @@ try {
   const cli = spawnSync(process.execPath, [script, good], { cwd: temp, encoding: "utf8" });
   assert.equal(cli.status, 0, cli.stderr);
   assert.equal(JSON.parse(cli.stdout).ok, true);
+  const linkedScripts = join(temp, "installed-factory-scripts");
+  symlinkSync(dirname(script), linkedScripts);
+  const linkedCli = spawnSync(process.execPath, [join(linkedScripts, "check-package.mjs"), good], { cwd: temp, encoding: "utf8" });
+  assert.equal(linkedCli.status, 0, linkedCli.stderr);
+  assert.equal(JSON.parse(linkedCli.stdout).ok, true, "the checker itself runs through an installed symlink");
+  assert.equal(spawnSync(process.execPath, [join(linkedScripts, "check-package.mjs"), join(temp, "absent")], { encoding: "utf8" }).status, 1);
   assert.equal(spawnSync(process.execPath, [script], { encoding: "utf8" }).status, 1);
   assert.equal(checkPackage(join(temp, "absent")).ok, false);
 

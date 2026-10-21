@@ -112,7 +112,10 @@ export function checkPackage(directory) {
   return { ok: errors.length === 0, name, errors };
 }
 
-if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+let invokedDirectly = false;
+try { invokedDirectly = realpathSync(process.argv[1]) === fileURLToPath(import.meta.url); }
+catch { /* Imported from an eval or stdin session. */ }
+if (invokedDirectly) {
   const result = process.argv.length === 3 ? checkPackage(process.argv[2]) : { ok: false, errors: ["Usage: node check-package.mjs <skill-directory>"] };
   console.log(JSON.stringify(result, null, 2));
   process.exitCode = result.ok ? 0 : 1;

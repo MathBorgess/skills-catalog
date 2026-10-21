@@ -39,4 +39,4 @@ Each skill **may** have one, and there is no required shape. A page earns its pl
 | [`morphological-project-design`](../skills/creativity/morphological-project-design/) | [workflow and agreed scope](morphological-project-design/workflow.md), [validation record](morphological-project-design/validation.md) — implemented and tested in the proposed release branch; not yet published |
 | [`prettify`](../skills/creativity/prettify/) | [source investigation](prettify/research.md), [workflow design](prettify/workflow.md), and [validation evidence](prettify/validation.md) — implemented on the MAT-265 branch; see [MAT-265](https://linear.app/borgesmathai/issue/MAT-265/criar-prettify-design-guiado-por-designmd-do-briefing-a-entrega) and [PR #67](https://github.com/MathBorgess/skills-catalog/pull/67) |
 
-| [`co-direct-animation`](../skills/creativity/co-direct-animation/) | [workflow, migration and validation scope](co-direct-animation/README.md) |
+| [`co-direct-animation`](../deprecated/co-direct-animation/) (retired; historical reference) | [workflow, migration and validation scope](co-direct-animation/README.md) |

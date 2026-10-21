@@ -9,7 +9,7 @@ import { fileURLToPath } from "node:url";
 
 const repo = join(dirname(fileURLToPath(import.meta.url)), "..");
 const skillsDir = join(repo, "skills");
-const categories = ["engineering", "creativity", "experiments"];
+const categories = ["engineering", "creativity", "media", "experiments"];
 const paths = categories.flatMap((category) =>
   readdirSync(join(skillsDir, category)).filter((name) =>
     existsSync(join(skillsDir, category, name, "SKILL.md")),

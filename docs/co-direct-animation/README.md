@@ -1,5 +1,7 @@
 # Co-direct animation
 
+> Retired workflow, preserved for historical reference. The active media direction workflow uses [`brand-dna`](../../skills/media/brand-dna/) and [`social-video-director`](../../skills/media/social-video-director/).
+
 `co-direct-animation` replaces `reference-animation` and owns the full film workflow: authored DESIGN.md plus human briefing → external TO-SPEC → reference direction → five human review packets → reviewed gflow shots → assembled film. The author confirmed the design in the [interview record](gflow-design.md); [ADR 0006](../../.agents/adr/0006-video-model-animation-production.md) records the generation/assembly boundary. [Issue #69](https://github.com/MathBorgess/skills-catalog/issues/69) supplies the acceptance criteria.
 
 | Evidence | Scope |
@@ -11,7 +13,7 @@
 
 ## Creative responsibility and external context
 
-The [skill](../../skills/creativity/co-direct-animation/SKILL.md) co-directs various animation styles. Apple, Disney, Mindful Movement and the complete attributed LottieFiles compilation remain reference sources, adapted to the work instead of imposing a spatial genre. The source DESIGN.md owns authorship. The external [TO-SPEC](../../skills/creativity/co-direct-animation/references/to-spec-template.md) retains the whole brief, constraints, direction, storyboard, shot IDs, steps, attempts, decisions, changes and next actions beyond model context.
+The [skill](../../deprecated/co-direct-animation/SKILL.md) co-directs various animation styles. Apple, Disney, Mindful Movement and the complete attributed LottieFiles compilation remain reference sources, adapted to the work instead of imposing a spatial genre. The source DESIGN.md owns authorship. The external [TO-SPEC](../../deprecated/co-direct-animation/references/to-spec-template.md) retains the whole brief, constraints, direction, storyboard, shot IDs, steps, attempts, decisions, changes and next actions beyond model context.
 
 The human chooses the image-generation tool, including gflow or GPT Image. Approved images receive descriptive handoffs and actual input assets accompany video prompts. Flow does not automatically load project Markdown. Audio is delegated to the agent within the accepted brief. Code may assemble generated clips, cut, add static captions/text/marks and finish color; it cannot generate object animation or substitute for a missing video model.
 
@@ -30,9 +32,9 @@ flowchart LR
     P --> D[Final delivery]
 ```
 
-[workflow.mjs](../../skills/creativity/co-direct-animation/scripts/workflow.mjs) snapshots artifact/spec revisions, preserves human response records and validates dependencies. Each gate needs a decision and criticism, including explicit nothing-to-change. Each visual attempt waits for human review before the next. An accepted clip does not approve an unseen assembled film. Later explicit overrides are scoped and recorded. Scripts validate record consistency, not that a human actually authored a response or that a film is good.
+[workflow.mjs](../../deprecated/co-direct-animation/scripts/workflow.mjs) snapshots artifact/spec revisions, preserves human response records and validates dependencies. Each gate needs a decision and criticism, including explicit nothing-to-change. Each visual attempt waits for human review before the next. An accepted clip does not approve an unseen assembled film. Later explicit overrides are scoped and recorded. Scripts validate record consistency, not that a human actually authored a response or that a film is good.
 
-[gflow.mjs](../../skills/creativity/co-direct-animation/scripts/gflow.mjs) submits one clip with literal arguments, snapshots inputs and records stdout/stderr and returned metadata. It checks downloaded output as well as process/JSON status. A catalog is a local CLI interface, not account entitlement; a returned request is not independent server-model or native-video evidence. The adapter does not automatically retry, rewrite prompts or switch providers. Uncertain submissions retain their IDs for recovery; `data download` retrieves the same known operation when the external catalog supports it.
+[gflow.mjs](../../deprecated/co-direct-animation/scripts/gflow.mjs) submits one clip with literal arguments, snapshots inputs and records stdout/stderr and returned metadata. It checks downloaded output as well as process/JSON status. A catalog is a local CLI interface, not account entitlement; a returned request is not independent server-model or native-video evidence. The adapter does not automatically retry, rewrite prompts or switch providers. Uncertain submissions retain their IDs for recovery; `data download` retrieves the same known operation when the external catalog supports it.
 
 ## Migration and validation
 

@@ -55,7 +55,7 @@ skills/<category>/<skill-name>/
 hooks/hooks.json        # plugin root — hooks any skill here ships
 ```
 
-Categories are `engineering`, `creativity` (operator skills), and `experiments` (shipped experiment skills). Keep categories in README.md and filesystem paths aligned.
+Categories are `engineering`, `creativity`, `media` (operator skills), and `experiments` (shipped experiment skills). Keep categories in README.md and filesystem paths aligned.
 
 One skill per directory. Directory name is the skill name: lowercase, hyphenated, no version suffix.
 

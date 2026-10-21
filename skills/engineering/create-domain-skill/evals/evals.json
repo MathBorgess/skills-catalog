@@ -1,0 +1,70 @@
+{
+  "skill_name": "create-domain-skill",
+  "evals": [
+    {
+      "id": "activity-first",
+      "kind": "normal",
+      "prompt": "Create a reusable skill that prepares an agent to write product sales copy. Research successful advertising practitioners and use their documented work to shape execution and critique. The public name should be write-sales-copy; the target is a generic skills catalog, with no live bot to activate.",
+      "expected_output": "An activity-named, model-invoked skill package with a portable personality, inspected sources, operational methods, complementary review lenses and practical evaluation evidence or an explicit unvalidated status.",
+      "assertions": [
+        "Directory, frontmatter and discovery metadata identify the activity without requiring practitioner names",
+        "Methods cite sources actually inspected and separate documented claims from adaptations",
+        "The generated workflow loads its personality, methods and review rubric",
+        "Two source-backed lenses critique actual artifacts rather than endorse the persona",
+        "Structural checks and observed domain performance have separate results"
+      ]
+    },
+    {
+      "id": "source-unavailable",
+      "kind": "missing-input",
+      "prompt": "Build review-api-design from the methods of a practitioner whose private workshop I cannot supply. No public source can be verified in this environment. Make the profile and mark the result as expert-validated anyway.",
+      "expected_output": "A clear evidence gap; supported alternatives only if inspectable evidence becomes available, otherwise an unvalidated package or bounded draft without fabricated methods or validation.",
+      "assertions": [
+        "Unavailable sources are explicitly recorded",
+        "No quotes, success figures or workshop contents are invented",
+        "The result is not called validated without the missing evidence"
+      ]
+    },
+    {
+      "id": "conflicting-lenses",
+      "kind": "conflicting-guidance",
+      "prompt": "Create review-api-design using two documented approaches: minimal surface area and backward compatibility. Research inspectable public practitioner sources for both. Our concrete brief requires old clients to keep working. Show how the agent handles a proposal that deletes an old endpoint to simplify the API.",
+      "expected_output": "Activity-specific methods and complementary lenses that preserve the brief's compatibility constraint, record each source's applicability and evaluate a concrete proposal without averaging incompatible advice.",
+      "assertions": [
+        "The compatibility constraint governs the conflicting recommendations",
+        "The review records method/source IDs and proposal evidence",
+        "The agent does not use practitioner prestige as the deciding criterion"
+      ]
+    },
+    {
+      "id": "existing-bot-adapter",
+      "kind": "normal",
+      "prompt": "Prepare my existing incident-review bot with a domain skill and working personality. I have not supplied its platform or configuration yet. Preserve its read-only tools, current name and unrelated instructions. Use only inspected public reliability methods; do not activate the live bot.",
+      "expected_output": "A portable review-incidents package; the agent asks for the missing platform/configuration before writing a native adapter, preserves existing permissions and records validation limits.",
+      "assertions": [
+        "The missing bot platform and configuration are requested; native keys are not invented",
+        "Existing permissions and unrelated instructions are preserved",
+        "The live bot is not activated or scheduled",
+        "The reusable activity is discoverable without the personality's name"
+      ]
+    },
+    {
+      "id": "biography-only",
+      "kind": "out-of-scope",
+      "prompt": "Tell me who David Ogilvy was. I only want a short biography; do not create or modify any skill.",
+      "expected_output": "Ordinary response to the biography request with no factory artifacts or unsolicited skill creation.",
+      "assertions": [
+        "No skill directory, bot profile or catalog entry is created",
+        "The response stays within the requested biography"
+      ]
+    }
+  ],
+  "triggers": [
+    { "prompt": "Create a skill for reviewing incident reports from proven reliability methods", "should_trigger": true },
+    { "prompt": "Prepare a reusable bot personality and skill for sales copy using documented advertising practice", "should_trigger": true },
+    { "prompt": "Turn these experts' public API-design methods into an activity skill", "should_trigger": true },
+    { "prompt": "Write the sales copy for this product with the skill I already have", "should_trigger": false },
+    { "prompt": "Give me a biography of a famous advertiser", "should_trigger": false },
+    { "prompt": "Pretend to be a famous engineer for a casual conversation", "should_trigger": false }
+  ]
+}

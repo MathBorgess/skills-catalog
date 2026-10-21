@@ -334,6 +334,24 @@ _Avoid_: missing result, proof that no market exists
 A source-supported observation about an existing alternative that changes the assessment of a candidate's proposed value or differentiation.
 _Avoid_: assumed absence of a feature, catalog label alone, measured advantage
 
+### Domain Skill Creation
+
+**Skill Factory**:
+A skill whose output is another skill prepared for a specific activity.
+_Avoid_: persona library, prompt generator
+
+**Activity Name**:
+The public name by which a model or user finds and invokes a skill for the work it performs.
+_Avoid_: personality name, expert name
+
+**Domain Personality**:
+A bot or agent's working profile informed by documented methods of successful practitioners of its activity.
+_Avoid_: activity name, actual practitioner
+
+**Review Lens**:
+A set of observable criteria adapted from documented domain methods to critique an activity's output.
+_Avoid_: expert endorsement, independent reviewer (a lens alone establishes neither)
+
 ## Deprecated Domains
 
 The domain languages for **Shunt** (outlines, excerpts, edit bypass, run wrapper, recover event), **Handoff** (session, slot, graph gate, digest, supervisor, child, capabilities, gate run, verdict, risk level, attention matrix, revise round), **Motion Identity** (standalone motion grilling and proof), and **Animation Direction** (`co-direct-animation`'s five-gate Flow pipeline) have been moved to [deprecated/](deprecated/) alongside their retired skill implementations. Their motion archetypes, role eases, kinetic type rules, and moodboard/storyboard progression are now absorbed into **Media Direction** (`brand-dna`, `social-video-director`, `social-post-director`). Meanwhile, `video-reference` remains in *analysis* status while `viral-rag` serves as the active reference engine for media direction.

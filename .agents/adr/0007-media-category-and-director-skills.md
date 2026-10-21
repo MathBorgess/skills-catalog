@@ -1,0 +1,8 @@
+# Media category, shared `brand-dna`, and episodic Moodboard before Hook
+
+We created the `skills/media/` category to house brand-guided media creation (`brand-dna`, `social-video-director`, `social-post-director`, `brand-campaign-shots`, `campaign-identity-grid`, `poster-design`, `illustration-style-remix`) and moved `motion-identity` and `co-direct-animation` to `deprecated/`. Instead of requiring users to run a separate 8-step motion-grilling skill or a 5-gate animation pipeline before making a Reel or post, `brand-dna` captures the durable visual, voice, and motion baseline once (`[known]` vs. `[inferred]`), while `social-video-director` and `social-post-director` layer an episodic `moodboard.md` *above* `brand-dna` and confirm it with the human *before* engineering the hook (`0–3s` Hook Triad or First-Fold Hook), script beats, and separate `storyboard.md`.
+
+## Consequences
+
+- **Moodboard before Hook, separate from Storyboard:** Because a piece's sensory and artistic direction (`moodboard.md`) modulates both how the hook feels and how the voice is delivered, it is confirmed at Step 3 before generating hooks at Step 4; `storyboard.md` remains a separate gate at Step 6 after the retention beats are settled.
+- **`viral-rag` over `video-reference` in media directors:** `social-video-director` and `social-post-director` rely exclusively on `viral-rag` (distilled hook triggers, format archetypes, and project-local pattern cards) for fast Arena-style iteration; `video-reference` stays in `skills/creativity/` under *analysis* status to evaluate whether its heavy 7-layer temporal extraction should be deprecated later.

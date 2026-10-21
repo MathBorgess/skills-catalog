@@ -140,14 +140,14 @@ export function parseSkillFrontmatter(content) {
  */
 export function getSiblingSkills(skillsDir, selfName = "skills-evaluate") {
   let dir = skillsDir || resolve(here, "..", "..");
-  if (!skillsDir && ["engineering", "creativity", "experiments"].includes(basename(dir)) && basename(dirname(dir)) === "skills") dir = dirname(dir);
+  if (!skillsDir && ["engineering", "creativity", "media", "experiments"].includes(basename(dir)) && basename(dirname(dir)) === "skills") dir = dirname(dir);
   if (!existsSync(dir)) return [];
 
   const results = [];
   try {
     const entries = readdirSync(dir, { withFileTypes: true });
     for (const entry of entries) {
-      if (entry.isDirectory() && ["engineering", "creativity", "experiments"].includes(entry.name) && !existsSync(join(dir, entry.name, "SKILL.md"))) {
+      if (entry.isDirectory() && ["engineering", "creativity", "media", "experiments"].includes(entry.name) && !existsSync(join(dir, entry.name, "SKILL.md"))) {
         results.push(...getSiblingSkills(join(dir, entry.name), selfName));
         continue;
       }

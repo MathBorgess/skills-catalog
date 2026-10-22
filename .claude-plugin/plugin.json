@@ -1,7 +1,7 @@
 {
   "name": "skills-catalog",
-  "version": "4.5.2",
-  "description": "Agent skills organized into engineering, creativity, media, and experiments, including brand-guided social video and post directors.",
+  "version": "4.6.0",
+  "description": "Agent skills organized into engineering, creativity, media, and experiments, including brand-guided social video and post directors. Includes evidence-backed PR presentation and evaluated instruction refinement.",
   "author": {
     "name": "Matheus Borges",
     "url": "https://github.com/MathBorgess"
@@ -24,7 +24,11 @@
     "prettify",
     "brand-dna",
     "social-video-director",
-    "social-post-director"
+    "social-post-director",
+    "pr-present",
+    "pr-refine",
+    "pr-review",
+    "evaluation"
   ],
   "skills": [
     "./skills/engineering/domain-modeling",
@@ -44,6 +48,8 @@
     "./skills/media/campaign-identity-grid",
     "./skills/media/brand-campaign-shots",
     "./skills/media/illustration-style-remix",
-    "./skills/creativity/morphological-project-design"
+    "./skills/creativity/morphological-project-design",
+    "./skills/engineering/pr-present",
+    "./skills/engineering/pr-refine"
   ]
 }

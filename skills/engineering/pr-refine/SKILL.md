@@ -3,7 +3,7 @@ name: pr-refine
 description: "Use when the user wants to improve the pr-present workflow from reviewer confusion, weak evidence, repeated PR-description corrections, or measured evaluation failures. Question the design, test one candidate change on development data, compare it on validation data, and preserve the lesson with evidence. Final test access and promotion require a frozen evaluation plan; speed cannot compensate for false confidence or correctness regressions."
 metadata:
   author: Matheus Borges
-  version: 0.0.0
+  version: 1.0.0
 ---
 
 # PR Refine

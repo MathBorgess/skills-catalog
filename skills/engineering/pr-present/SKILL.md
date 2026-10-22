@@ -3,7 +3,7 @@ name: pr-present
 description: "Use when the user wants a pull request explained for human review: simplify a PR description, prepare a review packet, explain what changed, or make a PR easier to assess. Ground the explanation in the diff and observed checks, preserve risks and unknowns, and write in plain language. It presents evidence for a reviewer; it does not perform a full code review or authorize a merge."
 metadata:
   author: Matheus Borges
-  version: 0.0.0
+  version: 1.0.0
 ---
 
 # PR Present

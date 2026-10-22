@@ -97,8 +97,8 @@ Domain design, agent workflow maintenance, and technical learning. These are ope
 | [`study-wiki`](skills/engineering/study-wiki/) | 1.0.0 | operator | Interviews you about the certifications you are chasing, then builds and operates a personal study repository: a knowledge graph of notes, a question bank, an error log, and a daily study loop that injects questions, grades your answers, and records where you are weak. |
 | [`teach-me`](skills/engineering/teach-me/) | 1.2.0 | operator | Runs one study session against a wiki that already exists: a phone-sized HTML lesson plus a session note and error log. Not for bootstrapping an empty wiki — that is study-wiki. |
 | [`skills-evaluate`](skills/engineering/skills-evaluate/) | 0.2.0 | operator | Reads the metrics the other skills leave in the OS temp dir, the maintainer sketchpad and open issues; compares the last run with the recent median, diagnoses root causes, checks each skill against its own scope, and proposes improvements to the skill or to its observability. |
-| [`pr-present`](skills/engineering/pr-present/) | 0.0.0 | operator | Presents one PR with a fixed review point, traceable claims, check limits and material risks. |
-| [`pr-refine`](skills/engineering/pr-refine/) | 0.0.0 | operator | Proposes evaluated presentation improvements while preserving human control of final tests, reward policy and promotion. |
+| [`pr-present`](skills/engineering/pr-present/) | 1.0.0 | operator | Presents one PR with a fixed review point, traceable claims, check limits and material risks. |
+| [`pr-refine`](skills/engineering/pr-refine/) | 1.0.0 | operator | Proposes evaluated presentation improvements while preserving human control of final tests, reward policy and promotion. |
 
 ### Creativity
 

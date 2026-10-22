@@ -59,11 +59,11 @@ Pick the skills you want and which coding agents to install them on. Add `-g` fo
 npm run link
 ```
 
-Symlinks every skill into `~/.claude/skills`, `~/.cursor/skills`, `~/.codex/skills`, `~/.agents/skills`, and `~/.gemini/config/skills`. Not the end-user installer.
+Symlinks every categorized skill into `~/.claude/skills`, `~/.cursor/skills`, `~/.codex/skills`, `~/.agents/skills`, and `~/.gemini/config/skills`. Not the end-user installer.
 
-Because those are symlinks into this working tree, **a `git pull` refreshes the content of every linked skill on its own** — the link points at the file that just changed. The one thing a pull cannot do by itself is link a skill that did not exist before, or drop one that was removed: that only happens when the script runs again.
+Because those are symlinks into this working tree, **a `git pull` refreshes the content of every linked skill on its own** — the link points at the file that just changed. The one thing a pull cannot do by itself is link a skill that did not exist before, drop one that was removed, or repair a link to a moved folder: that only happens when the script runs again.
 
-So `npm run link` also points this clone's `core.hooksPath` at `.githooks` (only if nothing else claims it). From then on, `.githooks/post-merge` runs after a `git pull` on `main` and re-links **when that pull added or removed a skill**, staying silent otherwise:
+So `npm run link` also points this clone's `core.hooksPath` at `.githooks` (only if nothing else claims it). From then on, `.githooks/post-merge` runs after a `git pull` on `main` and re-links **when that pull added, removed, or moved a skill**, staying silent otherwise:
 
 ```
 skills-catalog: 1 skill(s) added or removed in this pull — local links refreshed.
@@ -80,44 +80,76 @@ Two things it deliberately does not cover: a pull on a branch other than `main`,
 
 ## Catalog
 
+The folders and tables separate `engineering`, `creativity`, `media`, and `experiments`. Installation and invocation still use the leaf skill name, without a category prefix. Learning workflows sit with engineering; visual explanations and plain writing sit with creativity; brand-guided content and social media direction sit with media.
+
 Two kinds of skills live in this catalog:
 - **Operators**: Generic, reusable workflows run to get work done across projects on work that keeps arriving.
 - **Experiments**: Specific, non-generic skills designed to test and measure agent behavior under fixed constraints or specific hypotheses, leaving a measurable finding behind.
 
-### Operators
+### Engineering
+
+Domain design, agent workflow maintenance, and technical learning. These are operator skills.
 
 | Skill | Version | Kind | What it does |
 |---|---|---|---|
-| [`domain-modeling`](skills/domain-modeling/) | 1.0.0 | operator | Actively builds and sharpens a project's domain model, ubiquitous language, and glossary during design; records ADRs for hard-to-reverse architectural decisions. |
-| [`study-wiki`](skills/study-wiki/) | 1.0.0 | operator | Interviews you about the certifications you are chasing, then builds and operates a personal study repository: a knowledge graph of notes, a question bank, an error log, and a daily study loop that injects questions, grades your answers, and records where you are weak. |
-| [`explain-me`](skills/explain-me/) | 1.1.1 | operator | Creates one visual explanation, in the language you asked in, with controlled-writing text, diagrams, images, interactive HTML or a narrated video, landscape or portrait for Reels/Shorts/TikTok (HyperFrames motion, local Kokoro voice), styled from an editable, brand-able DESIGN.md; teach-me retains quizzes and progress records. |
-| [`motion-identity`](skills/motion-identity/) | 1.0.0 | operator | Grills a brand's owner, round by round, into a motion identity — personality, one GSAP ease per role (enter, exit, emphasis), durations, ambient level, signature move, kinetic type and a never-list — and writes it into the brand's DESIGN.md, where HyperFrames and explain-me both read it; renders a short deterministic HyperFrames proof the owner approves by watching, and prints the block a HyperFrames BRIEF.md carries to the footage skills. Disney's principles, archetypes and timing adapted for video from LottieFiles' motion-design and GreenSock's gsap-skills. |
-| [`teach-me`](skills/teach-me/) | 1.2.0 | operator | Runs one study session against a wiki that already exists: a phone-sized HTML lesson plus a session note and error log. Not for bootstrapping an empty wiki — that is study-wiki. |
-| [`skills-evaluate`](skills/skills-evaluate/) | 0.2.0 | operator | Reads the metrics the other skills leave in the OS temp dir, the maintainer sketchpad and open issues; compares the last run with the recent median, diagnoses root causes, checks each skill against its own scope, and proposes improvements to the skill or to its observability. |
-| [`easy-to-read`](skills/easy-to-read/) | 1.0.0 | operator | Once activated, keeps every text it writes for you in plain language for the rest of the session — chat replies, documents, notes, summaries, PR and issue bodies — under STE-lite plus the profile of the text's language (ASD-STE100 for English; ABNT NBR ISO 24495-1 and the Senado style for Brazilian Portuguese; the core alone for other languages). Lints documents and long replies with a zero-dependency linter before they ship, and never rewrites code, commands, paths, identifiers or quotes. Canonical home of the writing rules explain-me ships as byte copies. |
-| [`pr-present`](skills/pr-present/) | 0.0.0 | operator | Presents one PR in plain language with a fixed review point, traceable claims, check limits, material risks, and a useful path through the diff. |
-| [`pr-refine`](skills/pr-refine/) | 0.0.0 | operator | Improves PR presentation instructions through targeted questions, development and validation evidence, a protected final test, and lessons with scope. Reward policy stays proposed until the owner approves it. |
+| [`domain-modeling`](skills/engineering/domain-modeling/) | 1.0.0 | operator | Actively builds and sharpens a project's domain model, ubiquitous language, and glossary during design; records ADRs for hard-to-reverse architectural decisions. |
+| [`create-domain-skill`](skills/engineering/create-domain-skill/) | 1.0.1 | operator | Creates a model-invoked skill named for an activity, with a portable bot or agent personality, methods from inspected domain practitioners, complementary review lenses and practical evaluation evidence. |
+| [`study-wiki`](skills/engineering/study-wiki/) | 1.0.0 | operator | Interviews you about the certifications you are chasing, then builds and operates a personal study repository: a knowledge graph of notes, a question bank, an error log, and a daily study loop that injects questions, grades your answers, and records where you are weak. |
+| [`teach-me`](skills/engineering/teach-me/) | 1.2.0 | operator | Runs one study session against a wiki that already exists: a phone-sized HTML lesson plus a session note and error log. Not for bootstrapping an empty wiki — that is study-wiki. |
+| [`skills-evaluate`](skills/engineering/skills-evaluate/) | 0.2.0 | operator | Reads the metrics the other skills leave in the OS temp dir, the maintainer sketchpad and open issues; compares the last run with the recent median, diagnoses root causes, checks each skill against its own scope, and proposes improvements to the skill or to its observability. |
+| [`pr-present`](skills/engineering/pr-present/) | 0.0.0 | operator | Presents one PR with a fixed review point, traceable claims, check limits and material risks. |
+| [`pr-refine`](skills/engineering/pr-refine/) | 0.0.0 | operator | Proposes evaluated presentation improvements while preserving human control of final tests, reward policy and promotion. |
+
+### Creativity
+
+Visual explanations, interactive prototypes, and plain-language writing. (`video-reference` is currently in *analysis* status against `viral-rag` in `skills/media/`.)
+
+| Skill | Version | Kind | What it does |
+|---|---|---|---|
+| [`video-reference`](skills/creativity/video-reference/) | 1.1.0 | operator | *(Under analysis)* Distills local videos into layered references and retrieves detailed Remotion direction with evidence and human-reviewed adaptation dependencies. |
+| [`morphological-project-design`](skills/creativity/morphological-project-design/) | 1.0.1 | operator | Turns seed ideas into reproducible morphological paths, two rounds of N independent proposals and commercial critique, competitor research, a decision package and pitch. RCD instructional adaptation has [specific terms](LICENSES.md). |
+| [`explain-me`](skills/creativity/explain-me/) | 2.0.0 | operator | Creates one visual explanation, in the language you asked in, with controlled-writing text, diagrams, images, interactive HTML or a narrated video, landscape or portrait for Reels/Shorts/TikTok (Remotion motion, local Kokoro voice), styled from an editable, brand-able DESIGN.md; teach-me retains quizzes and progress records. |
+| [`prettify`](skills/creativity/prettify/) | 0.0.0 | operator | Guides a visual idea from a clear question through briefing, low-fidelity and high-fidelity review to an inspected web or static delivery, with explicit design decisions and task-specific dependencies. |
+| [`easy-to-read`](skills/creativity/easy-to-read/) | 1.0.0 | operator | Once activated, keeps every text it writes for you in plain language for the rest of the session — chat replies, documents, notes, summaries, PR and issue bodies — under STE-lite plus the profile of the text's language (ASD-STE100 for English; ABNT NBR ISO 24495-1 and the Senado style for Brazilian Portuguese; the core alone for other languages). Lints documents and long replies with a zero-dependency linter before they ship, and never rewrites code, commands, paths, identifiers or quotes. Canonical home of the writing rules explain-me ships as byte copies. |
+
+### Media
+
+Brand-guided media creation and social content direction. `brand-dna` captures the durable visual, voice, and motion baseline once (`[known]` vs. `[inferred]`); `social-video-director` and `social-post-director` layer an episodic `moodboard.md` *before* the hook, run a fast Arena-style delta loop over `viral-rag`, and separate `moodboard.md` from `storyboard.md`; `poster-design`, `campaign-identity-grid`, `brand-campaign-shots`, and `illustration-style-remix` direct image-model assets and inspect every output by counting.
+
+| Skill | Version | Kind | What it does |
+|---|---|---|---|
+| [`brand-dna`](skills/media/brand-dna/) | 1.0.0 | operator | Extracts, confirms, and locks a three-block Brand & Voice DNA brief (`brand-dna.md`: Visual & Brand Core, Voice DNA, Motion & Guardrails) marking every claim `[known]` or `[inferred]` so downstream media skills reuse it in zero questions. |
+| [`social-video-director`](skills/media/social-video-director/) | 1.0.0 | operator | Co-directs short-form vertical videos (Reels, Shorts, TikTok) through a fast Arena-style loop over `brand-dna` and `viral-rag`: format & angle -> `moodboard.md` (confirmed before the hook) -> `0–3s` Hook Triad -> 3-track Retention Beats -> second-by-second `storyboard.md` -> Inspect by counting. |
+| [`social-post-director`](skills/media/social-post-director/) | 1.0.1 | operator | Co-directs social posts, carousels, and threads through a fast Arena-style loop over `brand-dna` and `viral-rag`: format & angle -> `moodboard.md` (confirmed before the hook) -> First-Fold Hook -> grounded beats/slides -> visual `storyboard.md` -> Inspect by counting. |
+| [`poster-design`](skills/media/poster-design/) | 1.0.1 | operator | Builds an image-model poster around one subject: picks one of three archetypes (flat digital portrait, photo-grid tribute, ensemble from references), derives its slots from the subject, generates with the tool you name, and inspects every output against the archetype's own checks, counting figures, cells and name widths. |
+| [`campaign-identity-grid`](skills/media/campaign-identity-grid/) | 1.0.1 | operator | Builds a brand tile wall of logo, slogan and photo blocks from a row-by-row spec, checks each output by counting rows, cells, gaps and slogan letters, and switches to generating tiles separately and assembling them in an HTML grid when the model keeps breaking the layout. |
+| [`brand-campaign-shots`](skills/media/brand-campaign-shots/) | 1.1.0 | operator | Writes or reuses a Brand DNA brief the user corrects, casts the muse from it, then generates an editorial campaign triptych and inspects it for brand fit, one consistent muse and invented logos. |
+| [`illustration-style-remix`](skills/media/illustration-style-remix/) | 1.0.0 | operator | Redraws a person or character, or a whole set, in one named style: breaks the style into six observable layers, locks them in a style block, varies only the subject, and inspects every output layer by layer for drift. |
 
 ### Experiments
 
-Specific, non-generic skills designed to test, probe, and measure agent behavior under controlled variables:
+Shipped workflows with a fixed hypothesis, measurement, and exit condition. These live in `skills/experiments/`; unshipped trials remain in `docs/experiments/`.
 
 | Skill | Version | Kind | What it does |
 |---|---|---|---|
-| [`still-cursor-living-day`](skills/still-cursor-living-day/) | 0.0.0 | experiment | Runs one image collection end to end under a fixed axis: twelve frames of the same MacBook, display off, carried through a day across places, distances and angles, with one white arrow on the same pixel of its screen in every frame, sized by the perspective the laptop is seen in. The generator never draws the cursor — asked for one, image models put it anywhere at any size — so the panel is generated blank, its four corners are marked in a local page, and a zero-dependency script projects the arrow onto it by homography. It refuses a plan that breaks the restriction, drifts out of the panel's reflectivity band, holds a frame nobody would miss, never leaves one room, or asks a generator for a cursor; gates the twelve briefs in one hash-locked approval; dispatches the generations in parallel (GPT-Image, Gemini, a CLI child, or a manual drop); refuses a panel too small, occluded or drawn on to carry the arrow; and runs a two-pass LLM-as-judge — blind first, which reorders the day into a Kendall tau — that proposes and never regenerates. Ships a guard hook that seals the plan while the blind pass is open. |
+| [`still-cursor-living-day`](skills/experiments/still-cursor-living-day/) | 0.0.0 | experiment | Runs one image collection end to end under a fixed axis: twelve frames of the same MacBook, display off, carried through a day across places, distances and angles, with one white arrow on the same pixel of its screen in every frame, sized by the perspective the laptop is seen in. The generator never draws the cursor — asked for one, image models put it anywhere at any size — so the panel is generated blank, its four corners are marked in a local page, and a zero-dependency script projects the arrow onto it by homography. It refuses a plan that breaks the restriction, drifts out of the panel's reflectivity band, holds a frame nobody would miss, never leaves one room, or asks a generator for a cursor; gates the twelve briefs in one hash-locked approval; dispatches the generations in parallel (GPT-Image, Gemini, a CLI child, or a manual drop); refuses a panel too small, occluded or drawn on to carry the arrow; and runs a two-pass LLM-as-judge — blind first, which reorders the day into a Kendall tau — that proposes and never regenerates. Ships a guard hook that seals the plan while the blind pass is open. |
 
 ### Deprecated
 
 The following skills are **deprecated** and no longer maintained or accessible in the catalog. They have been moved out of `skills/` to [`deprecated/`](deprecated/) and are no longer usable or installed by the plugin or package:
 
+- [`co-direct-animation`](deprecated/co-direct-animation/): Previously used to co-direct animations through five formal critique gates and Flow shot generation. Replaced by `brand-dna` and `social-video-director` in `skills/media/`.
 - [`handoff`](deprecated/handoff/): Previously used to compact conversation briefs and schedule cross-provider session graphs. Deprecated and removed from active catalog.
+- [`motion-identity`](deprecated/motion-identity/): Previously used to grill a brand owner into standalone motion keys in `DESIGN.md`. Folded into `brand-dna` and `social-video-director` in `skills/media/`.
 - [`shunt`](deprecated/shunt/): Previously used to keep large models off heavy I/O via read thresholds and run wrappers. Deprecated and removed from active catalog.
 
 ## Using a skill
 
 How a skill works under the hood, for whoever maintains it, is in [`docs/`](docs/) — written for people, never loaded by a model.
 
-After install, start a session and type `/domain-modeling`, `/study-wiki`, `/teach-me`, `/explain-me`, `/motion-identity`, `/easy-to-read`, `/skills-evaluate`, `/pr-present`, `/pr-refine`, or `/still-cursor-living-day`, or just say what you want — the skill's `description` is what makes the model reach for it on its own.
+After install, start a session and type `/domain-modeling`, `/study-wiki`, `/teach-me`, `/explain-me`, `/brand-dna`, `/social-video-director`, `/social-post-director`, `/easy-to-read`, `/skills-evaluate`, or `/still-cursor-living-day`, or just say what you want — the skill's `description` is what makes the model reach for it on its own.
+
+For evidence-backed PR packets, use `pr-present`; use `pr-refine` to investigate measured presentation failures. These workflows do not establish human benefit or promote a candidate without the required evidence.
 
 **Improving the skills**
 
@@ -132,7 +164,7 @@ Paste the contents of the skill's `SKILL.md` as the opening message and let the 
 ## Anatomy of a skill in this catalog
 
 ```
-skills/<name>/
+skills/<category>/<name>/
   SKILL.md             # frontmatter (name, description) + the workflow, top to bottom
   agents/openai.yaml   # Codex picker metadata
   references/          # the depth — loaded on demand, not up front
@@ -165,9 +197,9 @@ Skills contributed by other people keep their own author in `metadata.author`; a
 ### Add a skill
 
 1. Read `AGENTS.md` and one existing skill end to end.
-2. Create `skills/<name>/SKILL.md` and `skills/<name>/agents/openai.yaml`.
+2. Create `skills/<category>/<name>/SKILL.md` and `skills/<category>/<name>/agents/openai.yaml`.
 3. Add a row to the catalog table above at version `0.0.0`.
-4. Append `"./skills/<name>"` to `.claude-plugin/plugin.json` → `skills`.
+4. Append `"./skills/<category>/<name>"` to `.claude-plugin/plugin.json` → `skills`.
 5. Run `npm run check` and fix anything it reports.
 6. Open a pull request against `main`. Do not push to `main`.
 
@@ -193,4 +225,4 @@ To submit the plugin to Anthropic's community marketplace later, follow [Discove
 
 ## License
 
-MIT © Matheus Borges — see [`LICENSE`](LICENSE). Use them, fork them, adapt them to your own workflow.
+Existing catalog material and original helpers remain MIT © Matheus Borges — see [`LICENSE`](LICENSE). The Revenue-Centric Design instructional adaptation in `morphological-project-design` has specific source-available terms, including attribution and a gambling/betting/casino exclusion. See [`LICENSES.md`](LICENSES.md) for the exact file scopes and complete applicable terms.

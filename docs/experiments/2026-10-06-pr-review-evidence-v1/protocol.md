@@ -1,7 +1,7 @@
 # Trial protocol
 
-The protocol for the operators lives in [PR Refine's evaluation reference](../../../skills/pr-refine/references/evaluation.md).
-The grader schema lives in [its observation reference](../../../skills/pr-refine/references/observations.md).
+The protocol for the operators lives in [PR Refine's evaluation reference](../../../skills/engineering/pr-refine/references/evaluation.md).
+The grader schema lives in [its observation reference](../../../skills/engineering/pr-refine/references/observations.md).
 This trial tests those measurement procedures with public synthetic cases and private real acquisitions.
 
 ## ML split roles

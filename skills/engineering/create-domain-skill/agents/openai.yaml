@@ -1,0 +1,3 @@
+interface:
+  display_name: "Create Domain Skill"
+  short_description: "Build activity skills from documented domain expertise"

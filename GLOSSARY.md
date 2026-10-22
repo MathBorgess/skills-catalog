@@ -216,39 +216,145 @@ _Avoid_: brand kit, template
 **Explain-Back**:
 A targeted diagnostic question testing whether the learner can reconstruct the mechanism without seeing the answer key.
 
-### Motion
+### Media Direction
 
-**Motion Graphics**:
-The style and dynamics of a video: large words that dominate the frame, and movement shaped by Disney's principles of animation so that it delights the viewer instead of only showing a thing. It applies at any length, with or without a person on screen.
-_Avoid_: HyperFrames' `motion-graphics` workflow (one genre: a short, unnarrated piece of about ten seconds); animation (one tween is not a style)
+**Brand DNA**:
+The durable record (`brand-dna.md`) of a brand and creator's identity across three blocks — Visual & Brand Core, Voice DNA, and Motion & Guardrails — where every line is marked `[known]` with its source or `[inferred]` until the human confirms it. Shared across all skills in `skills/media/`.
+_Avoid_: brand kit, unverified style prompt
 
-**Motion Identity**:
-How a brand describes the movement of its content — its personality, timing, easing, signature moves and what it never does — kept as the motion layer of its brand spec, where every video tool reads it.
-_Avoid_: motion graphics (the style of one video), brand kit, motion preset
+**Voice DNA**:
+The spoken and written cadence layer inside `brand-dna.md` specifying three tone words, sentence-length burstiness (oscillating short `<= 5`-word punches with longer structural clauses), vocabulary grounding rules, and explicit banned AI clichés.
+_Avoid_: generic tone of voice, persona bio
 
-**Role Ease**:
-The one GSAP ease a motion identity gives each role a move can play: an entrance decelerates, an exit accelerates, an emphasis may overshoot. Moves between positions keep the base ease.
-_Avoid_: easing curve (unqualified), CSS timing function (the tools take GSAP names only)
+**Moodboard**:
+The episodic artistic, visual, and sensory direction (`moodboard.md`) created *above* `brand-dna` and `voice-dna` for a single video, post, or campaign. It defines the piece's core sensation, intentional modulations over the base DNA, and visual/sonic anchors, and requires human confirmation *before* the hook or script is written.
+_Avoid_: merging with storyboard, permanent brand spec mutation
 
-**Signature Move**:
-The one move a viewer could recognize a brand by with the sound off, made from a motif the brand already owns, used once per video where the main point lands. The logo itself never deforms.
-_Avoid_: logo animation, sting (a sting is a whole short piece)
+**Hook Triad**:
+The indivisible `0–3 s` opening unit of a short-form vertical video, synchronizing a Visual Hook (`0–1.5 s`), an On-Screen Headline (`2–6` words passing the Mute Test), and a Spoken Opening (zero greeting filler) under a named psychological trigger.
+_Avoid_: spoken-only hook, transcript repetition on screen
 
-**Ambient Level**:
-How much background life a brand allows behind the stage: none, subtle or lively. It never stands in for the content's motion, and the Motion Gate never counts it.
-_Avoid_: idle loop, wobble
+**First-Fold Hook**:
+The opening unit of a written post or carousel visible before any swipe or click (`Slide 1` headline + sub-hook + visual cue for carousels; `Lines 1–2` for text posts).
+_Avoid_: intro paragraph, warm-up preamble
 
-**Motion Proof**:
-A short, deterministic clip rendered from a brand spec alone that plays its motion identity, so the owner approves the identity by watching it. An identity without one stays a draft.
-_Avoid_: preview, mockup, sample video
+**Retention Beat**:
+The `2–4 s` unit of progression in a short-form script (`script.md`) or block/slide sequence (`post.md`), locking one grounded concept and three parallel tracks (`Audio/Speech`, `Visual Stage`, `Overlay/Motion`).
+_Avoid_: unstructured paragraph, scene without per-beat tracks
 
-**Brief Block**:
-The few lines of a motion identity written for a HyperFrames `BRIEF.md`, the only channel through which the footage workflows hear the brand.
-_Avoid_: summary, prompt snippet
+**Concept Grounding**:
+The rule that no beat or slide may rely on a concept unless the audience brought it as a declared prerequisite or an earlier beat established it.
+_Avoid_: forward reference, unexplained jargon
+
+**Storyboard**:
+The temporal and spatial execution plan (`storyboard.md` / `REVIEW.md`), separate from `moodboard.md`, translating approved beats and moodboard direction into a second-by-second `1080x1920` vertical score (or slide-by-slide layout) with safe zones, motion `Brief Block`, and reversible speech-cut ledger.
+_Avoid_: moodboard, vague shot list without timing
+
+**Viral RAG**:
+The curated, queryable repertoire of hook triggers, format archetypes, retention mechanics, and project-local reference cards (`<project>/references/viral-rag/`) consumed by `social-video-director` and `social-post-director`.
+_Avoid_: heavy frame-by-frame video ingestion during ideation
+
+**Inspect by Counting**:
+The final verification step (`review.md`) that judges a media package or render through a numeric *Expected / Seen* table (word ceilings, hook onset seconds, burstiness span, static-hold limits, safe-zone breaches, cliché count), changing one variable per revision round.
+_Avoid_: subjective impression review
+
+### Prototype Exploration
+
+**Prototype**:
+A temporary artifact used to answer an explicit design question, with the relevant alternatives or state visible to the person exploring it.
+_Avoid_: production implementation, visual mockup (when the question requires interaction)
+
+**Prettify**:
+The complete workflow connecting a prototype's question, its creation or reuse, and an intentional visual treatment under a shared design spec.
+_Avoid_: cosmetic pass (alone; prettify also owns the prototype exploration)
+
+**Question Result**:
+The evidence-based answer to the question a prototype was built to explore, including an inconclusive answer when the evidence is insufficient.
+_Avoid_: visual approval, runnable artifact (neither alone answers the question)
+
+**Visual Assessment**:
+The judgment of a rendered artifact's visual decisions against its design spec and intended impression.
+_Avoid_: question result, detector score (neither alone establishes visual appeal)
+
+**Briefing**:
+The definition of a visual assignment's question, audience, message or task, constraints and intended artifact.
+_Avoid_: design spec (the assignment and the durable visual identity are different concepts)
+
+**Low Fidelity**:
+A visual exploration of structure, hierarchy and sequence that leaves detailed appearance open to change.
+_Avoid_: unfinished high-fidelity design, text-only direction
+
+**High Fidelity**:
+A reviewable visual representation close to the intended final appearance, following the chosen direction and design spec.
+_Avoid_: delivery (visual review and a usable final artifact are different milestones)
+
+**Stage Skip**:
+The human's explicit choice to bypass an intermediate design checkpoint, accepting less control before the result is delivered.
+_Avoid_: automatic approval, omitted verification
+
+**Reference Acceptance**:
+The human's decision to use a proposed visual reference for the current artifact, without by itself making that direction part of the durable design spec.
+_Avoid_: design spec update, permanent brand decision
+
+### Morphological Project Selection
+
+**Seed Idea**:
+An initial project concept whose possibilities help identify dimensions and alternatives for exploration.
+_Avoid_: project candidate, selected project
+
+**Morphological Box**:
+A set of project dimensions, each with distinct alternatives, that defines the space of possible combinations.
+_Avoid_: list of ideas, candidate ranking
+
+**Morphological Path**:
+A combination containing one alternative from every dimension of a morphological box.
+_Avoid_: project proposal, variation (unqualified)
+
+**Project Candidate**:
+A developed project proposal interpreting one morphological path for a specific audience and use.
+_Avoid_: morphological path, commercial recommendation, proposal (unqualified)
+
+**Commercial Recommendation**:
+A comparative judgment about a project candidate's commercial potential and the evidence still needed, including a judgment that none currently merits advancement.
+_Avoid_: validated business, observed revenue, investment approval
+
+**Revenue Hypothesis**:
+An untested claim about who would pay, for what outcome, at what price and with which economic benefit.
+_Avoid_: revenue, commercial validation, realized return
+
+**Candidate Revision Round**:
+An iteration in which every proponent updates its project candidate in response to criticism while retaining its morphological path.
+_Avoid_: reroll, winner-only refinement
+
+**No-Go Decision**:
+A recommendation not to advance any reviewed project candidate under the current evidence, with the reasons and evidence needed to reconsider.
+_Avoid_: missing result, proof that no market exists
+
+**Competitive Finding**:
+A source-supported observation about an existing alternative that changes the assessment of a candidate's proposed value or differentiation.
+_Avoid_: assumed absence of a feature, catalog label alone, measured advantage
+
+### Domain Skill Creation
+
+**Skill Factory**:
+A skill whose output is another skill prepared for a specific activity.
+_Avoid_: persona library, prompt generator
+
+**Activity Name**:
+The public name by which a model or user finds and invokes a skill for the work it performs.
+_Avoid_: personality name, expert name
+
+**Domain Personality**:
+A bot or agent's working profile informed by documented methods of successful practitioners of its activity.
+_Avoid_: activity name, actual practitioner
+
+**Review Lens**:
+A set of observable criteria adapted from documented domain methods to critique an activity's output.
+_Avoid_: expert endorsement, independent reviewer (a lens alone establishes neither)
 
 ## Deprecated Domains
 
-The domain languages for **Shunt** (outlines, excerpts, edit bypass, run wrapper, recover event) and **Handoff** (session, slot, graph gate, digest, supervisor, child, capabilities, gate run, verdict, risk level, attention matrix, revise round) have been moved to [deprecated/](deprecated/) alongside their retired skill implementations.
+The domain languages for **Shunt** (outlines, excerpts, edit bypass, run wrapper, recover event), **Handoff** (session, slot, graph gate, digest, supervisor, child, capabilities, gate run, verdict, risk level, attention matrix, revise round), **Motion Identity** (standalone motion grilling and proof), and **Animation Direction** (`co-direct-animation`'s five-gate Flow pipeline) have been moved to [deprecated/](deprecated/) alongside their retired skill implementations. Their motion archetypes, role eases, kinetic type rules, and moodboard/storyboard progression are now absorbed into **Media Direction** (`brand-dna`, `social-video-director`, `social-post-director`). Meanwhile, `video-reference` remains in *analysis* status while `viral-rag` serves as the active reference engine for media direction.
 
 ## Relationships
 
@@ -264,8 +370,8 @@ The domain languages for **Shunt** (outlines, excerpts, edit bypass, run wrapper
 - **Orientation** sets the frame and its **safe zone**; in portrait the kit draws **burned captions** in a band of their own, and the **motion gate** watches the stage, never the captions.
 - A **design spec** styles every format; a **brand spec** may replace any 3b1b default, but never switches the motion gate off or changes the **requester language**.
 - **STE-lite** is shared by every language; a **language profile** adds the rules of one language on top of it.
-- A **motion identity** lives in a **brand spec** and shapes the **motion graphics** of every video made from that spec, through HyperFrames or explain-me; it never switches the **motion gate** off.
-- A **motion identity** is approved only after its owner watched a **motion proof**; it reaches explain-me through the spec, HyperFrames through the spec at the project root, and the footage workflows through its **brief block**.
+- In `skills/media/`, **`brand-dna`** establishes the durable identity, **Voice DNA**, and motion baseline (`[known]` vs. `[inferred]`) once per project; every media skill (`social-video-director`, `social-post-director`, `brand-campaign-shots`, `campaign-identity-grid`, `poster-design`, `illustration-style-remix`) reuses it without re-interviewing the owner.
+- In **`social-video-director`** and **`social-post-director`**, the **Moodboard** sits *above* `brand-dna` as an episodic sensory and artistic layer confirmed *before* the **Hook Triad** (or **First-Fold Hook**), whereas the **Storyboard** comes *after* the **Retention Beats** to map second-by-second or slide-by-slide execution, verified by **Inspect by Counting**.
 
 ## Flagged Ambiguities
 
@@ -275,4 +381,4 @@ The domain languages for **Shunt** (outlines, excerpts, edit bypass, run wrapper
 - "Full ASD-STE100" vs "STE-lite" — resolved: full ASD-STE100 requires an English-only dictionary; STE-lite is the language-agnostic structural core, and the grammar and word rules of one language live in its **language profile** (ASD-STE100 for English; ABNT NBR ISO 24495-1 and the Senado style for Brazilian Portuguese).
 - "Requester Language" vs "the language of the text" — resolved: easy-to-read picks the **language profile** from the language of the text, which is the language of the request unless the user or a caller names another; in explain-me that language is the **Requester Language**, so both skills pick the same profile.
 - "3b1b style" meant both a fixed palette and a way of moving — resolved: it is explain-me's default look, motion grammar included; a **brand spec** may replace any part of it, and only the **motion gate** and the **requester language** stay fixed.
-- "Motion graphics" meant both HyperFrames' short-piece genre and the style of any video — resolved: **motion graphics** is the style and dynamics of a video, at any length; HyperFrames' `motion-graphics` names one of its workflows, not this term. How a brand prescribes that style is its **motion identity**.
+- "Moodboard" vs "Storyboard" vs "Brand DNA" — resolved: **`brand-dna`** is the durable brand, voice, and motion baseline across pieces; **`moodboard`** is the episodic artistic, visual, and sensory layer above `brand-dna` confirmed *before* the hook; **`storyboard`** is the concrete temporal/spatial execution table built *after* the script.

@@ -59,3 +59,8 @@ The raw trace stays in private external storage because it contains paths from t
 Claims of benefit remain hypotheses.
 A test pass cannot prove improvement in professional reviews or time to merge.
 The trial must keep failures and missing data when real runs arrive.
+
+
+## Packaging review on 2026-10-22
+
+The draft was reconciled with the categorized catalog. PR Present and PR Refine now live under `skills/engineering/`; package and plugin use the proposed catalog release 4.6.0. The six bundled writing files match the current canonical Easy to Read files. Existing synthetic evaluation artifacts and private evidence remain unchanged. The catalog suite, fourteen simulated-observation checks and five synthetic collector checks validate implementation contracts; they do not establish reviewer benefit, calibrate a judge or promote an instruction candidate. No protected final test was opened. Human labels, custody and promotion remain unverified gates of the evaluation workflow.

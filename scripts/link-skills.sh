@@ -21,14 +21,15 @@ realpath_portable() {
 
 names=()
 srcs=()
-for skill_md in "$REPO"/skills/*/SKILL.md; do
+for skill_md in "$REPO"/skills/*/*/SKILL.md; do
+  [ -f "$skill_md" ] || continue
   src="$(dirname "$skill_md")"
   names+=("$(basename "$src")")
   srcs+=("$src")
 done
 
 if [ "${#names[@]}" -eq 0 ]; then
-  echo "error: no skills/*/SKILL.md under $REPO" >&2
+  echo "error: no skills/<category>/<name>/SKILL.md under $REPO" >&2
   exit 1
 fi
 

@@ -3,8 +3,8 @@
 Status: trial prepared; operator skills implemented on this branch, not yet published.
 
 The owner approved two generic operator skills:
-- [PR Present](../../../skills/pr-present/SKILL.md) presents one PR in plain language.
-- [PR Refine](../../../skills/pr-refine/SKILL.md) improves the presentation workflow with evidence and preserves lessons.
+- [PR Present](../../../skills/engineering/pr-present/SKILL.md) presents one PR in plain language.
+- [PR Refine](../../../skills/engineering/pr-refine/SKILL.md) improves the presentation workflow with evidence and preserves lessons.
 
 The trial draws on the RSI study direction and lessons from the closed factory experiment.
 It does not reopen that experiment or transfer its results into this benchmark.
@@ -14,7 +14,7 @@ The skills never load this trial.
 The pilot uses Pareto comparison before numeric weights.
 Its real-data direction is a family-based split, pending grouping review and final-test custody.
 Coverage floors and numeric promotion thresholds still need review.
-See [the reward proposal](../../../skills/pr-refine/references/reward.md) before choosing weights or promotion thresholds.
+See [the reward proposal](../../../skills/engineering/pr-refine/references/reward.md) before choosing weights or promotion thresholds.
 
 ## Question and arms
 
@@ -53,7 +53,7 @@ Tests use simulated observations, never real reviewer measurements.
 
 ```bash
 node docs/experiments/2026-10-06-pr-review-evidence-v1/evaluate.test.mjs
-node skills/pr-refine/scripts/evaluate.mjs \
+node skills/engineering/pr-refine/scripts/evaluate.mjs \
   --cases docs/experiments/2026-10-06-pr-review-evidence-v1/cases.json \
   --run /external/run.json
 ```
@@ -65,7 +65,7 @@ An empty run returns `unverified`, with null rates and explicit zero denominator
 
 ## Sources and adaptations
 
-- [Easy to Read](../../../skills/easy-to-read/SKILL.md): plain language, fixed terms, protected code spans, and a linter.
+- [Easy to Read](../../../skills/creativity/easy-to-read/SKILL.md): plain language, fixed terms, protected code spans, and a linter.
 - [Warp core triage](https://github.com/warpdotdev/oz-for-oss/blob/a2bb45f231fd56ea28c1b381999d11b277a0b0e2/.agents/skills/triage-issue/SKILL.md): inspect evidence before asking for missing facts.
 - [Warp local triage](https://github.com/warpdotdev/warp/blob/f571865ca3f2bd6e769867b468d620791865592a/.agents/skills/triage-issue-local/SKILL.md): separate observed behavior from suggested causes.
 - [Grill With Docs](https://github.com/mattpocock/skills/blob/6fd947921b935b7e1e69293a200400f0fdd5c15f/skills/engineering/grill-with-docs/SKILL.md): interview plus durable documentation; confirmed design reference.

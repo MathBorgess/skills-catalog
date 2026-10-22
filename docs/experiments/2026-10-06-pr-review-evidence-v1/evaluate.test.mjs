@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { evaluate, rate, hash } from '../../../skills/pr-refine/scripts/evaluate.mjs';
+import { evaluate, rate, hash } from '../../../skills/engineering/pr-refine/scripts/evaluate.mjs';
 
 const root = mkdtempSync(join(tmpdir(), 'pr-eval-'));
 const dataset = JSON.parse(readFileSync(new URL('./cases.json', import.meta.url), 'utf8'));
@@ -97,7 +97,7 @@ try {
     assert.equal(r.arms.A.human_missing,1); assert.equal(r.arms.A.decision_accuracy.value,null);
   });
   test('the CLI separates report success from evidence status and input failure', () => {
-    const script = fileURLToPath(new URL('../../../skills/pr-refine/scripts/evaluate.mjs', import.meta.url));
+    const script = fileURLToPath(new URL('../../../skills/engineering/pr-refine/scripts/evaluate.mjs', import.meta.url));
     const casesPath = fileURLToPath(new URL('./cases.json', import.meta.url));
     const runPath = join(root,'empty-run.json'); writeFileSync(runPath,JSON.stringify(run([])));
     const good = spawnSync(process.execPath,[script,'--cases',casesPath,'--run',runPath],{encoding:'utf8'});

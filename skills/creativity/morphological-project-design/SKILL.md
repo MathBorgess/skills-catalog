@@ -3,7 +3,7 @@ name: morphological-project-design
 description: "Use when the user brings a project brief and seed ideas and wants distinct project candidates, independent critique, a defensible choice or no-go, and an evidence-backed project and timed pitch before implementation."
 metadata:
   author: Matheus Borges
-  version: 1.0.1
+  version: 2.0.0
 ---
 <!-- SPDX-License-Identifier: MIT -->
 

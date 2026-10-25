@@ -49,10 +49,10 @@ async function fixture(t) {
   }
   const artifacts = [];
   for (const path of ['brief.md', 'ideas.md', 'morphbox.md', 'morphbox.json', 'criteria.json', 'validation-plan.md', 'project.md', 'pitch.md']) artifacts.push(await artifact(path));
-  artifacts.push(await artifact('RCD-LICENSE.txt', await readFile(new URL('../RCD-LICENSE.txt', import.meta.url))));
+  artifacts.push(await artifact('MIT-LICENSE.txt', await readFile(new URL('../MIT-LICENSE.txt', import.meta.url))));
   artifacts.push(await artifact('research/sources.json', JSON.stringify(sources)));
   const run = {
-    schemaVersion: 1,
+    schemaVersion: 2,
     draw: { ...await artifact('paths.json', JSON.stringify(draw)), inputPath: 'morphbox.input.txt' }, rounds, reviews, research,
     decision: { status: 'selected', proposalId: ids[0], considered: ids, report: await artifact('decision.md'), selectionHistory: [{ proposalId: ids[0], researchPath: 'research.md' }] },
     postResearchReviews: [await postReview(research[0])],
@@ -70,7 +70,7 @@ async function fixture(t) {
 
 test('complete selected and rejected-all runs pass only structural checks', async t => {
   const f = await fixture(t);
-  assert.deepEqual(await checkRun(f.manifest), { status: 'selected', count: 3, checkedFiles: 32, researchLimited: [] });
+  assert.deepEqual(await checkRun(f.manifest), { schemaVersion: 2, status: 'selected', count: 3, checkedFiles: 32, researchLimited: [] });
   f.run.decision.status = 'rejected_all';
   f.run.decision.proposalId = null;
   f.run.decision.selectionHistory = [];
@@ -305,7 +305,7 @@ test('all native invocation entries require an agent identity', async t => {
   }
 });
 
-test('selected packages require core deliverables and an unmodified complete RCD license', async t => {
+test('schema 2 packages require core deliverables and an unmodified complete MIT notice', async t => {
   const f = await fixture(t);
   const original = [...f.run.artifacts];
   for (const removed of original) {
@@ -313,10 +313,75 @@ test('selected packages require core deliverables and an unmodified complete RCD
     await f.save();
     await assert.rejects(checkRun(f.manifest), /Missing required package artifact/);
   }
-  f.run.artifacts = original.map(entry => entry.path === 'RCD-LICENSE.txt' ? null : entry).filter(Boolean);
-  f.run.artifacts.push(await f.artifact('RCD-LICENSE.txt', 'An abbreviated or changed license'));
+  f.run.artifacts = original.filter(entry => entry.path !== 'MIT-LICENSE.txt');
+  f.run.artifacts.push(await f.artifact('MIT-LICENSE.txt', 'An abbreviated or changed license'));
   await f.save();
   await assert.rejects(checkRun(f.manifest), /preserve the complete bundled terms/);
+  f.run.decision.status = 'rejected_all';
+  f.run.decision.proposalId = null;
+  f.run.artifacts = original.filter(entry => entry.path !== 'MIT-LICENSE.txt');
+  await f.save();
+  await assert.rejects(checkRun(f.manifest), /Missing required package artifact: MIT-LICENSE.txt/);
+});
+
+test('schema 1 still requires its historical notice rather than a MIT replacement', async t => {
+  const f = await fixture(t);
+  f.run.schemaVersion = 1;
+  await f.save();
+  await assert.rejects(checkRun(f.manifest), /Missing required package artifact: RCD-LICENSE.txt/);
+  const mit = await readFile(new URL('../MIT-LICENSE.txt', import.meta.url));
+  f.run.artifacts = f.run.artifacts.filter(entry => entry.path !== 'MIT-LICENSE.txt');
+  f.run.artifacts.push(await f.artifact('RCD-LICENSE.txt', mit));
+  await f.save();
+  await assert.rejects(checkRun(f.manifest), /RCD-LICENSE.txt must preserve the complete historical terms/);
+  f.run.artifacts = f.run.artifacts.filter(entry => entry.path !== 'RCD-LICENSE.txt');
+  f.run.artifacts.push(await f.artifact('RCD-LICENSE.txt', 'Altered historical terms'));
+  await f.save();
+  await assert.rejects(checkRun(f.manifest), /RCD-LICENSE.txt must preserve the complete historical terms/);
+});
+
+test('archived schema 1 runs remain valid without a runtime copy of the RCD notice', async t => {
+  let historicalNotice;
+  try {
+    historicalNotice = await readFile(new URL('../../../../docs/morphological-project-design/license-history/RCD-LICENSE.txt', import.meta.url));
+  } catch (error) {
+    if (error.code !== 'ENOENT') throw error;
+    t.skip('The historical notice is deliberately excluded from standalone skill packages');
+    return;
+  }
+  const f = await fixture(t);
+  f.run.schemaVersion = 1;
+  f.run.artifacts = f.run.artifacts.filter(entry => entry.path !== 'MIT-LICENSE.txt');
+  f.run.artifacts.push(await f.artifact('RCD-LICENSE.txt', historicalNotice));
+  await f.save();
+  assert.equal((await checkRun(f.manifest)).schemaVersion, 1);
+  const cli = spawnSync(process.execPath, [fileURLToPath(new URL('./check-run.mjs', import.meta.url)), f.manifest], { encoding: 'utf8' });
+  assert.equal(cli.status, 0, cli.stderr);
+  assert.match(cli.stdout, /Historical run schema 1: complete RCD terms retained; this run has not been relicensed/);
+  f.run.schemaVersion = 2;
+  await f.save();
+  await assert.rejects(checkRun(f.manifest), /Missing required package artifact: MIT-LICENSE.txt/);
+});
+
+test('unsupported run schemas fail without changing the draw or source schema contracts', async t => {
+  const f = await fixture(t);
+  for (const schema of [0, 3, '2', null]) {
+    f.run.schemaVersion = schema;
+    await f.save();
+    await assert.rejects(checkRun(f.manifest), /Unsupported run schemaVersion/);
+  }
+  f.run.schemaVersion = 2;
+  f.sources.schemaVersion = 2;
+  await f.saveSources();
+  await f.save();
+  await assert.rejects(checkRun(f.manifest), /Unsupported research sources schemaVersion/);
+  f.sources.schemaVersion = 1;
+  await f.saveSources();
+  const draw = JSON.parse(await readFile(join(f.root, f.run.draw.path), 'utf8'));
+  draw.schemaVersion = 2;
+  f.run.draw = { ...await f.artifact('paths.json', JSON.stringify(draw)), inputPath: f.run.draw.inputPath };
+  await f.save();
+  await assert.rejects(checkRun(f.manifest), /Unsupported draw schemaVersion or algorithm/);
 });
 
 test('a separate hashed criteria entry is supported and rejected-all still requires its validation plan', async t => {
@@ -475,6 +540,8 @@ test('installed directory symlink runs the checker CLI from an unrelated cwd', a
   const result = invoke();
   assert.equal(result.status, 0, result.stderr);
   assert.match(result.stdout, /STRUCTURE OK: 3 paths/);
+  assert.match(result.stdout, /Run schema 2: bundled MIT notice retained/);
+  assert.match(result.stdout, /A structural pass or schema change does not relicense existing material/);
   await writeFile(join(f.root, f.run.draw.inputPath), 'tampered input');
   const failure = invoke();
   assert.equal(failure.status, 1);

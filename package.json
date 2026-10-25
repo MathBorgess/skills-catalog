@@ -1,12 +1,12 @@
 {
   "name": "@mathborgess/skills-catalog",
-  "version": "4.6.0",
+  "version": "5.0.0",
   "description": "Matheus Borges's catalog of agent skills for Claude, Cursor, and Codex.",
   "author": {
     "name": "Matheus Borges",
     "url": "https://github.com/MathBorgess"
   },
-  "license": "SEE LICENSE IN LICENSES.md",
+  "license": "MIT",
   "homepage": "https://github.com/MathBorgess/skills-catalog#readme",
   "repository": {
     "type": "git",

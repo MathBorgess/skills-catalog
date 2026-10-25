@@ -1,5 +1,7 @@
 # Morphological project selection: workflow design
 
+> Historical specification for the RCD adaptation. The decisions and observations below are preserved; they are not the current instructional license or fresh validation of the replacement. See the [MIT replacement review](mit-replacement-review.md) for the current scope. This historical document is outside the runtime package and is not relicensed by that correction.
+
 | Surface | Status |
 | --- | --- |
 | Source workflow | Recovered from an executed project exploration |

@@ -1,26 +1,22 @@
-# Competitors, differences and pitch
+<!-- SPDX-License-Identifier: MIT -->
 
-Use this reference after the second comparative selection and provisional consolidation. Candidate authors may have researched alternatives earlier; this phase specifically checks the selected candidate against catalog and official-source evidence.
+# Alternative research and outcome files
 
-## Competitor investigation
+Research begins after the second comparative review. Its purpose is to test the provisional choice's decisive claims against observed alternatives and primary evidence. Do not create a third author round.
 
-Search There's An AI For That for the user's task and the closest products. Record the exact product-entry URL when accessible, exact task labels and their URLs, and separately any Supported features or other taxonomy actually displayed. A feature page does not establish a task classification or product entry. Suggested search terms are not verified catalog labels.
+## Research one eligible round-2 candidate
 
-Follow official product documentation for concrete claims about capabilities, usage boundaries and current prices. Keep the source date, URL, specific supported claim and provenance in `research/sources.json`. If a price affects the financial comparison, verify the applicable plan and conditions rather than recycling old catalog copy. Do not infer a product lacks a feature because the supplied list omits it. Distinguish a broad AI suite from the individual module linked in an excerpt.
+1. State the candidate, its round-2 artifact path/hash, the provisional claim, and the evidence that could disprove it.
+2. Search **There's An AI For That** for relevant tasks and alternatives. Retain query text, access date, search scope, and result limitations. Copy entry, task, and feature labels exactly as observed; identify each as an entry, task, or feature. Record “not observed” when a label was not visible. Never invent a directory label from the candidate's wording.
+3. Follow relevant entries to official product, documentation, pricing, or other primary-source pages. Attribute each claim to the page that supports it. Record contradictions or differences between directory labels and official capabilities rather than choosing whichever helps the candidate.
+4. Compare the candidate with the observed alternatives using the frozen criteria. Distinguish listed capabilities from tested behavior; do not imply hands-on verification unless it occurred within separate authorization.
+5. Retain the candidate's research in a unique file under `research/` and record its hash. Update the retained source record by creating a new immutable snapshot while work is active; create the final `research/sources.json` once when the research sequence is complete.
 
-If access is blocked, respect the block. Do not route through alternate fetchers, mirrors or another browser to obtain the same prohibited access. Record what is missing, request the relevant text/links from the user and continue permitted work. User-supplied excerpts remain attributed to that message, with the date received and unknown publication date when appropriate. A final `limited` research record can preserve the gap; it must not be called directly verified catalog research.
+For each material claim, retain the candidate ID, exact claim, URL, access date in `YYYY-MM-DD`, and provenance: directory entry, official primary source, or another clearly identified origin. In the candidate's research notes, retain exact observed labels, relevant extracts or concise observation notes, scope, and limitations. A directory listing establishes what was listed, not completeness, accuracy, or purchaser demand.
 
-Use a comparison such as:
+If access is blocked, requires unavailable credentials, or a useful label cannot be observed, stop that access attempt and record limited research. Do not bypass controls, infer the missing content, claim no competitors exist, or treat sparse search results as absence evidence. Alternative primary evidence may still be collected; state which required observations remain unavailable.
 
-| Alternative | Supported overlap and source | Exact catalog label/type/link | Proposed useful difference | Evidence still needed |
-| --- | --- | --- | --- | --- |
-| Existing product or manual workflow | Specific documented capability | Task, feature or unavailable | Testable mechanism for the initial payer | Measured task outcome and willingness to pay |
-
-Include the current manual workflow and a generic model plus common tools when relevant. Editing, human control or AI generation alone seldom establish exclusivity. A useful proposed difference identifies a specific task, workflow constraint and observable benefit, without claiming superiority before comparison.
-
-## Source record
-
-Write `research/sources.json` whenever any candidate has a research entry, and hash it in `run.artifacts`. Use this shape:
+`research/sources.json` uses **schemaVersion 1**:
 
 ```json
 {
@@ -28,41 +24,45 @@ Write `research/sources.json` whenever any candidate has a research entry, and h
   "sources": [
     {
       "proposalId": "proposal-01",
-      "date": "2026-10-20",
-      "url": "https://example.org/product/docs",
-      "claim": "The specific capability supported by this source.",
-      "provenance": "Official documentation directly consulted on the recorded date."
+      "claim": "The exact claim supported by this page",
+      "provenance": "Official documentation; observed feature label retained in the candidate research notes",
+      "url": "https://example.org/documentation",
+      "date": "2026-01-15"
     }
   ],
   "gaps": []
 }
 ```
 
-Every source names a candidate recorded in `run.research` and includes `date`, `url`, `claim` and `provenance`. Dates use `YYYY-MM-DD`; provenance explains whether that is publication, consultation or receipt. URLs use HTTP(S). Claims and provenance are nonempty. For limited research, an unknown date or original URL is `null`, accompanied by a nonempty `limitations` field. User-supplied excerpts identify the originating message or retained input in `provenance`; keep them distinguishable from direct verification. The example is a schema fixture, not a consulted competitor.
+Use the actual access date, never the example date. If a URL or date is unknown, use JSON `null`, add a nonempty `limitations` field on that source, and mark the candidate's research `limited`. Gaps take the shape `{"proposalId":"proposal-01","notes":"Specific missing access or evidence"}`; gaps require a limited candidate. Each researched candidate needs a source or an explicit gap. A source entry's presence does not establish that its claim was verified.
 
-If limited research produced no usable source, keep `sources` empty for that candidate and add `{"proposalId": "proposal-01", "notes": "<what was blocked or unavailable>"}` to `gaps`. A `complete` research entry requires at least one source record. A no-go before research requires no source file; a no-go after research preserves its sources and gaps. Structural validation checks the fields and references; it does not establish that the source supports the claim.
+## Evidence review and bounded replacement
 
-## Reassessment and bounded reselection
+Send each researched candidate to an author-independent native critic with its exact research path/hash and complete source records. The critic may also have conducted the two comparative reviews; it must differ from all authors and replacements. Retain its full prompt and a distinct output file. Record `researchPath` and `researchSha256` on the review.
 
-Give the findings to the critic. Record the provisional candidate, finding, rationale and transition in `decision.md` and `decision.selectionHistory`. The critic can retain the candidate, choose a different already-revised candidate or reject all. Research each replacement before accepting it. Preserve rejected candidates and exclusion evidence; never restart the generation process or cycle through the same rejected candidate.
+Reassess against the frozen gates. If evidence rejects a candidate, record the reason and never revisit it within this run. A replacement must be another existing round-2 candidate that survived the relevant earlier gates. Research and review the replacement before making it the selected outcome. Do not invent a new candidate, alter a path, ask for another author revision, or silently weaken a criterion.
 
-`complete` research means the planned documentary investigation was performed, not that buyers or the market were validated. `limited` means the record contains explicit gaps. Official descriptions are not hands-on testing, and hands-on success would still not establish financial demand.
+Keep selection history in order, with unique candidate IDs and each candidate's recorded research path. Include researched provisional choices that were later rejected. The sequence contains at most N candidates. If none supports selection, record `rejected_all`. Limited research may support only the uncertainty treatment allowed by the frozen criteria; it never silently becomes complete evidence.
 
-## Financial validation plan
+## Decision and validation plan — both outcomes
 
-State the payer hypothesis, unit of sale, price/cost assumptions, initial reachable channel, proposed payment/value test, effort limit and stopping criteria. Separate revenue, contribution and buyer benefit. Declare which costs or taxes remain unknown and which metric would change the recommendation. No customer contact, offer, payment or result has occurred merely because a plan exists.
+`decision.md` is a distinct final record, not an alias or hard link to another artifact. State:
 
-## Pitch
+- Selected candidate ID or no-go; all N candidates considered and their decisive gate findings.
+- The frozen comparison rule, round-2 provisional choice, research sequence, evidence-driven rejections, and final rationale.
+- Source limitations, unresolved assumptions, scenario sensitivities, and any conditions attached to selection.
+- What the structural checker verified and what still depends on semantic review.
 
-Use five minutes as the default maximum, or the user's explicit limit. Write only the spoken script inside `<!-- speech:start -->` and `<!-- speech:end -->` markers, with supporting material outside them. Estimate duration from its word count at a declared speaking rate and preserve time for pauses. Call this a textual estimate until a person rehearses it.
+`validation-plan.md` specifies the next evidence, tests, observable rejection conditions, required resources or permissions, and the decisions each result would change. For no-go, explain what would justify a new run. A new run is distinct from revisiting a rejected candidate in the sealed run.
 
-Cover six questions:
+## Selected outcome only
 
-1. What is it, what task does it support and how will it work?
-2. Who uses it, who pays and what benefit could justify the purchase?
-3. How does the person interact, make choices and obtain a useful result?
-4. Which products/tasks are similar, what overlaps and which proposed differences remain to test?
-5. Which tools and technologies are planned, and where does the model act if the brief requires AI during use?
-6. Why is the scope feasible within the actual time available, with milestones and a completion criterion?
+Write `project.md` with the selected candidate's scope, intended users and purchaser, concrete behavior for every path choice, supporting ledger, resources and boundaries, economic scenarios, unresolved assumptions, and evidence needed next. Specify the user's sequence of actions, controls and approval points; identify planned technologies and any required model's role during use. Map the requested time budget to milestones and an observable completion criterion. Describe proposed work without executing it.
 
-Do not reuse an old academic calendar as a universal timeline. Distinguish planned implementation from working software, proposed economic benefit from measured value, and agent selection from commercial validation. A no-go result needs reasons and next evidence, rather than a fictional winning-project pitch.
+Write `pitch.md` as a speakable script. Unless the user requests another duration, keep the estimate at **five minutes or less**. Enclose only spoken text between `<!-- speech:start -->` and `<!-- speech:end -->`. Put delivery notes, timing calculations and pause allowances outside that span. Count spoken words inside the markers, declare the assumed speaking rate and total pause time, and calculate:
+
+`estimated seconds = spoken words / words per minute × 60 + pause seconds`
+
+Record that this is an estimate, not a timed performance. Explain the problem, proposed response, intended user and purchaser, observed alternatives and specific distinction, evidence and limits, scenario economics, and next validation decision. Describe how a person operates the proposed tool and retains control, which technologies are planned, and where a model acts during use if required by the brief. Explain how milestones and the completion criterion fit the user's available schedule. Do not describe assumptions as traction, model outputs as customer findings, or estimates as achieved results.
+
+For no-go, create neither `project.md` nor `pitch.md`. Preserve all candidate drafts, reviews, research, prompts, and logs.

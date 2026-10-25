@@ -13,9 +13,16 @@ and license, hashes, decision and researched selections.
 All artifact paths are relative to RUN.json's folder and must remain inside it.
 run.draw.inputPath must name the retained raw box input. Its bytes must match
 the sampler's input hash and its parsed dimensions must match the snapshot.
+Run schema 1 retains the complete historical RCD notice; run schema 2 requires
+the bundled MIT notice. Draw and research-source schemas remain at version 1.
+A schema change, notice replacement or structural pass does not relicense
+existing material or establish rights in supplied inputs and generated outputs.
 This does not prove agent isolation/concurrency, semantic fidelity, research
 quality, economic viability or a commercial outcome.
 `;
+// Pinned upstream LICENSE at 1942760c2242f609bf63ce2c97204f5a1791bd68.
+// Retain validation of historical runs without shipping their instructional terms.
+const historicalRcdLicenseSha256 = '29e6d8b0a1e3dd78776b46b22b9a9a3df94fdbf6a73482f59d688dee7fd38e32';
 const demand = (condition, message) => { if (!condition) throw new Error(message); };
 const array = (value, label) => { demand(Array.isArray(value), `${label} must be an array`); return value; };
 const shaPattern = /^[a-f0-9]{64}$/;
@@ -57,7 +64,8 @@ export async function checkRun(manifestPath) {
   const manifestFile = await realpath(manifestPath);
   const root = dirname(manifestFile);
   const run = JSON.parse(await readFile(manifestFile, 'utf8'));
-  demand(run.schemaVersion === 1, 'Unsupported run schemaVersion');
+  demand([1, 2].includes(run.schemaVersion), 'Unsupported run schemaVersion');
+  const requiredLicense = run.schemaVersion === 1 ? 'RCD-LICENSE.txt' : 'MIT-LICENSE.txt';
   let checkedFiles = 0;
   const outputPaths = new Set();
   const outputInodes = new Set();
@@ -202,18 +210,21 @@ export async function checkRun(manifestPath) {
   const artifacts = array(run.artifacts, 'artifacts');
   const entries = [...artifacts, ...(run.criteria ? [run.criteria] : [])];
   demand(new Set(entries.map(entry => entry.path)).size === entries.length, 'Duplicate additional artifact path');
-  const required = ['brief.md', 'ideas.md', 'morphbox.md', 'morphbox.json', 'criteria.json', 'validation-plan.md', 'RCD-LICENSE.txt'];
+  const required = ['brief.md', 'ideas.md', 'morphbox.md', 'morphbox.json', 'criteria.json', 'validation-plan.md', requiredLicense];
   if (research.length) required.push('research/sources.json');
   if (decision.status === 'selected') required.push('project.md', 'pitch.md');
   for (const path of required) demand(entries.some(entry => entry.path === path), `Missing required package artifact: ${path}`);
   for (const entry of entries) {
     const bytes = await artifact(entry, 'package artifact');
     if (entry.path === 'RCD-LICENSE.txt') {
-      demand(bytes.equals(await readFile(new URL('../RCD-LICENSE.txt', import.meta.url))), 'RCD-LICENSE.txt must preserve the complete bundled terms');
+      demand(createHash('sha256').update(bytes).digest('hex') === historicalRcdLicenseSha256, 'RCD-LICENSE.txt must preserve the complete historical terms');
+    }
+    if (entry.path === 'MIT-LICENSE.txt') {
+      demand(bytes.equals(await readFile(new URL('../MIT-LICENSE.txt', import.meta.url))), 'MIT-LICENSE.txt must preserve the complete bundled terms');
     }
     if (entry.path === 'research/sources.json') checkSources(bytes, research);
   }
-  return { status: decision.status, count: ids.length, checkedFiles, researchLimited: research.filter(entry => entry.status === 'limited').map(entry => entry.proposalId) };
+  return { schemaVersion: run.schemaVersion, status: decision.status, count: ids.length, checkedFiles, researchLimited: research.filter(entry => entry.status === 'limited').map(entry => entry.proposalId) };
 }
 
 export async function main(args = process.argv.slice(2)) {
@@ -221,7 +232,11 @@ export async function main(args = process.argv.slice(2)) {
   demand(args.length === 1 && !args[0].startsWith('--'), 'Provide one run.json path. Use --help');
   const result = await checkRun(args[0]);
   process.stdout.write(`STRUCTURE OK: ${result.count} paths, two complete rounds; decision=${result.status}; ${result.checkedFiles} file checks.\n`);
+  process.stdout.write(result.schemaVersion === 1
+    ? 'Historical run schema 1: complete RCD terms retained; this run has not been relicensed.\n'
+    : 'Run schema 2: bundled MIT notice retained; this is not a rights assessment of inputs or outputs.\n');
   if (result.researchLimited.length) process.stdout.write(`Research gaps recorded: ${result.researchLimited.join(', ')}.\n`);
+  process.stdout.write('A structural pass or schema change does not relicense existing material.\n');
   process.stdout.write('No assertion of agent isolation, research quality, viability or revenue.\n');
 }
 

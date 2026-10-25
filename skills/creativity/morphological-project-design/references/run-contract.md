@@ -1,128 +1,212 @@
+<!-- SPDX-License-Identifier: MIT -->
+
 # Run contract
 
-Use this reference to set up and resume a run. The scripts require Node.js and its standard library. Native agent delegation and permitted research tools belong to the calling host; the scripts do not call models or open websites.
+Use this contract for newly generated runs. The sampler and checker are local, dependency-free Node scripts; their structural checks supplement the workflow's judgment.
 
-## Inputs and defaults
+## Files and immutable state
 
-Recover existing answers before asking for missing information. Establish the brief, seed ideas, practical constraints, output language and run location. Record any assignment-specific requirements without imposing them on other projects. N defaults to 3; requested models are configurable and must be available to the host. Record the configured/requested model separately from a served model the host actually exposes. Use `unknown` when the latter is not observable.
+Create a new run directory without reusing an existing run's paths. All manifest paths are relative to the manifest's directory and must resolve to regular files inside it. Do not use absolute paths, `..`, backslashes, escaping symlinks, or file aliases to merge roles.
 
-Create a fresh run directory in the authorized workspace. Do not create a public repository, read email or install/link the skill unless that action is requested or already authorized. Reuse a compatible existing box by copying its original input bytes into the new run. Preserve earlier attempts and dated decisions.
+Retain at least:
 
-`morphbox.json` uses:
+| File or group | Purpose |
+| --- | --- |
+| `brief.md` | Scoped brief, constraints, explicit unknowns, and N |
+| `ideas.md` and retained input files | Original seed representations and their provenance, separate from derived dimensions |
+| `morphbox.md` | Human-readable dimensions, alternatives, and derivation |
+| `morphbox.json` | Exact raw sampler input, retained byte for byte |
+| `seed-paths.md` | Derived representative choices for each original seed, including unrepresented aspects; separate from the random paths |
+| `criteria.json` | Frozen criteria, gates, comparison rule, and uncertainty treatment |
+| `paths.json` | Complete sampler output, including attempts and duplicate draws |
+| `prompts/` | Complete submitted invocation and follow-up text |
+| `rounds/initial/`, `rounds/revised/` | N separate submissions per round |
+| `reviews/` | Two comparative reviews and one separate output per researched candidate |
+| `execution/` | Native agent, model, batching, replacement, failure, and context evidence |
+| `research/` | Candidate research, source snapshots, and final `sources.json` when research occurs |
+| `decision.md`, `validation-plan.md` | Final decision and next evidence plan, for either outcome |
+| `project.md`, `pitch.md` | Selected outcome only |
+| `MIT-LICENSE.txt` | Complete bundled MIT notice, copied byte for byte |
+| `run.json` | Final schema-2 manifest |
 
-```json
-{
-  "dimensions": [
-    {"name": "Audience", "alternatives": ["Independent trainers", "Small teams"]},
-    {"name": "Output", "alternatives": ["Checklist", "Visual board"]}
-  ]
-}
-```
+Original text seeds can appear verbatim in `ideas.md`. For images, attachments, or other representations, preserve original files and index their paths/hashes there; do not replace them with descriptions. Keep seed narratives out of author packets. Keep separately supplied source documents intact even when the scoped brief summarizes their constraints.
 
-Every dimension has a distinct, nonempty name and one to four distinct, nonempty alternatives. Write a readable Markdown matrix as well. The helper also accepts text rows in the upstream format `Dimension: Alternative A, Alternative B`. Save that exact input in the run as `morphbox.input.txt` when using text. JSON avoids commas being interpreted as alternative separators.
+After constructing the box, record representative dimension/alternative choices for each seed in `seed-paths.md`. Mark any aspect that has no faithful box choice instead of forcing a match. Hash this explanatory artifact in the manifest. It does not consume a sampled path, constrain the random draw or belong in an author's packet.
 
-Keep original ideas and representative seed paths as explanatory artifacts. Random proponents receive the scoped brief and their own sampled path, rather than those seed narratives.
+Create files exclusively. During work, write checkpoints and source snapshots to new numbered paths; do not repeatedly replace `run.json`, `sources.json`, or logs. Keep partial outputs and retries with their own identities. Preserve superseded material; select the authoritative final artifact by its manifest reference rather than deleting its predecessors.
 
-## Draw and replay
+On resume, inventory the run and verify recorded hashes before dispatching work. Continue only missing invocations, outputs, reviews, or finalization steps. If an invocation's outcome is uncertain, inspect its native status before retrying. Stop on damaged, contradictory, or hash-mismatched evidence; do not repair it by overwriting or regenerating different bytes at the same path. A sealed run is immutable. Changed criteria or a changed final decision belong in a separately identified run that links to the earlier evidence.
+
+## Sampler interface — schema 1
 
 ```sh
-node <skill-dir>/scripts/sample-paths.mjs --input <run>/morphbox.json --count 3 --output <run>/paths.json
-node <skill-dir>/scripts/sample-paths.mjs --input <run>/morphbox.json --count 3 --seed <recorded-uint64> --output <new-output>/paths.json
+node <skill>/scripts/sample-paths.mjs --input <run>/morphbox.json --output <run>/paths.json --count 3
+node <skill>/scripts/sample-paths.mjs --input <run>/morphbox.json --output <run>/replay.json --count 3 --seed 123
 ```
 
-Replace `<skill-dir>` with the loaded skill's directory, never a developer's checkout path. The output must not exist. Capture the seed produced by an unseeded draw. The helper uses `splitmix64-v1-low2`, not Python's `random.Random`; an old Python seed does not imply the same sequence. Replay compares the deterministic path/attempt/duplicate fields, excluding the creation timestamp.
+`--count` defaults to 3; `--seed` is an optional unsigned decimal 64-bit integer. `--format auto|json|text` is optional. The output must be new. Replay to another new path, never over the recorded draw.
 
-Positions are uniformly drawn from 1–4. A position absent from a short dimension is recorded and retried for that dimension; do not pad the alternatives or alter the distribution. A complete duplicate path is recorded and retried. The input's combinatorial capacity bounds N. No semantic or economic filter belongs in this procedure.
+The JSON input is `{"dimensions":[{"name":"Dimension","alternatives":["Choice A","Choice B"]}]}`. Text input uses one `Name: A, B` row per dimension. Each dimension has 1–4 distinct, nonempty alternatives. Dimension names are distinct and nonempty. Preserve their order.
 
-Optional PDF: use an authorized, available text-to-morphbox checkout at a recorded revision, following its actual invocation instructions. Inspect the output before calling it legible. Failure of this optional export does not invalidate complete Markdown/JSON artifacts. Do not download or install a dependency silently to hide a missing capability.
+The sampler's `schemaVersion` remains **1**. It records `splitmix64-v1-low2`, the decimal seed string, the SHA-256 of raw input bytes, parsed dimensions, count, accepted sequences, per-position attempts, and discarded duplicate whole paths. Draws are positions 1–4: unavailable positions are rejected, then duplicate complete paths are rejected. No semantic incompatibility, attractiveness, or economic judgment affects sampling. Count cannot exceed the product of the alternative counts.
 
-## Artifacts and execution record
+The checker replays this algorithm, not a language runtime's unrelated random generator. Reproduction requires the retained input bytes, count, and seed. Editing whitespace in the raw input changes its hash even when parsing would give the same box.
 
-Keep `brief.md`, `ideas.md`, the box, `paths.json`, `criteria.json`, full `prompts/`, `round-1/`, `round-2/`, `research/`, `decision.md`, `project.md`, `validation-plan.md`, `pitch.md` when applicable, `RCD-LICENSE.txt` and `run.json`. The output language follows the requester. Paths inside the manifest are relative to its directory, including symlink resolution; keep external inputs as copies inside the run.
+## Final manifest — schema 2
 
-The structural manifest has this shape; expand the proposal arrays to exactly the IDs in `paths.json`:
+Every artifact reference is `{"path":"relative/file","sha256":"64 lowercase hexadecimal characters"}`. Hash full file bytes, including complete prompts. Do not hash a summary instead of the submitted text. File names below are illustrative except the required package names and `decision.md`.
 
 ```json
 {
-  "schemaVersion": 1,
-  "draw": {"path": "paths.json", "sha256": "<sha256>", "inputPath": "morphbox.json"},
+  "schemaVersion": 2,
+  "draw": {
+    "path": "paths.json",
+    "sha256": "<draw hash>",
+    "inputPath": "morphbox.json"
+  },
   "rounds": [
-    {"id": "initial", "proposals": [
-      {"id": "proposal-01", "agentId": "worker-01", "path": "round-1/proposal-01.md", "sha256": "<sha256>",
-       "prompt": {"path": "prompts/initial-proposal-01.md", "sha256": "<sha256>"}}
-    ]},
-    {"id": "revised", "proposals": [
-      {"id": "proposal-01", "agentId": "worker-01", "path": "round-2/proposal-01.md", "sha256": "<sha256>",
-       "prompt": {"path": "prompts/revised-proposal-01.md", "sha256": "<sha256>"}}
-    ]}
+    {
+      "id": "initial",
+      "proposals": [
+        {
+          "id": "proposal-01",
+          "agentId": "<native author ID>",
+          "path": "rounds/initial/proposal-01.md",
+          "sha256": "<submission hash>",
+          "prompt": {
+            "path": "prompts/initial-proposal-01.md",
+            "sha256": "<complete submitted prompt hash>"
+          }
+        }
+      ]
+    },
+    {
+      "id": "revised",
+      "proposals": [
+        {
+          "id": "proposal-01",
+          "agentId": "<same native author ID>",
+          "path": "rounds/revised/proposal-01.md",
+          "sha256": "<submission hash>",
+          "prompt": {
+            "path": "prompts/revised-proposal-01.md",
+            "sha256": "<complete submitted prompt hash>"
+          }
+        }
+      ]
+    }
   ],
   "reviews": [
-    {"id": "initial", "agentId": "critic", "path": "round-1/critic.md", "sha256": "<sha256>",
-     "prompt": {"path": "prompts/initial-critic.md", "sha256": "<sha256>"}},
-    {"id": "revised", "agentId": "critic", "path": "round-2/critic.md", "sha256": "<sha256>",
-     "prompt": {"path": "prompts/revised-critic.md", "sha256": "<sha256>"}}
+    {
+      "id": "initial",
+      "agentId": "<native critic ID>",
+      "path": "reviews/initial.md",
+      "sha256": "<review hash>",
+      "prompt": {
+        "path": "prompts/review-initial.md",
+        "sha256": "<prompt hash>"
+      }
+    },
+    {
+      "id": "revised",
+      "agentId": "<native critic ID>",
+      "path": "reviews/revised.md",
+      "sha256": "<review hash>",
+      "prompt": {
+        "path": "prompts/review-revised.md",
+        "sha256": "<prompt hash>"
+      }
+    }
+  ],
+  "additionalPrompts": [
+    {
+      "id": "research-proposal-01",
+      "path": "prompts/research-proposal-01.md",
+      "sha256": "<complete submitted prompt hash>"
+    }
   ],
   "research": [
-    {"proposalId": "proposal-01", "path": "research/proposal-01.md", "sha256": "<sha256>", "status": "complete"}
+    {
+      "proposalId": "proposal-01",
+      "status": "complete",
+      "path": "research/proposal-01.md",
+      "sha256": "<research hash>"
+    }
   ],
   "postResearchReviews": [
-    {"proposalId": "proposal-01", "researchPath": "research/proposal-01.md", "researchSha256": "<research-sha256>",
-     "agentId": "critic", "path": "research/proposal-01-critic.md", "sha256": "<sha256>",
-     "prompt": {"path": "prompts/post-research-proposal-01.md", "sha256": "<sha256>"}}
+    {
+      "proposalId": "proposal-01",
+      "agentId": "<native critic ID>",
+      "researchPath": "research/proposal-01.md",
+      "researchSha256": "<research hash>",
+      "path": "reviews/research-proposal-01.md",
+      "sha256": "<review hash>",
+      "prompt": {
+        "path": "prompts/review-research-proposal-01.md",
+        "sha256": "<complete submitted prompt hash>"
+      }
+    }
   ],
   "decision": {
     "status": "selected",
     "proposalId": "proposal-01",
-    "report": {"path": "decision.md", "sha256": "<sha256>"},
     "considered": ["proposal-01"],
+    "report": {
+      "path": "decision.md",
+      "sha256": "<decision hash>"
+    },
     "selectionHistory": [
-      {"proposalId": "proposal-01", "researchPath": "research/proposal-01.md"}
+      {
+        "proposalId": "proposal-01",
+        "researchPath": "research/proposal-01.md"
+      }
     ]
   },
+  "criteria": {
+    "path": "criteria.json",
+    "sha256": "<criteria hash>"
+  },
   "artifacts": [
-    {"path": "brief.md", "sha256": "<sha256>"},
-    {"path": "ideas.md", "sha256": "<sha256>"},
-    {"path": "morphbox.md", "sha256": "<sha256>"},
-    {"path": "morphbox.json", "sha256": "<sha256>"},
-    {"path": "criteria.json", "sha256": "<sha256>"},
-    {"path": "research/sources.json", "sha256": "<sha256>"},
-    {"path": "validation-plan.md", "sha256": "<sha256>"},
-    {"path": "RCD-LICENSE.txt", "sha256": "<sha256>"},
-    {"path": "project.md", "sha256": "<sha256>"},
-    {"path": "pitch.md", "sha256": "<sha256>"}
+    {"path": "brief.md", "sha256": "<hash>"},
+    {"path": "ideas.md", "sha256": "<hash>"},
+    {"path": "morphbox.md", "sha256": "<hash>"},
+    {"path": "morphbox.json", "sha256": "<raw input hash>"},
+    {"path": "validation-plan.md", "sha256": "<hash>"},
+    {"path": "MIT-LICENSE.txt", "sha256": "<bundled notice hash>"},
+    {"path": "research/sources.json", "sha256": "<source record hash>"},
+    {"path": "execution/invocations.json", "sha256": "<execution evidence hash>"},
+    {"path": "project.md", "sha256": "<hash>"},
+    {"path": "pitch.md", "sha256": "<hash>"}
   ]
 }
 ```
 
-`decision.considered` contains all sampled IDs, not only the winner. `decision.report.path` is exactly `decision.md`; this must be a physically distinct file from every other artifact, including symlinks and hard links. Record it only in `decision.report`.
+This shape shows **one candidate only to make the fields readable**. For the default N = 3, put every actual draw ID exactly once in each round and in `decision.considered`. Use actual IDs from `draw.sequences`; do not manufacture missing IDs. Include every retained supporting file not already referenced elsewhere in `artifacts`, including logs, original inputs, feedback packets, context attachments, checkpoints, and prior source snapshots.
 
-A `rejected_all` decision omits `proposalId`; its selection history can be empty if rejection occurred before a research candidate existed. Research can be `limited` with `notes` stating precisely what was inaccessible, user-supplied or unverified. Every provisional candidate and replacement in the history needs a corresponding research entry. A selected candidate must appear in that history.
+The two rounds are named `initial` and `revised`. Each has N distinct native author IDs, and an author cannot own different candidates across rounds. Normally a candidate keeps the same author. If it changes, its revised record must add `"replacement":{"fromAgentId":"<initial ID>","reason":"<specific reason>"}`; unchanged authors must not declare replacement. Retain the failed author's work and all replacement context.
 
-Every formal candidate research entry in `run.research` requires a `postResearchReviews` entry, including candidates rejected after research. It names the reviewed research path and SHA-256, an independent critic's native `agentId`, a hashed nonempty output and its submitted prompt. Preserve a distinct critic output; it cannot reuse the research file, an earlier review or another artifact, even through an alias. This records reassessment separately from the two earlier comparative reviews. Keep incidental research from earlier proposal rounds in additional artifacts. A no-go before formal research can omit `postResearchReviews` and `research/sources.json`; a no-go after research retains the corresponding evidence.
+Each comparative review needs a native ID different from every author in both rounds. Its prompt and output must be separate files. The same critic may provide both comparative and post-research reviews. Proposals, reviews, and prompts have separate real paths and file identities. The decision report and every post-research critic output are distinct from every other artifact.
 
-Hash every required package file in `artifacts`. Both outcomes require the brief, ideas, Markdown/JSON box, criteria, validation plan and complete RCD terms. Whenever `research` is nonempty, include `research/sources.json` using the [source-record schema](competitors-and-pitch.md#source-record). Each research candidate has recorded sources or an explicit limited-research gap; unknown dates/URLs stay explicit rather than being invented. Only a `selected` decision requires `project.md` and `pitch.md`; omit those promotional artifacts after a no-go. A separately hashed top-level `criteria` entry is also accepted instead of listing `criteria.json` in `artifacts`. Additional evidence files may be listed as well.
+`additionalPrompts` is optional when empty. Otherwise every record has a unique nonempty invocation `id` and its own `prompts/` path/hash. Use it for researcher calls, additional author or critic messages, replacements, and other dispatched prompts beyond the primary prompt references. Do not repeat a primary prompt entry as an additional invocation.
 
-Each proposal and review requires its native `agentId` and a hashed `prompt` file under `prompts/`. Preserve the complete submitted text for that invocation, including expanded instructions and supplied context; retain any separately attached resources as hashed artifacts. Use a distinct, nonempty prompt file per invocation. Record delegated calls beyond the proposal, review and post-research entries, including retries, in `additionalPrompts` with a unique invocation `id`, `path` and `sha256`; omit that array when no such invocation occurred. The checker verifies the recorded files, not whether the host omitted an invocation or the text faithfully matches its submission.
+Research records have unique `proposalId` values from the draw. Status is `complete` or `limited`; limited records require nonempty `notes` describing the gap. Every research record requires a post-research review with the matching `researchPath` and `researchSha256`. Include final `research/sources.json` in `artifacts` whenever research occurs; its source schema remains 1 as defined in [the research guide](competitors-and-pitch.md).
 
-A revised proposal retains its initial author. If that author is unavailable, use a new agent with only that candidate's context and add `"replacement": {"fromAgentId": "<initial-agent-id>", "reason": "<why replacement was needed>"}` to the revised entry. An agent that authored another candidate cannot be its replacement. Unchanged authors omit `replacement`. This preserves candidate continuity while allowing explicit failure recovery.
+`selectionHistory` is ordered, has unique candidate IDs, and contains at most N entries. Every entry names matching recorded research; no rejected candidate returns later. For `selected`, the final history entry is the selected candidate. For `rejected_all`, omit `proposalId` or set it to `null`, omit project/pitch files, and retain the complete decision and validation plan. If all candidates fail before research, research and history may both be empty.
 
-Add `requestedModel`, `observedModel`, timestamps, actual batches, invocation parameters and completion/error records to the relevant entries or an execution section. Preserve the host's evidence when available. These records document what was observed; they do not sandbox filesystem access or prove that a model never saw other context. Record hashes only after an artifact is saved. Any later final decision or revised research is a separate version, with history preserved.
+`criteria` is an optional top-level artifact reference; `criteria.json` is required either there or in `artifacts`, never in both. Do not duplicate additional artifact paths. Requested/observed models, capability unknowns, actual batches, and full context provenance belong in retained hashed execution artifacts; the checker does not interpret those records.
 
-Run the checker from any working directory:
+## License and schema boundaries
+
+For new runs, use schema 2 and copy the bundled skill-level `MIT-LICENSE.txt` to the run root unchanged. Do not substitute a shortened notice, a repository notice with different bytes, or an assertion that attribution was preserved. The checker compares the complete bundled notice bytes.
+
+The current checker also recognizes historical schema-1 manifests and validates their historical notice against a fixed digest; it does not obtain current terms from the historical archive. Historical runs retain their original evidence and terms. Do not change their schema, replace notices, migrate them, or relabel them as newly licensed runs. Historical attribution and the archive's relationship to this original workflow are documented in [PROVENANCE.md](../PROVENANCE.md); the archive is not an input or runtime dependency for a new run.
+
+## Check and report
 
 ```sh
-node <skill-dir>/scripts/check-run.mjs <run>/run.json
+node <skill>/scripts/check-run.mjs <run>/run.json
 ```
 
-It verifies the source bytes and draw replay, IDs, two complete rounds, reviewer and submitted-prompt files, declared author continuity/replacements, path confinement, hashes, distinct decision and post-research review outputs, required package files, structured source records, byte-identical bundled RCD terms and researched selection history. It cannot determine whether a proposal respects the meaning of every choice, a source supports a claim, a critic actually reassessed the evidence, an agent was independent, a pitch fits a human's speech or anyone will pay. Keep those reviews separate from a structural pass.
+Create the final manifest once after all required artifacts exist and their bytes are stable. A selected run requires the decision, validation plan, project, pitch, complete two rounds, required reviews, and researched selection. A no-go requires the decision, validation plan, complete rounds, and reviews for every research record it retains.
 
-## Failure and stopping rules
-
-- If the host lacks native independent delegation, stop that phase and report the gap. Do not write role-play outputs and present them as separate agents.
-- If N exceeds available slots, schedule batches and record actual overlap; N is the candidate count, not a claim about simultaneous execution.
-- After partial failure, preserve completed files and resume only missing work with a recorded retry. Use a replacement agent only with that candidate's own context. An incomplete round cannot become a final comparison of N.
-- Both rounds preserve the sampled choices. If criticism cannot be resolved within a path, retain the objection and permit rejection; do not silently reroll.
-- After competitor research, each new provisional candidate must be researched before acceptance. Never cycle back to an evidence-rejected candidate. At most N distinct revised candidates can be considered; there is no third generation round.
-- If every candidate fails, produce a no-go decision, objections and evidence needed to reconsider. Do not force a winner or a promotional pitch. An optional explanatory presentation must preserve that status.
-
-Copy the skill's complete `RCD-LICENSE.txt` into the run and attribute Richard and the pinned source in its decision package. Implementing the MVP, contacting customers, charging money, deploying, publishing or creating an external repository are subsequent actions, rather than evidence supplied by this workflow.
+The checker verifies path containment, hashes, exact sampler replay, declared IDs and replacement records, round coverage, required files, source-record shape, research/review references, selection-history structure, and the schema-appropriate notice. It does not establish whether agents were actually isolated, batches overlapped, models matched requests, prompts were fully disclosed, criteria were frozen on time, candidates honored their choices, evidence supports claims, arithmetic is appropriate, or the project is viable. Those require inspection of the retained evidence. A structural pass is neither a real-world outcome nor legal certification.

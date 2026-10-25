@@ -1,36 +1,31 @@
 ---
 name: morphological-project-design
-description: >-
-  Use when the user wants to turn seed ideas into a morphological box, explore N
-  independent project proposals, challenge their revenue potential with a devil's
-  advocate, revise every proposal, investigate competitors and prepare a project
-  decision package or pitch. Stops before implementing the selected product.
+description: "Use when the user brings a project brief and seed ideas and wants distinct project candidates, independent critique, a defensible choice or no-go, and an evidence-backed project and timed pitch before implementation."
 metadata:
   author: Matheus Borges
-  version: 1.0.1
+  version: 2.0.0
 ---
+<!-- SPDX-License-Identifier: MIT -->
 
-# Morphological Project Design
+# Morphological project design
 
-Turn ideas into a project worth testing through reproducible combinations, two independent proposal rounds and evidence-aware commercial review. Work in the requester's language.
+Turn a brief into sampled candidates and a reviewable decision. Authorize analysis and local artifacts only; implementation, outreach, purchases, payments, and publication require separate instructions. Historical credit is recorded in [PROVENANCE.md](PROVENANCE.md).
 
-This instructional workflow adapts **Revenue-Centric Design by Richard (@richardrx)**. Read [provenance](PROVENANCE.md) and preserve the [complete source terms](RCD-LICENSE.txt); they exclude gambling, betting and casino use. Do not apply this adaptation to excluded projects. Original helper scripts are MIT; this instructional material has the specific RCD terms.
+## Workflow
 
-1. **Frame the run.** Read [the run contract](references/run-contract.md). Recover the brief, seed ideas, constraints, audience, deliverables and available agent tools. Use N = 3 unless specified; quantity and requested models are configurable. Resolve material unknowns without repeating decisions already made. Create a new run directory and preserve its original inputs.
-2. **Build the box.** Normalize the seed ideas, derive dimensions with one to four distinct alternatives each, and write `ideas.md`, `morphbox.md` and `morphbox.json`. Preserve representative paths for the seed ideas separately from the random exploration. PDF through text-to-morphbox is optional; Markdown and JSON suffice.
-3. **Freeze criteria and draw N paths.** Read [the commercial review](references/revenue-centric-review.md), record criteria before seeing proposals, then run `node <skill-dir>/scripts/sample-paths.mjs --input <run>/morphbox.json --count N --output <run>/paths.json`. Supply `--seed` for replay. Never filter or repair random paths for coherence or profitability. Preserve the seed, algorithm, attempts and input bytes.
-4. **Generate N independent candidates.** Read [the agent prompts](references/agent-prompts.md). Use one native subagent per path with a separate initial context, scoped brief and exclusive output. Supply its path, not the seed ideas or peer proposals. Run concurrently within available slots; record actual batches. If independent delegation is unavailable, report that capability gap instead of simulating N agents yourself.
-5. **Challenge every candidate.** Once all N outputs exist, use a separate devil's advocate to audit each path, compare commercial assumptions and produce feedback for every candidate. Preserve its full report and extract only candidate-specific feedback for each author. A score is a judgment, not evidence of demand.
-6. **Revise all N and select again.** Each author revises its own candidate once, preserving its path and responding to its feedback. Preserve both versions. After all N revisions exist, the critic compares them again and can reject every candidate. There are exactly two candidate-generation rounds; do not silently add a third.
-7. **Consolidate and investigate competitors.** Read [competitors and pitch](references/competitors-and-pitch.md). Consolidate the provisional choice, then research its alternatives in There's An AI For That and official sources. Preserve exact catalog labels, links, dates and provenance. If access is blocked, record the gap and use clearly attributed user-supplied evidence; never bypass a safety block or invent tasks.
-8. **Reassess using the findings.** The critic may withdraw the recommendation or choose another of the N revised candidates. Research every replacement before closing. Preserve the selection history and reasons for exclusion; never revisit an evidence-rejected candidate or regenerate candidates. End with a researched candidate or an explicit no-go decision.
-9. **Deliver and check.** Write `decision.md`, the consolidated project, financial validation plan and timed pitch when a candidate remains. If none remains, deliver the rejection and next tests without inventing a winner or promotional pitch. Complete `run.json`, copy the RCD terms into the run, and execute `node <skill-dir>/scripts/check-run.mjs <run>/run.json`. Resume missing artifacts after failures without overwriting completed work.
+1. **Preserve and scope.** Create a new run directory. Save the brief, constraints, and original seed representations without rewriting them; keep the seed archive separate from the scoped brief sent to authors. Record missing inputs as unknowns. Use **N = 3** unless requested otherwise. Read [the run contract](references/run-contract.md) before creating files. Preserve every prompt, response, log, and artifact; resume only missing work.
+2. **Define the search.** Derive named morphological dimensions from the brief and seeds, with **1–4 distinct alternatives per dimension**. Save the derived box separately from the originals. In `seed-paths.md`, map each seed to representative box choices and identify any choices the box cannot express; keep these explanatory mappings separate from the random draw and author packets. Freeze the evaluation criteria, hard constraint gates, evidence requirements, and sensitivity rules in `criteria.json` before launching authors; use [the evaluation ledger](references/evaluation-ledger.md). Changes require a separately identified run.
+3. **Draw once.** Run `node <skill>/scripts/sample-paths.mjs --input <run>/morphbox.json --output <run>/paths.json --count N`, optionally adding `--seed UINT64`. The sampler draws positions 1–4, rejects unavailable positions and duplicate whole paths, and applies no semantic filter. Retain the original input bytes, seed, attempts, and rejected draws. If capacity is below N, resolve the count or box before drawing. Never redraw an inconvenient candidate. Replay using the retained bytes, count, and seed.
+4. **Develop round 1.** Launch N independent native authors in clean contexts without inherited coordinator history, one per sampled path, with only the scoped brief, constraints, frozen criteria, and that author's exact path. Give them no original seed narratives or peer outputs. Use [the agent packets](references/agent-prompts.md); retain complete submitted prompts and supplied context. Record requested and observed models, native agent IDs, actual launch batches, and unknown capabilities. If independent native authoring is unavailable, retain the partial run and report it incomplete.
+5. **Compare, then revise once.** After all N submissions, an independent critic compares every candidate, checks every sampled choice, and issues candidate-specific feedback. Send each original author only its own submission and feedback. Each revises its own candidate once. Then the critic compares all N revised submissions and checks every path choice again. These are **exactly two rounds**. Preserve replacements and their reasons; do not assign one author another candidate or invent a third round. Apply the frozen gates and ledger; any or all candidates may fail.
+6. **Test the provisional choice.** If round 2 yields an eligible leader, research it under [alternatives and pitch](references/competitors-and-pitch.md). Use exact observed There's An AI For That entry, task, and feature labels plus official primary sources. Retain claims, URLs, access dates, provenance, and access gaps. An author-independent critic reassesses each researched candidate using its research path and hash. If evidence rejects it, consider another existing round-2 candidate only after researching it. Never revisit an evidence-rejected candidate; consider at most N candidates.
+7. **Record the outcome.** Write `decision.md` and `validation-plan.md` for either outcome. For a selected candidate, also write `project.md` and `pitch.md`; default pitch duration is at most five minutes, with speech markers and an estimate declaring speaking rate and pauses. For no-go, omit project and pitch and specify the next evidence needed. All economic figures are scenarios or evidence-backed inputs, never claimed outcomes.
+8. **Seal and check.** Create a schema-2 `run.json` with hashes and the complete bundled `MIT-LICENSE.txt`, byte for byte. Run `node <skill>/scripts/check-run.mjs <run>/run.json`. A structural pass does not prove isolation, path fidelity, research quality, viability, or legal certification; review those separately. Historical runs retain their original schema, evidence, and terms.
 
 ## Done-check
 
-- Original ideas, box, input bytes, distinct sampled paths, criteria, full prompts and both sets of N proposals are preserved.
-- Both critic reports audit morphological fidelity; the research and final recommendation reflect actual sources and any substitutions.
-- Native delegation records distinguish requested models, observed models and unknowns; concurrency and isolation are not inferred from JSON alone.
-- The run checker passes for structure and hashes; semantic fidelity, commercial evidence and pitch timing are reviewed separately.
-- Assumptions, source gaps, costs, observed outcomes and proposed tests remain distinguishable. The package ends before MVP construction, outreach, charges or publication.
-- Attribution and complete RCD terms accompany the adaptation and generated decision package.
+- [ ] Original inputs, frozen criteria, exact draw bytes, all prompts, responses, execution records, and both complete rounds remain intact.
+- [ ] Every path choice was reviewed twice; authored revisions, replacements, research, and post-research reviews are attributable.
+- [ ] The ledger distinguishes purchaser benefit from provider contribution, exposes unknowns, and counts each cost once.
+- [ ] The decision explains selection or rejection against the frozen gates; research limitations and next evidence are explicit.
+- [ ] Required outcome files and byte-identical MIT notice are hashed; structural results and semantic limitations are reported separately.

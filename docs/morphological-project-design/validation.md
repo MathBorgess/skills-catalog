@@ -1,5 +1,7 @@
 # Morphological project design: validation
 
+> Historical validation of the RCD adaptation and its later structural corrections. These findings remain attached to the versions exercised. They do not validate the newly authored instructions or change historical rights. See the [MIT replacement review](mit-replacement-review.md). This preserved record is outside the runtime package and is not relicensed by the correction.
+
 The table and initial checks below record the pre-release exercise; later structural corrections are described separately.
 
 | Surface | Status on 2026-10-20 |

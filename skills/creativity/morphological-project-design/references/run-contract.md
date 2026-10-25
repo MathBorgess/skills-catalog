@@ -41,12 +41,12 @@ On resume, inventory the run and verify recorded hashes before dispatching work.
 
 ```sh
 node <skill>/scripts/sample-paths.mjs --input <run>/morphbox.json --output <run>/paths.json --count 3
-node <skill>/scripts/sample-paths.mjs --input <run>/morphbox.json --output <run>/replay.json --count 3 --seed 123
+node <skill>/scripts/sample-paths.mjs --input <run>/morphbox.json --output <run>/replay.json --count 3 --seed <recorded-uint64>
 ```
 
 `--count` defaults to 3; `--seed` is an optional unsigned decimal 64-bit integer. `--format auto|json|text` is optional. The output must be new. Replay to another new path, never over the recorded draw.
 
-The JSON input is `{"dimensions":[{"name":"Dimension","alternatives":["Choice A","Choice B"]}]}`. Text input uses one `Name: A, B` row per dimension. Each dimension has 1–4 distinct, nonempty alternatives. Dimension names are distinct and nonempty. Preserve their order.
+For example, `{"dimensions":[{"name":"Workspace","alternatives":["Shared board","Personal notebook"]},{"name":"Output","alternatives":["Checklist","Timeline"]}]}` has four possible paths, enough for the default count of three. Text input uses one `Name: A, B` row per dimension. Each dimension has 1–4 distinct, nonempty alternatives. Dimension names are distinct and nonempty. Preserve their order.
 
 The sampler's `schemaVersion` remains **1**. It records `splitmix64-v1-low2`, the decimal seed string, the SHA-256 of raw input bytes, parsed dimensions, count, accepted sequences, per-position attempts, and discarded duplicate whole paths. Draws are positions 1–4: unavailable positions are rejected, then duplicate complete paths are rejected. No semantic incompatibility, attractiveness, or economic judgment affects sampling. Count cannot exceed the product of the alternative counts.
 
@@ -181,7 +181,7 @@ Every artifact reference is `{"path":"relative/file","sha256":"64 lowercase hexa
 }
 ```
 
-This shape shows **one candidate only to make the fields readable**. For the default N = 3, put every actual draw ID exactly once in each round and in `decision.considered`. Use actual IDs from `draw.sequences`; do not manufacture missing IDs. Include every retained supporting file not already referenced elsewhere in `artifacts`, including logs, original inputs, feedback packets, context attachments, checkpoints, and prior source snapshots.
+This shape shows **one candidate only to make the fields readable**. For the default N = 3, put every actual draw ID exactly once in each round and in `decision.considered`. Use actual IDs from `draw.sequences`; do not manufacture missing IDs. Include every retained supporting file available before sealing and not already referenced elsewhere in `artifacts`, including logs, original inputs, feedback packets, context attachments, checkpoints, and prior source snapshots.
 
 The two rounds are named `initial` and `revised`. Each has N distinct native author IDs, and an author cannot own different candidates across rounds. Normally a candidate keeps the same author. If it changes, its revised record must add `"replacement":{"fromAgentId":"<initial ID>","reason":"<specific reason>"}`; unchanged authors must not declare replacement. Retain the failed author's work and all replacement context.
 
@@ -208,5 +208,7 @@ node <skill>/scripts/check-run.mjs <run>/run.json
 ```
 
 Create the final manifest once after all required artifacts exist and their bytes are stable. A selected run requires the decision, validation plan, project, pitch, complete two rounds, required reviews, and researched selection. A no-go requires the decision, validation plan, complete rounds, and reviews for every research record it retains.
+
+Keep verification performed after sealing in new immutable reports that name the final manifest's SHA-256 and the checker revision used. Such reports sit outside the manifest they verify. Do not rewrite a sealed manifest to incorporate its own later check logs.
 
 The checker verifies path containment, hashes, exact sampler replay, declared IDs and replacement records, round coverage, required files, source-record shape, research/review references, selection-history structure, and the schema-appropriate notice. It does not establish whether agents were actually isolated, batches overlapped, models matched requests, prompts were fully disclosed, criteria were frozen on time, candidates honored their choices, evidence supports claims, arithmetic is appropriate, or the project is viable. Those require inspection of the retained evidence. A structural pass is neither a real-world outcome nor legal certification.

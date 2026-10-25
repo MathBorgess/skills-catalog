@@ -4,6 +4,8 @@
 
 Use native agent or task facilities that support independent contexts. A coordinator writing several personas is not N independent authors. Before launch, record what the harness actually supports: clean contexts, model selection, agent reuse, concurrent execution, and visibility into model identity. Use `unknown` for unavailable observations. Do not infer isolation, a model, or concurrency from a requested setting.
 
+Start every author in a fresh context with inheritance of the coordinator's transcript disabled; use `fork_turns: "none"` when that is the host's control. A small input packet does not remove history inherited through a default spawn setting. If the host cannot withhold that history, report independent authoring as unavailable and keep the phase incomplete. Preserve the chosen settings as execution evidence without claiming they establish a filesystem sandbox.
+
 ## Dispatch and retention
 
 Start every initial or replacement author in a clean context, without inheriting the coordinator's transcript or attachments. Native spawns that default to a full-history fork must be configured for a fresh task. If the harness cannot provide a context free of original seed narratives and peer outputs, retain the run as incomplete.

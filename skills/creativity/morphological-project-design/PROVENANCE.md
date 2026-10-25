@@ -26,7 +26,7 @@ The declared adaptation at [catalog commit 2cc80e2dbc6b6f4372e89873c32ad6f4e56fc
 | `scripts/check-run.mjs` and its tests | Retained original MIT implementation, updated for the two manifest versions. |
 | `MIT-LICENSE.txt` | Retained unchanged, byte-identical to the root MIT notice. |
 
-The drafting brief used the functional requirements and the MIT executable interfaces. The replacement author was instructed not to consult the old instructional files or upstream RCD text. This is a documented fresh-drafting process, not a claim of a legally certified clean room. The replacement does not load, reproduce or forward the old commercial-review text, source examples, distinctive framework organization or source numerical benchmarks. Generic arithmetic, morphological combination, competing hypotheses, independent critique and source records supply the current procedure.
+The drafting brief used the functional requirements and the MIT executable interfaces. The replacement drafting agent was instructed not to consult the old instructional files or upstream RCD text. This is a documented fresh-drafting process, not a claim of a legally certified clean room. The replacement does not load, reproduce or forward the old commercial-review text, source examples, distinctive framework organization or source numerical benchmarks. Generic arithmetic, morphological combination, competing hypotheses, independent critique and source records supply the current procedure.
 
 ## Historical rights remain historical rights
 

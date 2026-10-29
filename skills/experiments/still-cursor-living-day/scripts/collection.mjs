@@ -33,7 +33,7 @@ const AXIS = "still-cursor-living-day";
 const FRAME_COUNT = 12;
 const SKILL_DIR = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 // SCLD_ROOT exists so the test suite does not append to the metrics history
-// that skills-evaluate reads. Runs use the OS temp dir.
+// for later evaluation. Runs use the OS temp dir.
 const ROOT = process.env.SCLD_ROOT ? resolve(process.env.SCLD_ROOT) : join(tmpdir(), AXIS);
 const IDS = Array.from({ length: FRAME_COUNT }, (_, i) => String(i + 1).padStart(2, "0"));
 const LABELS = "ABCDEFGHIJKL".split("");

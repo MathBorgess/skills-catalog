@@ -9,14 +9,13 @@
     {
       "name": "skills-catalog",
       "source": "./",
-      "description": "Study wikis, teaching sessions, domain modeling, and visual explainers.",
+      "description": "Teaching sessions, domain skills, creative workflows, and social media direction.",
       "category": "productivity",
       "keywords": [
         "skills",
-        "study-wiki",
         "teach-me",
-        "domain-modeling",
-        "explain-me"
+        "create-domain-skill",
+        "social-post-director"
       ]
     }
   ]

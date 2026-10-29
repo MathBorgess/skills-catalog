@@ -98,4 +98,4 @@ A language without a profile gets the core and the narration rules. Say so in th
 
 ## Change the rules
 
-This file, `profile-en.md`, `profile-pt-br.md`, `scripts/ste-lint.mjs` and the two files in `scripts/profiles/` have one canonical copy, in the `easy-to-read` skill. A skill that ships its own copy, such as `explain-me`, keeps each file byte-identical to the canonical copy. Change the canonical copy first, then copy the file over. The contract test in `easy-to-read/scripts/ste-lint.test.mjs` fails while the two copies differ.
+This file, `profile-en.md`, `profile-pt-br.md`, `scripts/ste-lint.mjs` and the two files in `scripts/profiles/` have one canonical copy, in the `easy-to-read` skill. A skill that ships its own copy, such as `pr-present`, keeps each file byte-identical to the canonical copy. Change the canonical copy first, then copy the file over. `scripts/check-pr-present-copies.mjs` verifies the copies.

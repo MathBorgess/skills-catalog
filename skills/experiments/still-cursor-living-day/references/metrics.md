@@ -1,6 +1,6 @@
 # Metrics
 
-`score` appends one JSON line to `$TMPDIR/still-cursor-living-day/metrics.jsonl` and never rewrites the file. `skills-evaluate` reads it; nothing else should.
+`score` appends one JSON line to `$TMPDIR/still-cursor-living-day/metrics.jsonl` and never rewrites the file. Inspect the retained records when evaluating the experiment.
 
 ```json
 {

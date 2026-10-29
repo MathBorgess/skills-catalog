@@ -2,7 +2,7 @@
 
 A session is one topic, one mode, one visible result. The user **consumes** an HTML lesson ([`lesson.md`](lesson.md)). You **record** a markdown session note and ledger lines. It is not a mission interview and not two syllabi.
 
-If study-wiki is installed and overlap or roadmap files are missing, call the Skill tool with `"study-wiki"` only to write those files, then continue this session. Theory-mode questions follow the rules below (exam format, qualifier in caps, no key in the same message). Do not call study-wiki to run the session itself.
+If overlap or roadmap files are missing, rank from the available plan and records for this session and report the missing files. Theory-mode questions follow the rules below (exam format, qualifier in caps, no key in the same message).
 
 ## 1. Orient
 
@@ -12,7 +12,7 @@ If a **gate falls in the next seven days**, that fact is the first line of your 
 
 ## 2. Pick the topic
 
-One row from the overlap sort (study-wiki `references/overlap.md`): shortest active exam → least mastery → highest domain weight → overlap with later exams as a bonus.
+One row from the overlap sort: shortest active exam → least mastery → highest domain weight → overlap with later exams as a bonus.
 
 - Parked and trigger-inactive exams contribute **zero** rows.
 - The error ledger steers **inside** that row's domain, not across exams.

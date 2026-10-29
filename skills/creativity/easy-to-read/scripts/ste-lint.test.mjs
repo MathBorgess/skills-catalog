@@ -1,9 +1,9 @@
 #!/usr/bin/env node
-// Tests for the canonical ste-lint, its profiles and the easy-to-read texts, plus the
-// contract that keeps explain-me's byte copies equal. Run: node skills/creativity/easy-to-read/scripts/ste-lint.test.mjs
+// Tests for the canonical ste-lint, its profiles and the easy-to-read texts.
+// Run: node skills/creativity/easy-to-read/scripts/ste-lint.test.mjs
 
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -19,7 +19,6 @@ import {
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const SKILL = join(HERE, "..");
-const SIBLING = join(SKILL, "..", "explain-me");
 
 let passed = 0;
 let failed = 0;
@@ -378,28 +377,6 @@ for (const [before, after] of examples) {
   const b = lintText(before, { lang });
   const a = lintText(after, { lang });
   assert(`examples (${lang}): "${after.slice(0, 40)}..." is clean and its before fails`, b.errors.length > 0 && a.errors.length === 0 && a.warnings.length === 0, JSON.stringify({ before: b.errors.map((f) => f.rule), after: a }));
-}
-
-// -----------------------------------------------------------------------------
-// 15. Contract: explain-me ships byte copies of the rules and the linter
-// -----------------------------------------------------------------------------
-
-const COPIES = [
-  "scripts/ste-lint.mjs",
-  "scripts/profiles/en.mjs",
-  "scripts/profiles/pt-br.mjs",
-  "references/ste-lite.md",
-  "references/profile-en.md",
-  "references/profile-pt-br.md",
-];
-if (existsSync(join(SIBLING, "scripts", "ste-lint.mjs"))) {
-  for (const rel of COPIES) {
-    const theirs = join(SIBLING, rel);
-    const same = existsSync(theirs) && readFileSync(join(SKILL, rel)).equals(readFileSync(theirs));
-    assert(`contract: explain-me's ${rel} is byte-identical to easy-to-read's`, same, `copy skills/creativity/easy-to-read/${rel} over skills/creativity/explain-me/${rel}`);
-  }
-} else {
-  console.log("skip contract: explain-me is not installed next to this skill");
 }
 
 // -----------------------------------------------------------------------------

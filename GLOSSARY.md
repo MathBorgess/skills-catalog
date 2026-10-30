@@ -352,6 +352,24 @@ _Avoid_: activity name, actual practitioner
 A set of observable criteria adapted from documented domain methods to critique an activity's output.
 _Avoid_: expert endorsement, independent reviewer (a lens alone establishes neither)
 
+### Work Closure
+
+**Work Closure**:
+Closure of requested work through review, authorized integration, context, and recoverable cleanup.
+_Avoid_: merge alone, project termination
+
+**Closure Evidence**:
+Dated evidence that confirms completion and records a home for open work.
+_Avoid_: idle state, merged pull request alone, inactivity
+
+**Recovery Record**:
+A record of what cleanup keeps and how to restore it.
+_Avoid_: backup claim, deletion receipt
+
+**Cleanup Receipt**:
+Evidence that confirms completion of a cleanup action and verifies its resulting state.
+_Avoid_: queued request, planned action, tool acceptance
+
 ## Deprecated Domains
 
 The domain languages for **Shunt** (outlines, excerpts, edit bypass, run wrapper, recover event), **Handoff** (session, slot, graph gate, digest, supervisor, child, capabilities, gate run, verdict, risk level, attention matrix, revise round), **Motion Identity** (standalone motion grilling and proof), and **Animation Direction** (`co-direct-animation`'s five-gate Flow pipeline) have been moved to [deprecated/](deprecated/) alongside their retired skill implementations. Their motion archetypes, role eases, kinetic type rules, and moodboard/storyboard progression are now absorbed into **Media Direction** (`brand-dna`, `social-video-director`, `social-post-director`). Meanwhile, `video-reference` remains in *analysis* status while `viral-rag` serves as the active reference engine for media direction.

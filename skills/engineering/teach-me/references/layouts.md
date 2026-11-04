@@ -19,7 +19,7 @@ All of `wiki/README.md` and `wiki/_log/errors.md` exist, and `estudos/certificac
 | Lesson assets | `wiki/assets/lesson.css`, `wiki/assets/quiz.js` — copy from this skill on first lesson |
 | Question bank | `wiki/questions/<exam>-batch-NN.md` |
 
-If overlap or roadmap is missing, **build the ranking in memory for this session**, then call the Skill tool with `"study-wiki"` so those files get written. Do not re-bootstrap. Do not create `MISSION.md`.
+If overlap or roadmap is missing, **build the ranking in memory for this session** from available plans and records, and report the missing files. Do not re-bootstrap. Do not create `MISSION.md`.
 
 ## Foreign (MathAI-style vault)
 

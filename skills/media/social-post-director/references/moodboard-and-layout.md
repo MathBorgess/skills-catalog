@@ -31,6 +31,6 @@ After `post.md` is approved in Step 5, write `<out>/storyboard.md` to map the vi
 
 ### Slide / Card Table
 
-| Slide / Card ID | Role (`Cover / Escalation / Proof / CTA`) | On-Slide Headline (`2–6` words, accent word marked) | On-Slide Body (`<= 28` words) | Visual Anchor / Diagram / Asset | Downstream Tool (`prettify / poster-design / campaign-identity-grid / manual`) |
+| Slide / Card ID | Role (`Cover / Escalation / Proof / CTA`) | On-Slide Headline (`2–6` words, accent word marked) | On-Slide Body (`<= 28` words) | Visual Anchor / Diagram / Asset | Downstream Tool (`poster-design / campaign-identity-grid / manual`) |
 |---|---|---|---|---|---|
-| `S01 (Cover)` | First-Fold Hook | `"O CUSTO OCULTO DO CONTEXTO"` (accent: `CUSTO OCULTO`) | "Por que colar arquivos inteiros degrada a decisão do agente." | Split diagram: bloated prompt vs. surgical excerpt | `prettify` |
+| `S01 (Cover)` | First-Fold Hook | `"O CUSTO OCULTO DO CONTEXTO"` (accent: `CUSTO OCULTO`) | "Por que colar arquivos inteiros degrada a decisão do agente." | Split diagram: bloated prompt vs. surgical excerpt | `manual` |

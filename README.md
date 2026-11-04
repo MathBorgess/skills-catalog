@@ -92,25 +92,19 @@ Domain design, agent workflow maintenance, and technical learning. These are ope
 
 | Skill | Version | Kind | What it does |
 |---|---|---|---|
-| [`domain-modeling`](skills/engineering/domain-modeling/) | 1.0.0 | operator | Actively builds and sharpens a project's domain model, ubiquitous language, and glossary during design; records ADRs for hard-to-reverse architectural decisions. |
 | [`create-domain-skill`](skills/engineering/create-domain-skill/) | 1.0.1 | operator | Creates a model-invoked skill named for an activity, with a portable bot or agent personality, methods from inspected domain practitioners, complementary review lenses and practical evaluation evidence. |
-| [`study-wiki`](skills/engineering/study-wiki/) | 1.0.0 | operator | Interviews you about the certifications you are chasing, then builds and operates a personal study repository: a knowledge graph of notes, a question bank, an error log, and a daily study loop that injects questions, grades your answers, and records where you are weak. |
-| [`teach-me`](skills/engineering/teach-me/) | 1.2.0 | operator | Runs one study session against a wiki that already exists: a phone-sized HTML lesson plus a session note and error log. Not for bootstrapping an empty wiki — that is study-wiki. |
-| [`skills-evaluate`](skills/engineering/skills-evaluate/) | 0.2.0 | operator | Reads the metrics the other skills leave in the OS temp dir, the maintainer sketchpad and open issues; compares the last run with the recent median, diagnoses root causes, checks each skill against its own scope, and proposes improvements to the skill or to its observability. |
+| [`teach-me`](skills/engineering/teach-me/) | 1.2.0 | operator | Runs one study session against a wiki that already exists: a phone-sized HTML lesson plus a session note and error log. Not for bootstrapping an empty wiki. |
 | [`pr-present`](skills/engineering/pr-present/) | 1.0.0 | operator | Presents one PR with a fixed review point, traceable claims, check limits and material risks. |
 | [`pr-refine`](skills/engineering/pr-refine/) | 1.0.0 | operator | Proposes evaluated presentation improvements while preserving human control of final tests, reward policy and promotion. |
 
 ### Creativity
 
-Visual explanations, interactive prototypes, and plain-language writing. (`video-reference` is currently in *analysis* status against `viral-rag` in `skills/media/`.)
+Project design and plain-language writing.
 
 | Skill | Version | Kind | What it does |
 |---|---|---|---|
-| [`video-reference`](skills/creativity/video-reference/) | 1.1.0 | operator | *(Under analysis)* Distills local videos into layered references and retrieves detailed Remotion direction with evidence and human-reviewed adaptation dependencies. |
 | [`morphological-project-design`](skills/creativity/morphological-project-design/) | 2.0.0 | operator | Turns seed ideas into reproducible morphological paths, two rounds of N independent proposals and commercial critique, competitor research, a decision package and pitch. Current instructions are MIT; [provenance and historical terms](LICENSES.md) remain documented. |
-| [`explain-me`](skills/creativity/explain-me/) | 2.0.0 | operator | Creates one visual explanation, in the language you asked in, with controlled-writing text, diagrams, images, interactive HTML or a narrated video, landscape or portrait for Reels/Shorts/TikTok (Remotion motion, local Kokoro voice), styled from an editable, brand-able DESIGN.md; teach-me retains quizzes and progress records. |
-| [`prettify`](skills/creativity/prettify/) | 0.0.0 | operator | Guides a visual idea from a clear question through briefing, low-fidelity and high-fidelity review to an inspected web or static delivery, with explicit design decisions and task-specific dependencies. |
-| [`easy-to-read`](skills/creativity/easy-to-read/) | 1.0.0 | operator | Once activated, keeps every text it writes for you in plain language for the rest of the session — chat replies, documents, notes, summaries, PR and issue bodies — under STE-lite plus the profile of the text's language (ASD-STE100 for English; ABNT NBR ISO 24495-1 and the Senado style for Brazilian Portuguese; the core alone for other languages). Lints documents and long replies with a zero-dependency linter before they ship, and never rewrites code, commands, paths, identifiers or quotes. Canonical home of the writing rules explain-me ships as byte copies. |
+| [`easy-to-read`](skills/creativity/easy-to-read/) | 1.0.0 | operator | Once activated, keeps every text it writes for you in plain language for the rest of the session — chat replies, documents, notes, summaries, PR and issue bodies — under STE-lite plus the profile of the text's language (ASD-STE100 for English; ABNT NBR ISO 24495-1 and the Senado style for Brazilian Portuguese; the core alone for other languages). Lints documents and long replies with a zero-dependency linter before they ship, and never rewrites code, commands, paths, identifiers or quotes. Canonical home of the writing rules shared with `pr-present`. |
 
 ### Media
 
@@ -138,6 +132,12 @@ Shipped workflows with a fixed hypothesis, measurement, and exit condition. Thes
 
 The following skills are **deprecated** and no longer maintained or accessible in the catalog. They have been moved out of `skills/` to [`deprecated/`](deprecated/) and are no longer usable or installed by the plugin or package:
 
+- [`domain-modeling`](deprecated/domain-modeling/): Deprecated and retained for historical reference.
+- [`study-wiki`](deprecated/study-wiki/): Deprecated and retained for historical reference.
+- [`skills-evaluate`](deprecated/skills-evaluate/): Deprecated and retained for historical reference.
+- [`video-reference`](deprecated/video-reference/): Deprecated and retained for historical reference.
+- [`explain-me`](deprecated/explain-me/): Deprecated and retained for historical reference.
+- [`prettify`](deprecated/prettify/): Deprecated and retained for historical reference.
 - [`co-direct-animation`](deprecated/co-direct-animation/): Previously used to co-direct animations through five formal critique gates and Flow shot generation. Replaced by `brand-dna` and `social-video-director` in `skills/media/`.
 - [`handoff`](deprecated/handoff/): Previously used to compact conversation briefs and schedule cross-provider session graphs. Deprecated and removed from active catalog.
 - [`motion-identity`](deprecated/motion-identity/): Previously used to grill a brand owner into standalone motion keys in `DESIGN.md`. Folded into `brand-dna` and `social-video-director` in `skills/media/`.
@@ -147,14 +147,14 @@ The following skills are **deprecated** and no longer maintained or accessible i
 
 How a skill works under the hood, for whoever maintains it, is in [`docs/`](docs/) — written for people, never loaded by a model.
 
-After install, start a session and type `/domain-modeling`, `/study-wiki`, `/teach-me`, `/explain-me`, `/brand-dna`, `/social-video-director`, `/social-post-director`, `/easy-to-read`, `/skills-evaluate`, or `/still-cursor-living-day`, or just say what you want — the skill's `description` is what makes the model reach for it on its own.
+After install, start a session and type `/teach-me`, `/brand-dna`, `/social-video-director`, `/social-post-director`, `/easy-to-read`, or `/still-cursor-living-day`, or just say what you want — the skill's `description` is what makes the model reach for it on its own.
 
 For evidence-backed PR packets, use `pr-present`; use `pr-refine` to investigate measured presentation failures. These workflows do not establish human benefit or promote a candidate without the required evidence.
 
 **Improving the skills**
 
 1. Use a skill.
-2. In a clone of this repo, run `/skills-evaluate`: it reads the metrics history, `.agents/sketchpad/` and open issues, and proposes what to fix — in the skill, in its metrics, or in the catalog's scope.
+2. Review its metrics history, `.agents/sketchpad/` and open issues; identify evidence-backed improvements to the skill, its metrics, or its scope.
 3. Accepted findings become issues, then PRs with a version bump.
 
 **Anywhere else (chat, Cowork, an API app)**
@@ -176,7 +176,7 @@ Every `SKILL.md` carries its author and version in frontmatter, so a skill copie
 
 ```yaml
 ---
-name: study-wiki
+name: create-domain-skill
 description: <written for the moment of triggering>
 metadata:
   author: Matheus Borges

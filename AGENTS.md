@@ -75,7 +75,7 @@ A skill here is either an **operator** or an **experiment**. The difference is w
 
 1. **It names what it measures and leaves the number behind.** A metrics line, a score, a rank correlation — something a later run can be compared against. An experiment with no measurement is an operator skill with a hobby.
 2. **It may be fixed to one subject.** An operator skill that only works for one axis, one exam, one repository is broken. An experiment may be exactly that narrow, because the subject is the controlled variable. The scope narrows; the privacy rule does not move. Still public, still no personal data, still nothing that only makes sense with its author's biography.
-3. **It has an exit.** When the question is answered, the skill graduates into an operator skill, is folded into one, or leaves the catalog. An experiment nobody has run in months is not a finding, it is debris, and `skills-evaluate` is where that call gets made.
+3. **It has an exit.** When the question is answered, the skill graduates into an operator skill, is folded into one, or leaves the catalog. The maintainer reviews the evidence and decides whether an experiment has reached its exit.
 
 Mark the kind in the `README.md` catalog table. If you cannot tell which one you are writing, you are writing an operator skill: make it generic.
 
@@ -87,7 +87,7 @@ Required frontmatter:
 
 ```yaml
 ---
-name: study-wiki
+name: teach-me
 description: <one paragraph, third person, written for the moment of triggering>
 metadata:
   author: Matheus Borges

@@ -1,6 +1,6 @@
 ---
 name: poster-design
-description: "Use when the user wants an image-model poster built around one subject — a person, athlete, team, character or ensemble — and says 'poster', 'pôster', 'tribute poster', 'sport poster', 'photo-grid poster', 'movie poster from my references', or hands over a name or photos to turn into one. Picks one of three poster archetypes, fills its slots from the subject, generates through the image tool the user names, and inspects every output against the archetype's own constraints. Not for brand identity boards (campaign-identity-grid) or posters built as a web page (prettify)."
+description: "Use when the user wants an image-model poster built around one subject — a person, athlete, team, character or ensemble — and says 'poster', 'pôster', 'tribute poster', 'sport poster', 'photo-grid poster', 'movie poster from my references', or hands over a name or photos to turn into one. Picks one of three poster archetypes, fills its slots from the subject, generates through the image tool the user names, and inspects every output against the archetype's own constraints. Not for brand identity boards (campaign-identity-grid) or posters built as a web page."
 metadata:
   author: Matheus Borges
   version: 1.0.1
